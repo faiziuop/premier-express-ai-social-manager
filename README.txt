@@ -1,1 +1,0 @@
-Premier Express AI Social Manager v5 FREE TESTING MODE. No OpenAI API call. Generates five strategy-based test posts and saves them as PENDING_APPROVAL. Deploy to Vercel via GitHub. Keep Supabase Publishable/Anon key only in browser; never use service-role/secret.
