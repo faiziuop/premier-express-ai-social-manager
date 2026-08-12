@@ -1,0 +1,380 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Premier Express AI Social Manager</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif;background:#f5f7fb;color:#172033}
+header{background:#111827;color:white;padding:18px 24px;display:flex;align-items:center;justify-content:space-between;gap:15px;flex-wrap:wrap}
+header small{opacity:.75}.wrap{max-width:1120px;margin:24px auto;padding:0 16px}.card{background:white;border-radius:14px;padding:18px;margin:14px 0;box-shadow:0 2px 12px #00000012}
+button{border:0;border-radius:8px;padding:10px 14px;margin:3px;cursor:pointer;font-weight:700}.primary{background:#087f5b;color:#fff}.danger{background:#b42318;color:#fff}.muted{background:#e5e7eb;color:#172033}
+input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:5px 0 12px}.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.stat{font-size:28px;font-weight:700}
+.post{border-left:4px solid #f59e0b}.pill{display:inline-block;background:#fef3c7;padding:5px 9px;border-radius:20px;font-size:12px;font-weight:700}.caption{white-space:pre-wrap;line-height:1.55}
+.notice{background:#ecfdf3;border-left:4px solid #087f5b}.live{font-size:12px;color:#087f5b;font-weight:700}
+.social-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}.social-item{border:1px solid #e5e7eb;border-radius:10px;padding:14px}
+.social-item b{display:block;margin-bottom:5px}.connected{color:#087f5b;font-weight:700}.not-connected{color:#6b7280}
+@media(max-width:700px){.stats,.social-grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header>
+<div><b>Premier Express AI Social Manager</b><br><small>Approval-first • Live dashboard</small></div>
+<div id="toolbar" style="display:none">
+<button class="primary" id="generateBtn">Generate today's 5 posts</button>
+<button class="muted" id="logoutBtn">Logout</button>
+</div>
+</header>
+
+<div class="wrap">
+<div id="authCard" class="card">
+<h2>Secure login</h2>
+<p>Sign in to your private marketing dashboard.</p>
+<label>Email</label>
+<input id="email" type="email" autocomplete="username">
+<label>Password</label>
+<input id="password" type="password" autocomplete="current-password">
+<button class="primary" id="signinBtn">Sign in</button>
+<button class="muted" id="signupBtn">Create account</button>
+<p id="authMsg"></p>
+</div>
+
+<div id="app" style="display:none">
+<div class="card notice">
+<b>Live mode:</b> database changes are synchronized automatically.
+<span id="realtimeStatus" class="live">Connecting to live updates…</span>
+</div>
+
+<div class="card" id="socialCard">
+<h2>Social Accounts</h2>
+<p>Connect your Facebook Page and Instagram Professional account so approved content can eventually be published automatically.</p>
+<div class="social-grid">
+<div class="social-item">
+<b>🔵 Facebook</b>
+<span id="facebookStatus" class="not-connected">Not connected</span>
+</div>
+<div class="social-item">
+<b>📸 Instagram</b>
+<span id="instagramStatus" class="not-connected">Not connected</span>
+</div>
+</div>
+<div style="margin-top:14px">
+<a id="metaConnect" class="primary"
+href="https://ivtwkyfiagouazopttlc.supabase.co/functions/v1/meta-oauth-callback-v2"
+style="display:inline-block;text-decoration:none">🔗 Connect Facebook &amp; Instagram</a>
+<button class="muted" id="refreshSocialBtn">↻ Check connection</button>
+</div>
+<p id="socialHelp" style="font-size:13px;color:#6b7280;margin-bottom:0">
+After Meta authorization, return here and click “Check connection” if the status does not update automatically.
+</p>
+</div>
+
+<div class="stats">
+<div class="card"><small>Posts</small><div id="total" class="stat">0</div></div>
+<div class="card"><small>Pending approval</small><div id="pending" class="stat">0</div></div>
+<div class="card"><small>Approved</small><div id="approved" class="stat">0</div></div>
+</div>
+
+<div id="posts"></div>
+</div>
+</div>
+
+<script>
+/* IMPORTANT: use the Supabase project's publishable key directly.
+   No browser prompt is used, so the login page can initialize normally. */
+const SUPABASE_URL="https://ivtwkyfiagouazopttlc.supabase.co";
+const SUPABASE_KEY="sb_publishable_w2Cn5cENECQqUUY3lAXH0w_GlSLz5iW";
+
+const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{
+  auth:{
+    autoRefreshToken:true,
+    persistSession:true,
+    detectSessionInUrl:true
+  }
+});
+
+let realtimeChannel=null;
+let appStarting=false;
+
+const $=id=>document.getElementById(id);
+
+function esc(v){
+  return String(v??"").replace(/[&<>"']/g,c=>({
+    "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"
+  }[c]));
+}
+
+async function renderPosts(){
+  const {data,error}=await sb.from("content_posts")
+    .select("*")
+    .order("post_number",{ascending:true})
+    .limit(20);
+
+  if(error){
+    $("posts").innerHTML="<div class='card'><b>Database error</b><pre>"+
+      esc(JSON.stringify(error,null,2))+"</pre></div>";
+    return;
+  }
+
+  const rows=data||[];
+  $("total").textContent=rows.length;
+  $("pending").textContent=rows.filter(x=>x.status==="PENDING_APPROVAL").length;
+  $("approved").textContent=rows.filter(x=>["APPROVED","READY_TO_PUBLISH"].includes(x.status)).length;
+
+  $("posts").innerHTML=rows.map(p=>`
+    <div class="card post">
+      <span class="pill">${esc(p.status)}</span>
+      <h2>${esc(p.post_number)}. ${esc(p.hook||p.objective||"Post")}</h2>
+      <small>${esc((p.platforms||[]).join(" • "))} | ${esc(p.content_type||"")}</small>
+      <p class="caption">${esc(p.caption||"")}</p>
+      <p><b>CTA:</b> ${esc(p.cta||"")}<br>
+      <b>Visual:</b> ${esc(p.visual_direction||"")}</p>
+      ${p.status==="PENDING_APPROVAL"||p.status==="EDIT_REQUESTED"?`
+        <button class="primary" onclick="approvePost('${esc(p.id)}')">✓ Approve</button>
+        <button class="muted" onclick="editPost('${esc(p.id)}')">✎ Edit</button>
+        <button class="danger" onclick="rejectPost('${esc(p.id)}')">✕ Reject</button>`:""}
+    </div>`).join("") ||
+    "<div class='card'><h3>No posts yet</h3>Click Generate today's 5 posts.</div>";
+}
+
+async function loadSocialConnections(){
+  const fb=$("facebookStatus"),ig=$("instagramStatus");
+  if(!fb||!ig)return;
+
+  const {data,error}=await sb.from("social_connections")
+    .select("platform,account_name,connection_status")
+    .in("platform",["facebook","instagram"]);
+
+  if(error){
+    fb.textContent="Connection status unavailable";
+    ig.textContent="Connection status unavailable";
+    fb.className=ig.className="not-connected";
+    return;
+  }
+
+  const rows=data||[];
+  const facebook=rows.find(x=>x.platform==="facebook"&&x.connection_status==="connected");
+  const instagram=rows.find(x=>x.platform==="instagram"&&x.connection_status==="connected");
+
+  fb.textContent=facebook
+    ?("🟢 Connected"+(facebook.account_name?" — "+facebook.account_name:""))
+    :"Not connected";
+
+  ig.textContent=instagram
+    ?("🟢 Connected"+(instagram.account_name?" — "+instagram.account_name:""))
+    :"Not connected";
+
+  fb.className=facebook?"connected":"not-connected";
+  ig.className=instagram?"connected":"not-connected";
+}
+
+async function subscribeRealtime(){
+  if(realtimeChannel) await sb.removeChannel(realtimeChannel);
+
+  realtimeChannel=sb.channel("content-posts-live")
+    .on("postgres_changes",
+      {event:"*",schema:"public",table:"content_posts"},
+      ()=>renderPosts()
+    )
+    .on("postgres_changes",
+      {event:"*",schema:"public",table:"social_connections"},
+      ()=>loadSocialConnections()
+    )
+    .subscribe(status=>{
+      if(status==="SUBSCRIBED")
+        $("realtimeStatus").textContent="● Live updates connected";
+      else if(status==="CHANNEL_ERROR")
+        $("realtimeStatus").textContent="Live connection error — retrying…";
+      else
+        $("realtimeStatus").textContent="Live status: "+status;
+    });
+}
+
+async function approvePost(id){
+  const {error}=await sb.from("content_posts").update({
+    status:"APPROVED",
+    approved_at:new Date().toISOString()
+  }).eq("id",id);
+
+  if(error){alert("Approval failed: "+error.message);return;}
+
+  await sb.from("approval_events").insert({post_id:id,action:"APPROVE"});
+  await renderPosts();
+}
+
+async function rejectPost(id){
+  const reason=prompt("Reason (optional):")||"";
+
+  const {error}=await sb.from("content_posts").update({
+    status:"REJECTED",
+    rejection_reason:reason
+  }).eq("id",id);
+
+  if(error){alert("Reject failed: "+error.message);return;}
+
+  await sb.from("approval_events").insert({
+    post_id:id,
+    action:"REJECT",
+    notes:reason
+  });
+
+  await renderPosts();
+}
+
+async function editPost(id){
+  const {data,error}=await sb.from("content_posts")
+    .select("caption")
+    .eq("id",id)
+    .single();
+
+  if(error){alert(error.message);return;}
+
+  const value=prompt("Edit caption:",data.caption||"");
+  if(value===null)return;
+
+  if(!value.includes("+971 56 202 6553")){
+    alert("The WhatsApp number +971 56 202 6553 must remain in every post.");
+    return;
+  }
+
+  const {error:e}=await sb.from("content_posts").update({
+    caption:value,
+    status:"EDIT_REQUESTED"
+  }).eq("id",id);
+
+  if(e){alert(e.message);return;}
+
+  await sb.from("approval_events").insert({
+    post_id:id,
+    action:"EDIT",
+    notes:"Caption edited"
+  });
+
+  await renderPosts();
+}
+
+async function generate(){
+  $("generateBtn").disabled=true;
+  $("generateBtn").textContent="Generating…";
+
+  try{
+    const {data:{session}}=await sb.auth.getSession();
+
+    if(!session){
+      alert("Your session has expired. Please sign in again.");
+      return;
+    }
+
+    const r=await fetch(SUPABASE_URL+"/functions/v1/generate-daily-content",{
+      method:"POST",
+      headers:{
+        apikey:SUPABASE_KEY,
+        Authorization:"Bearer "+session.access_token,
+        "Content-Type":"application/json"
+      }
+    });
+
+    const j=await r.json();
+
+    if(!r.ok||!j.success)
+      throw new Error(j.error||JSON.stringify(j));
+
+    await renderPosts();
+    alert("5 posts generated and placed in PENDING APPROVAL.");
+  }catch(e){
+    alert("Generation failed: "+e.message);
+  }finally{
+    $("generateBtn").disabled=false;
+    $("generateBtn").textContent="Generate today's 5 posts";
+  }
+}
+
+async function enterApp(){
+  if(appStarting)return;
+  appStarting=true;
+
+  try{
+    $("authCard").style.display="none";
+    $("app").style.display="block";
+    $("toolbar").style.display="block";
+
+    await renderPosts();
+    await loadSocialConnections();
+    await subscribeRealtime();
+  }finally{
+    appStarting=false;
+  }
+}
+
+async function leaveApp(){
+  if(realtimeChannel){
+    await sb.removeChannel(realtimeChannel);
+    realtimeChannel=null;
+  }
+
+  $("app").style.display="none";
+  $("toolbar").style.display="none";
+  $("authCard").style.display="block";
+}
+
+async function logout(){
+  await sb.auth.signOut();
+  await leaveApp();
+  $("authMsg").textContent="Signed out.";
+}
+
+$("signinBtn").onclick=async()=>{
+  const email=$("email").value.trim();
+  const password=$("password").value;
+
+  if(!email||!password){
+    $("authMsg").textContent="Please enter your email and password.";
+    return;
+  }
+
+  $("signinBtn").disabled=true;
+  $("authMsg").textContent="Signing in…";
+
+  const {error}=await sb.auth.signInWithPassword({email,password});
+
+  $("signinBtn").disabled=false;
+  $("authMsg").textContent=error?error.message:"Signed in.";
+};
+
+$("signupBtn").onclick=async()=>{
+  const email=$("email").value.trim();
+  const password=$("password").value;
+
+  if(!email||!password){
+    $("authMsg").textContent="Please enter your email and password.";
+    return;
+  }
+
+  const {data,error}=await sb.auth.signUp({email,password});
+
+  $("authMsg").textContent=error
+    ?error.message
+    :(data.session
+      ?"Account created and signed in."
+      :"Account created. Check your email, then sign in.");
+};
+
+$("generateBtn").onclick=generate;
+$("logoutBtn").onclick=logout;
+$("refreshSocialBtn").onclick=loadSocialConnections;
+
+sb.auth.onAuthStateChange((event,session)=>{
+  if(session){
+    enterApp();
+  }else{
+    leaveApp();
+  }
+});
+
+sb.auth.getSession().then(({data})=>{
+  if(data.session) enterApp();
+});
+</script>
+</body>
+</html>
