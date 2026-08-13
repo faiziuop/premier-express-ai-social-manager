@@ -1,0 +1,642 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Premier Express AI Social Manager</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif;background:#f5f7fb;color:#172033}
+header{background:#111827;color:white;padding:18px 24px;display:flex;align-items:center;justify-content:space-between;gap:15px;flex-wrap:wrap}
+header small{opacity:.75}.wrap{max-width:1120px;margin:24px auto;padding:0 16px}.card{background:white;border-radius:14px;padding:18px;margin:14px 0;box-shadow:0 2px 12px #00000012}
+button{border:0;border-radius:8px;padding:10px 14px;margin:3px;cursor:pointer;font-weight:700}button:disabled{opacity:.55;cursor:not-allowed}
+.primary{background:#087f5b;color:#fff}.danger{background:#b42318;color:#fff}.muted{background:#e5e7eb;color:#172033}
+input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:5px 0 12px}.command-grid{display:grid;grid-template-columns:120px 1fr auto;gap:10px;align-items:end;margin-top:14px}.command-grid label{font-size:12px;font-weight:700}.command-grid input{margin:5px 0 0}.command-help{font-size:12px;color:#6b7280;margin-top:8px}@media(max-width:760px){.command-grid{grid-template-columns:1fr}}.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.stat{font-size:28px;font-weight:700}
+.post{border-left:4px solid #f59e0b}.pill{display:inline-block;background:#fef3c7;padding:5px 9px;border-radius:20px;font-size:12px;font-weight:700}.caption{white-space:pre-wrap;line-height:1.55}
+.notice{background:#ecfdf3;border-left:4px solid #087f5b}.live{font-size:12px;color:#087f5b;font-weight:700}.social-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}.social-item{border:1px solid #e5e7eb;border-radius:10px;padding:14px}.social-item b{display:block;margin-bottom:5px}.connected{color:#087f5b;font-weight:700}.not-connected{color:#6b7280}
+.tabs{display:flex;gap:8px;flex-wrap:wrap;margin:18px 0}.tab{background:#e5e7eb}.tab.active{background:#111827;color:#fff}.platform-head{display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap}.media-box{background:#f8fafc;border:1px dashed #cbd5e1;border-radius:10px;padding:12px;margin:10px 0}.ig-note{background:#fff7ed;border-left:4px solid #f59e0b;padding:12px;border-radius:8px}
+.media-preview{margin:12px 0}
+.media-preview img,.media-preview video{display:block;max-width:420px;width:100%;height:auto;border-radius:12px;border:1px solid #e5e7eb}
+.media-actions{margin-top:10px}.media-upload{margin-top:10px;padding:10px;background:#fff;border:1px solid #e5e7eb;border-radius:8px}.media-upload input{margin:6px 0 4px}.workflow-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 18px}.workflow-tab{background:#eef2f7}.workflow-tab.active{background:#087f5b;color:#fff}.history-note{font-size:12px;color:#6b7280;margin-top:8px}.agent-reason{margin:10px 0;padding:10px 12px;background:#f0fdf4;border-left:4px solid #16a34a;border-radius:8px;font-size:13px}.agent-reason b{color:#166534}.intel-tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}.intel-tag{font-size:11px;background:#eef2ff;border:1px solid #c7d2fe;padding:4px 7px;border-radius:999px;color:#3730a3}.deleted-note{font-size:13px;color:#6b7280;margin:8px 0}.agent-control{border-left:4px solid #6366f1}.agent-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:12px}.agent-metric{background:#f8fafc;border:1px solid #e5e7eb;border-radius:10px;padding:12px}.agent-metric small{display:block;color:#6b7280}.agent-metric b{display:block;margin-top:4px}.agent-settings{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;align-items:end;margin-top:14px}.agent-settings label{font-size:12px;font-weight:700}.agent-settings select,.agent-settings input{width:100%;padding:10px;border:1px solid #ccd1d9;border-radius:8px;margin-top:5px}.agent-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}.intel-brief{border-left:4px solid #0ea5e9}.intel-columns{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}.intel-box{background:#f8fafc;border:1px solid #e5e7eb;border-radius:10px;padding:12px}.intel-box h3{margin:0 0 8px;font-size:14px}.intel-list{margin:0;padding-left:18px;font-size:13px;line-height:1.55}.intel-chips{display:flex;gap:6px;flex-wrap:wrap}.intel-chip{font-size:11px;background:#ecfeff;border:1px solid #a5f3fc;padding:4px 7px;border-radius:999px;color:#155e75}.intel-warn{background:#fff7ed;border-color:#fed7aa;color:#9a3412}.opp-card{border-left:4px solid #7c3aed}.opp-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:12px}.opp-item{border:1px solid #e5e7eb;border-radius:10px;padding:12px;background:#fafafa}.opp-item h3{margin:0 0 7px;font-size:14px}.opp-meta{display:flex;gap:6px;flex-wrap:wrap;margin:7px 0}.opp-tag{font-size:11px;padding:4px 7px;border-radius:999px;background:#f3e8ff;color:#6b21a8;border:1px solid #e9d5ff}.opp-score{font-weight:700;color:#6d28d9}.campaign-card{border-left:4px solid #0f766e}.campaign-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:12px}.campaign-item{border:1px solid #d1d5db;border-radius:12px;padding:14px;background:#fff}.campaign-item h3{margin:0 0 7px;font-size:15px}.campaign-flow{font-size:12px;background:#ecfeff;border:1px solid #a5f3fc;border-radius:8px;padding:8px;margin-top:8px}.campaign-score{font-weight:700;color:#0f766e}.opp-evidence{margin-top:9px;padding-top:8px;border-top:1px dashed #d1d5db;font-size:12px;color:#4b5563}.opp-evidence a{font-weight:700}@media(max-width:900px){.campaign-grid{grid-template-columns:1fr}}@media(max-width:700px){.opp-grid{grid-template-columns:1fr}}@media(max-width:700px){.intel-columns{grid-template-columns:1fr}}@media(max-width:850px){.agent-grid,.agent-settings{grid-template-columns:1fr 1fr}}@media(max-width:560px){.agent-grid,.agent-settings{grid-template-columns:1fr}}.schedule-box{margin-top:10px;padding:10px;background:#f8fafc;border:1px solid #e5e7eb;border-radius:8px}.schedule-box input{max-width:260px;margin:6px 6px 6px 0}.scheduled-note{font-size:13px;color:#7c3aed;font-weight:700;margin:8px 0}
+@media(max-width:700px){.stats,.social-grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header>
+  <div><b>Premier Express AI Social Manager</b><br><small>Approval-first • Platform-specific publishing</small></div>
+  <div id="toolbar" style="display:none"><button class="muted" id="logoutBtn">Logout</button></div>
+</header>
+<div class="wrap">
+  <div id="authCard" class="card">
+    <h2>Secure login</h2><p>Sign in to your private marketing dashboard.</p>
+    <label>Email</label><input id="email" type="email" autocomplete="username">
+    <label>Password</label><input id="password" type="password" autocomplete="current-password">
+    <button class="primary" id="signinBtn">Sign in</button><button class="muted" id="signupBtn">Create account</button><p id="authMsg"></p>
+  </div>
+
+  <div id="app" style="display:none">
+    <div class="card notice"><b>Live mode:</b> database changes are synchronized automatically. <span id="realtimeStatus" class="live">Connecting to live updates…</span></div>
+
+    <div class="card" id="socialCard">
+      <h2>Social Accounts</h2>
+      <div class="social-grid">
+        <div class="social-item"><b>🔵 Facebook</b><span id="facebookStatus" class="not-connected">Not connected</span></div>
+        <div class="social-item"><b>📸 Instagram</b><span id="instagramStatus" class="not-connected">Not connected</span></div>
+      </div>
+      <div style="margin-top:14px">
+        <a id="metaConnect" class="primary" href="https://ivtwkyfiagouazopttlc.supabase.co/functions/v1/meta-oauth-callback-v2" style="display:inline-block;text-decoration:none">🔗 Connect / Reconnect Meta</a>
+        <button class="muted" id="refreshSocialBtn">↻ Check connection</button>
+      </div>
+    </div>
+
+    <div class="card agent-control" id="agentControl">
+      <div class="platform-head"><div><h2 style="margin:0">🤖 Autonomous Agent Control Center</h2><p style="margin:6px 0 0">Researches current tourism demand and prepares drafts for your approval. It never publishes autonomous drafts without your approval.</p></div><span id="agentStatus" class="pill">Loading…</span></div>
+      <div class="agent-grid">
+        <div class="agent-metric"><small>Last research run</small><b id="agentLastRun">—</b></div>
+        <div class="agent-metric"><small>Next scheduled check</small><b id="agentNextRun">—</b></div>
+        <div class="agent-metric"><small>Last opportunities</small><b id="agentOpportunities">—</b></div>
+        <div class="agent-metric"><small>Last drafts created</small><b id="agentDrafts">—</b></div>
+      </div>
+      <div class="agent-settings">
+        <div><label>Autonomous research</label><select id="agentEnabled"><option value="true">ON</option><option value="false">OFF</option></select></div>
+        <div><label>Total drafts per run (all enabled platforms)</label><input id="agentMaxDrafts" type="number" min="0" max="20" value="4"><small class="command-help">Example: 6 with Facebook + Instagram means 6 total drafts, usually balanced across both platforms.</small></div>
+        <div><label>Research interval</label><select id="agentInterval"><option value="1">Every 1 hour</option><option value="2">Every 2 hours</option><option value="3">Every 3 hours</option><option value="4">Every 4 hours</option><option value="6">Every 6 hours</option><option value="8">Every 8 hours</option><option value="12">Every 12 hours</option><option value="24">Every 24 hours</option></select></div>
+        <div><label>Platforms</label><select id="agentPlatforms"><option value="facebook,instagram">Facebook + Instagram</option><option value="facebook">Facebook only</option><option value="instagram">Instagram only</option></select></div>
+      </div>
+      <div class="agent-actions"><button class="primary" id="researchNowBtn" onclick="researchNow()">🔎 Research Now</button><button class="muted" onclick="saveAgentSettings()">💾 Save Agent Settings</button><button class="muted" onclick="loadAgentControl()">↻ Refresh Status</button></div>
+      <p id="agentMessage" class="command-help"></p>
+    </div>
+
+    <div class="card opp-card">
+      <div class="platform-head">
+        <div><h2 style="margin:0">🔭 Opportunity Research Engine</h2><p style="margin:6px 0 0">Scans current tourism signals, traveller problems and your real services, then identifies customer opportunities before content is generated.</p></div>
+        <button class="primary" id="scanOppBtn" onclick="scanOpportunities()">🔎 Scan Opportunities</button>
+      </div>
+      <div id="opportunitySummary" class="command-help">No opportunity scan loaded yet.</div>
+      <div id="opportunityGrid" class="opp-grid"></div>
+    </div>
+
+    <div class="card campaign-card">
+      <div class="platform-head">
+        <div>
+          <h2 style="margin:0">🧠 Campaign Intelligence</h2>
+          <p style="margin:6px 0 0">Builds coordinated customer-acquisition campaign concepts from opportunities, audience gaps, recent content and your real services. Campaigns are strategy only until you approve future activation.</p>
+        </div>
+        <button class="primary" id="campaignPlanBtn" onclick="planCampaigns()">✨ Build Campaign Strategy</button>
+      </div>
+      <div id="campaignSummary" class="command-help">No campaign strategy loaded yet.</div>
+      <div id="campaignGrid" class="campaign-grid"></div>
+    </div>
+
+    <div class="card intel-brief">
+      <div class="platform-head">
+        <div><h2 style="margin:0">🎯 Content Intelligence Memory</h2><p style="margin:6px 0 0">A 30-day view of what the agent has already covered, what is being repeated, and where the next customer-acquisition opportunities should come from.</p></div>
+        <button class="muted" id="refreshIntelBtn" onclick="loadIntelligenceBrief()">↻ Refresh Intelligence</button>
+      </div>
+      <div class="agent-grid">
+        <div class="agent-metric"><small>Active posts analysed</small><b id="intelTotal">—</b></div>
+        <div class="agent-metric"><small>Underused products</small><b id="intelUnderCount">—</b></div>
+        <div class="agent-metric"><small>Priority audiences missing</small><b id="intelAudienceGap">—</b></div>
+        <div class="agent-metric"><small>Overused products</small><b id="intelOverCount">—</b></div>
+      </div>
+      <div class="intel-columns">
+        <div class="intel-box"><h3>Next product rotation</h3><div id="intelUnder" class="intel-chips">Loading…</div></div>
+        <div class="intel-box"><h3>Audience gaps</h3><div id="intelAudience" class="intel-chips">Loading…</div></div>
+        <div class="intel-box"><h3>Most-used products</h3><div id="intelOver" class="intel-chips">Loading…</div></div>
+        <div class="intel-box"><h3>Recommended next moves</h3><ul id="intelRecommendations" class="intel-list"><li>Loading intelligence…</li></ul></div>
+      </div>
+      <p id="intelUpdated" class="command-help"></p>
+    </div>
+
+    <div class="tabs">
+      <button class="tab active" id="tabFacebook" onclick="switchPlatform('facebook')">🔵 Facebook</button>
+      <button class="tab" id="tabInstagram" onclick="switchPlatform('instagram')">📸 Instagram</button>
+      <button class="tab" disabled title="LinkedIn will be added after Instagram publishing is stable">💼 LinkedIn — later</button>
+    </div>
+
+    <div class="card">
+      <div class="platform-head">
+        <div><h2 id="platformTitle" style="margin:0">Facebook Content</h2><p id="platformSubtitle" style="margin:6px 0 0">Facebook-specific AI posts with independent approval and publishing.</p></div>
+      </div>
+      <div class="command-grid">
+        <div><label>How many posts?</label><input id="generateCount" type="number" min="1" max="20" value="1"></div>
+        <div><label>Product / service link (optional)</label><input id="productUrl" type="url" placeholder="https://www.dubaipremiertourism.com/..."></div>
+        <div><button class="primary" id="generatePlatformBtn">⚡ Generate Now</button></div>
+      </div>
+      <div class="command-help">No daily 5-post limit. Generate 1–20 posts per command and run the command again whenever you want. If you provide a Premier Express product link, the agent will read that page and create content specifically for it.</div>
+      <div id="instagramNotice" class="ig-note" style="display:none;margin-top:14px"><b>Instagram media:</b> Media is optional while preparing a draft. To publish on Instagram, upload an image or short video first. You can approve a text draft without media and publish it later after media is added.</div>
+    </div>
+
+    <div class="workflow-tabs">
+      <button class="workflow-tab active" id="queueTab" onclick="switchView('queue')">📝 Approval Queue</button>
+      <button class="workflow-tab" id="scheduledTab" onclick="switchView('scheduled')">📅 Scheduled</button>
+      <button class="workflow-tab" id="historyTab" onclick="switchView('history')">🕘 Publish History</button>
+      <button class="workflow-tab" id="deletedTab" onclick="switchView('deleted')">🗑 Deleted</button>
+    </div>
+
+    <div class="stats">
+      <div class="card"><small>Total posts</small><div id="total" class="stat">0</div></div>
+      <div class="card"><small>Pending approval</small><div id="pending" class="stat">0</div></div>
+      <div class="card"><small>Published</small><div id="approved" class="stat">0</div></div>
+    </div>
+    <div id="posts"></div>
+  </div>
+</div>
+<script>
+const SUPABASE_URL="https://ivtwkyfiagouazopttlc.supabase.co";
+const SUPABASE_KEY="sb_publishable_w2Cn5cENECQqUUY3lAXH0w_GlSLz5iW";
+const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{auth:{autoRefreshToken:true,persistSession:true,detectSessionInUrl:true}});
+let realtimeChannel=null,appStarting=false,activePlatform="facebook",activeView="queue";
+const publishingIds=new Set();
+const $=id=>document.getElementById(id);
+function esc(v){return String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]));}
+
+
+async function loadCampaigns(){
+  try{
+    const {data,error}=await sb.from("agent_campaigns").select("*").eq("status","PROPOSED").order("created_at",{ascending:false}).limit(3);
+    if(error)throw error;
+    const rows=data||[];
+    if(!rows.length){
+      $("campaignSummary").textContent="No proposed campaign strategy yet.";
+      $("campaignGrid").innerHTML="";
+      return;
+    }
+    $("campaignSummary").textContent=`${rows.length} proposed campaign(s). These are strategic plans only; no posts were created or scheduled.`;
+    $("campaignGrid").innerHTML=rows.map(c=>{
+      const stages=Array.isArray(c.traveller_stage_strategy)?c.traveller_stage_strategy:[];
+      const pillars=Array.isArray(c.content_pillar_strategy)?c.content_pillar_strategy:[];
+      const plats=Array.isArray(c.platforms)?c.platforms:[];
+      return `<div class="campaign-item">
+        <h3>${esc(c.campaign_name||"Campaign")}</h3>
+        <div class="opp-meta">
+          <span class="opp-tag">${esc(c.matched_product||"")}</span>
+          <span class="opp-tag">${esc(c.audience_segment||"")}</span>
+          <span class="opp-tag">${esc(c.audience_location||"Worldwide")}</span>
+          <span class="opp-tag">${esc(plats.join(" + "))}</span>
+        </div>
+        <p><b>Type:</b> ${esc(c.campaign_type==="multi_product_journey"?"Multi-Product Journey":"Single-Product Campaign")}</p>
+        <p><b>Theme:</b> ${esc(c.campaign_theme||"")}</p>
+        <p><b>Objective:</b> ${esc(c.objective||"")}</p>
+        <p><b>Why this campaign:</b> ${esc(c.campaign_reason||"")}</p>
+        <p><b>Evidence:</b> ${esc(c.evidence_summary||"Evergreen/product intelligence")}</p>
+        <div class="campaign-flow"><b>Journey:</b> ${esc(stages.join(" → ")||"—")}<br><b>Content pillars:</b> ${esc(pillars.join(" → ")||"—")}<br><b>Recommended posts:</b> ${esc(c.recommended_posts??3)}</div>
+        ${(Array.isArray(c.product_strategy)&&c.product_strategy.length)?`<div class="campaign-flow"><b>Product strategy:</b><br>${c.product_strategy.map(x=>`${esc(x.service_name)} — ${esc(x.role)}`).join("<br>")}</div>`:""}
+        ${(Array.isArray(c.post_blueprint)&&c.post_blueprint.length)?`<div class="campaign-flow"><b>Planned sequence:</b><br>${c.post_blueprint.map(x=>`${esc(x.sequence)}. ${esc(x.service_name)} • ${esc(x.traveller_stage)} • ${esc(x.platform_focus)} — ${esc(x.purpose)}`).join("<br>")}</div>`:""}
+        <div class="campaign-score">Commercial score: ${esc(c.commercial_score??"—")}/100</div>
+        <button class="primary" style="margin-top:10px" onclick="activateCampaign('${esc(c.id)}',this)">▶ Activate Campaign</button>
+      </div>`;
+    }).join("");
+  }catch(e){
+    $("campaignSummary").textContent="Campaign intelligence error: "+(e?.message||String(e));
+  }
+}
+
+async function activateCampaign(id,btn){
+  const ok=confirm("Activate this campaign? Its planned drafts will be generated into Pending Approval only. Nothing will be published or scheduled automatically.");
+  if(!ok)return;
+  const old=btn.textContent;btn.disabled=true;btn.textContent="Activating…";
+  try{
+    const {data:{session}}=await sb.auth.getSession();if(!session)throw Error("Your session expired. Please sign in again.");
+    const r=await fetch(SUPABASE_URL+"/functions/v1/campaign-activate",{method:"POST",headers:{apikey:SUPABASE_KEY,Authorization:"Bearer "+session.access_token,"Content-Type":"application/json"},body:JSON.stringify({campaign_id:id})});
+    const text=await r.text();let j={};try{j=JSON.parse(text)}catch{}
+    if(!r.ok||!j.success)throw Error(j.error||text||("Activation failed with HTTP "+r.status));
+    alert(`Campaign activated successfully. ${j.created} coordinated draft(s) were created in Pending Approval. Nothing was published or scheduled.`);
+    await loadCampaigns();await renderPosts();
+  }catch(e){alert("Campaign activation failed: "+(e?.message||String(e)));btn.disabled=false;btn.textContent=old;}
+}
+
+async function planCampaigns(){
+  const btn=$("campaignPlanBtn"),old=btn.textContent;btn.disabled=true;btn.textContent="Planning…";
+  try{
+    const {data:{session}}=await sb.auth.getSession();if(!session)throw Error("Your session expired. Please sign in again.");
+    const r=await fetch(SUPABASE_URL+"/functions/v1/campaign-intelligence-planner",{method:"POST",headers:{apikey:SUPABASE_KEY,Authorization:"Bearer "+session.access_token,"Content-Type":"application/json"},body:"{}"});
+    const text=await r.text();let j={};try{j=JSON.parse(text)}catch{}
+    if(!r.ok||!j.success)throw Error(j.error||text||("Campaign planning failed with HTTP "+r.status));
+    $("campaignSummary").textContent=`✅ ${j.count??0} campaign strategy proposal(s) created. Nothing was published or scheduled.`;
+    await loadCampaigns();
+  }catch(e){
+    $("campaignSummary").textContent="Campaign planning failed: "+(e?.message||String(e));
+  }finally{btn.disabled=false;btn.textContent=old;}
+}
+
+async function scanOpportunities(){
+  const btn=$("scanOppBtn"),old=btn.textContent;btn.disabled=true;btn.textContent="Scanning…";
+  try{
+    const {data:{session}}=await sb.auth.getSession();if(!session)throw Error("Your session expired. Please sign in again.");
+    const r=await fetch(SUPABASE_URL+"/functions/v1/opportunity-research-engine",{method:"POST",headers:{apikey:SUPABASE_KEY,Authorization:"Bearer "+session.access_token,"Content-Type":"application/json"},body:"{}"});
+    const text=await r.text();let j={};try{j=JSON.parse(text)}catch{}
+    if(!r.ok||!j.success)throw Error(j.error||text||("Opportunity scan failed with HTTP "+r.status));
+    const ops=j.opportunities||[];
+    $("opportunitySummary").textContent=`✅ ${ops.length} customer opportunities identified. These are research opportunities only; nothing was published or scheduled.`;
+    $("opportunityGrid").innerHTML=ops.map(o=>{const evidence=o.evidence_source_url?`<div class="opp-evidence"><b>Evidence:</b> ${esc(o.evidence_source_name||o.evidence_source_kind||"Source")} • <a href="${esc(o.evidence_source_url)}" target="_blank" rel="noopener">Open source</a>${o.evidence_published_at?`<br><b>Published:</b> ${esc(new Date(o.evidence_published_at).toLocaleString())}`:""}${o.evidence_fetched_at?`<br><b>Checked:</b> ${esc(new Intl.DateTimeFormat("en-GB",{timeZone:"Asia/Dubai",year:"numeric",month:"short",day:"2-digit",hour:"2-digit",minute:"2-digit",hour12:true}).format(new Date(o.evidence_fetched_at))+" Dubai")}`:""}</div>`:`<div class="opp-evidence"><b>Evidence:</b> Evergreen/planning opportunity — no current-trend claim used.</div>`;return `<div class="opp-item"><h3>${esc(o.matched_product||"Opportunity")}</h3><div class="opp-meta"><span class="opp-tag">${esc(o.opportunity_type||"")}</span><span class="opp-tag">${esc(o.customer_intent||"")}</span><span class="opp-tag">${esc(o.audience_segment||"")}</span><span class="opp-tag">${esc(o.origin_market_hint||"Worldwide")}</span></div><p><b>Customer problem:</b> ${esc(o.customer_problem||"")}</p><p><b>Why they may book:</b> ${esc(o.booking_trigger||"")}</p><p><b>Research reason:</b> ${esc(o.research_reason||"")}</p><div class="opp-score">Relevance: ${esc(o.relevance_score??"—")}/100</div>${evidence}</div>`}).join("");
+  }catch(e){
+    $("opportunitySummary").textContent="Opportunity scan error: "+(e?.message||String(e));
+  }finally{btn.disabled=false;btn.textContent=old;}
+}
+
+async function loadIntelligenceBrief(){
+  const btn=$("refreshIntelBtn");if(btn){btn.disabled=true;}
+  try{
+    const {data:{session}}=await sb.auth.getSession();if(!session)throw Error("Your session expired. Please sign in again.");
+    const r=await fetch(SUPABASE_URL+"/functions/v1/content-intelligence-brief",{method:"POST",headers:{apikey:SUPABASE_KEY,Authorization:"Bearer "+session.access_token,"Content-Type":"application/json"},body:"{}"});
+    const text=await r.text();let j={};try{j=JSON.parse(text)}catch{}
+    if(!r.ok||!j.success)throw Error(j.error||text||("HTTP "+r.status));
+    $("intelTotal").textContent=String(j.total_active_posts??0);
+    $("intelUnderCount").textContent=String((j.underused_products||[]).length);
+    $("intelAudienceGap").textContent=String((j.missing_priority_audiences||[]).length);
+    $("intelOverCount").textContent=String((j.overused_products||[]).length);
+    const chips=(arr,warn=false)=>arr?.length?arr.map(x=>`<span class="intel-chip${warn?" intel-warn":""}">${esc(typeof x==="string"?x:(x.name+(Number.isFinite(x.count)?` (${x.count})`:"")))}</span>`).join(""):"<span class='command-help'>No gap detected.</span>";
+    $("intelUnder").innerHTML=chips(j.underused_products||[]);
+    $("intelAudience").innerHTML=chips(j.missing_priority_audiences||[]);
+    $("intelOver").innerHTML=chips(j.overused_products||[],true);
+    $("intelRecommendations").innerHTML=(j.recommendations||[]).map(x=>`<li>${esc(x)}</li>`).join("")||"<li>No recommendation available.</li>";
+    const d=new Date(j.generated_at);$("intelUpdated").textContent="Intelligence refreshed: "+new Intl.DateTimeFormat("en-GB",{timeZone:"Asia/Dubai",year:"numeric",month:"short",day:"2-digit",hour:"2-digit",minute:"2-digit",hour12:true}).format(d)+" Dubai";
+  }catch(e){
+    $("intelRecommendations").innerHTML=`<li>${esc("Intelligence error: "+(e?.message||String(e)))}</li>`;
+  }finally{if(btn)btn.disabled=false;}
+}
+
+async function loadAgentControl(){
+  try{
+    const [{data:settings,error:se},{data:runs,error:re}]=await Promise.all([
+      sb.from("agent_settings").select("*").eq("id","main").single(),
+      sb.from("agent_runs").select("*").order("started_at",{ascending:false}).limit(10)
+    ]);
+    if(se)throw se;if(re)throw re;
+    $("agentEnabled").value=String(settings.enabled);
+    $("agentMaxDrafts").value=String(settings.max_drafts_per_run??4);
+    $("agentInterval").value=String(settings.research_interval_hours??6);
+    const ps=Array.isArray(settings.platforms)?settings.platforms:[];
+    $("agentPlatforms").value=ps.includes("facebook")&&ps.includes("instagram")?"facebook,instagram":ps.includes("instagram")?"instagram":"facebook";
+    $("agentStatus").textContent=settings.enabled?"● ON":"○ OFF";
+    $("agentStatus").style.background=settings.enabled?"#dcfce7":"#e5e7eb";
+    const allRuns=runs||[];
+    const last=allRuns[0];
+    const lastSuccess=allRuns.find(r=>r.status==="SUCCEEDED");
+    const dubaiFmt=d=>new Intl.DateTimeFormat("en-GB",{timeZone:"Asia/Dubai",year:"numeric",month:"short",day:"2-digit",hour:"2-digit",minute:"2-digit",hour12:true}).format(d)+" Dubai";
+    const nextHourlyCheck=()=>{const now=new Date();const parts=new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Dubai",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).formatToParts(now).reduce((a,p)=>(a[p.type]=p.value,a),{});let d=new Date(`${parts.year}-${parts.month}-${parts.day}T${parts.hour}:15:00+04:00`);if(d<=now)d=new Date(d.getTime()+3600000);return d;};
+    if(last){
+      $("agentLastRun").textContent=dubaiFmt(new Date(last.started_at));
+      $("agentOpportunities").textContent=String(last.opportunities_found??last.metadata?.opportunities_found??0);
+      $("agentDrafts").textContent=String(last.drafts_created??last.items_created??last.metadata?.drafts_created??0);
+      $("agentNextRun").textContent=settings.enabled?dubaiFmt(nextHourlyCheck()):"Agent OFF";
+      const err=last.error||last.error_message||last.metadata?.error||"";
+      $("agentMessage").textContent=last.status+(last.summary?" — "+last.summary:"")+(err?" — "+err:"")+(lastSuccess&&last.status!=="SUCCEEDED"?` • Last successful run: ${dubaiFmt(new Date(lastSuccess.started_at))}`:"");
+    }else{
+      $("agentLastRun").textContent="No research run yet";$("agentNextRun").textContent=settings.enabled?dubaiFmt(nextHourlyCheck()):"Agent OFF";$("agentOpportunities").textContent="0";$("agentDrafts").textContent="0";
+    }
+  }catch(e){$("agentMessage").textContent="Agent status error: "+(e?.message||String(e));}
+}
+
+async function persistAgentSettings(showMessage=true){
+  const platforms=$("agentPlatforms").value.split(",").filter(Boolean);
+  const requested=Math.max(0,Math.min(20,Number($("agentMaxDrafts").value||0)));
+  const payload={
+    enabled:$("agentEnabled").value==="true",
+    max_drafts_per_run:requested,
+    research_interval_hours:Number($("agentInterval").value||6),
+    platforms,
+    updated_at:new Date().toISOString()
+  };
+  const {data,error}=await sb.from("agent_settings").update(payload).eq("id","main").select("max_drafts_per_run,research_interval_hours,platforms,enabled").single();
+  if(error)throw error;
+  if(Number(data?.max_drafts_per_run)!==requested)throw Error(`Settings verification failed. Requested ${requested}, database returned ${data?.max_drafts_per_run}.`);
+  if(showMessage)$("agentMessage").textContent=`✅ Agent settings saved and verified: ${requested} total draft(s) per run.`;
+  return data;
+}
+
+async function saveAgentSettings(){
+  try{
+    await persistAgentSettings(true);
+    await loadAgentControl();
+loadCampaigns();
+  }catch(e){alert("Could not save agent settings: "+(e?.message||String(e)));}
+}
+
+async function researchNow(){
+  const btn=$("researchNowBtn");btn.disabled=true;const old=btn.textContent;btn.textContent="Saving settings…";
+  try{
+    const saved=await persistAgentSettings(false);
+    const requested=Number(saved.max_drafts_per_run);
+    $("agentMessage").textContent=`Settings verified: ${requested} total draft(s). Starting research…`;
+    btn.textContent="Researching…";
+    const {data:{session}}=await sb.auth.getSession();if(!session)throw Error("Your session expired. Please sign in again.");
+    const r=await fetch(SUPABASE_URL+"/functions/v1/auto-content-agent-v10-safe",{method:"POST",headers:{apikey:SUPABASE_KEY,Authorization:"Bearer "+session.access_token,"Content-Type":"application/json"},body:"{}"});
+    const text=await r.text();let j={};try{j=JSON.parse(text)}catch{}
+    if(!r.ok||!j.success)throw Error(j.error||text||("Research failed with HTTP "+r.status));
+    const created=Number(j.created??0);
+    $("agentMessage").textContent=j.skipped?("Skipped: "+j.reason):`✅ Research complete: requested ${requested} total draft(s), created ${created}.`;
+    await loadAgentControl();await renderPosts();
+  }catch(e){alert("Research failed: "+(e?.message||String(e)));}
+  finally{btn.disabled=false;btn.textContent=old;}
+}
+
+function switchPlatform(platform){
+  activePlatform=platform;
+  $("tabFacebook").classList.toggle("active",platform==="facebook");
+  $("tabInstagram").classList.toggle("active",platform==="instagram");
+  $("platformTitle").textContent=platform==="facebook"?"Facebook Content":"Instagram Content";
+  $("platformSubtitle").textContent=platform==="facebook"?"Facebook-specific AI posts with independent approval and live publishing.":"Instagram-specific AI posts with independent approval, captions, hashtags and visual direction.";
+  $("instagramNotice").style.display=platform==="instagram"?"block":"none";
+  activeView="queue";
+  $("queueTab").classList.add("active");
+  $("historyTab").classList.remove("active");
+  $("scheduledTab").classList.remove("active");
+  $("deletedTab").classList.remove("active");
+  renderPosts();
+}
+
+
+function switchView(view){
+  activeView=view;
+  $("queueTab").classList.toggle("active",view==="queue");
+  $("historyTab").classList.toggle("active",view==="history");
+  $("scheduledTab").classList.toggle("active",view==="scheduled");
+  $("deletedTab").classList.toggle("active",view==="deleted");
+  renderPosts();
+}
+async function renderPosts(){
+  const {data,error}=await sb.from("content_posts").select("*").eq("primary_platform",activePlatform).order("created_at",{ascending:false}).limit(100);
+  if(error){$("posts").innerHTML="<div class='card'><b>Database error</b><pre>"+esc(JSON.stringify(error,null,2))+"</pre></div>";return;}
+  const allRows=data||[];
+  const activeRows=allRows.filter(x=>!x.deleted_at);
+  const queueStatuses=["PENDING_APPROVAL","EDIT_REQUESTED","APPROVED","READY_TO_PUBLISH"];
+  const historyStatuses=["PUBLISHED","REJECTED","FAILED"];
+  const rows=activeView==="deleted"?allRows.filter(x=>!!x.deleted_at):activeRows.filter(x=>activeView==="queue"?queueStatuses.includes(x.status):activeView==="scheduled"?x.status==="SCHEDULED":historyStatuses.includes(x.status));
+  $("total").textContent=activeRows.length;
+  $("pending").textContent=activeRows.filter(x=>["PENDING_APPROVAL","EDIT_REQUESTED"].includes(x.status)).length;
+  $("approved").textContent=activeRows.filter(x=>x.status==="PUBLISHED").length;
+
+  $("posts").innerHTML=rows.map(p=>{
+    const busy=publishingIds.has(p.id);
+    let actions="";
+
+    if(activePlatform==="facebook" && ["PENDING_APPROVAL","EDIT_REQUESTED"].includes(p.status)){
+      actions=`<button class="primary" ${busy?"disabled":""} onclick="approveFacebook('${esc(p.id)}')">${busy?"Publishing…":"✓ Approve &amp; Publish FB"}</button>`+
+              `<button class="muted" ${busy?"disabled":""} onclick="editPost('${esc(p.id)}')">✎ Edit</button>`+
+              `<button class="danger" ${busy?"disabled":""} onclick="rejectPost('${esc(p.id)}')">✕ Reject</button>`;
+    }
+
+    if(activePlatform==="instagram"){
+      if(["PENDING_APPROVAL","EDIT_REQUESTED"].includes(p.status)){
+        actions = p.media_url
+          ? `<button class="primary" ${busy?"disabled":""} onclick="approveInstagramAndPublish('${esc(p.id)}')">${busy?"Publishing…":"✓ Approve &amp; Publish Instagram"}</button>`
+          : `<button class="primary" ${busy?"disabled":""} onclick="approveInstagramDraft('${esc(p.id)}')">${busy?"Approving…":"✓ Approve Draft"}</button>`;
+        actions += `<button class="muted" ${busy?"disabled":""} onclick="editPost('${esc(p.id)}')">✎ Edit</button>`+
+                   `<button class="danger" ${busy?"disabled":""} onclick="rejectPost('${esc(p.id)}')">✕ Reject</button>`;
+      } else if(["APPROVED","READY_TO_PUBLISH"].includes(p.status) && p.media_url){
+        actions = `<button class="primary" ${busy?"disabled":""} onclick="publishInstagram('${esc(p.id)}')">${busy?"Publishing…":"🚀 Publish Instagram"}</button>`;
+      }
+    }
+
+    if(activeView==="queue" && ["PENDING_APPROVAL","EDIT_REQUESTED","APPROVED","READY_TO_PUBLISH"].includes(p.status)){
+      const canSchedule=activePlatform==="facebook" || !!p.media_url;
+      actions += canSchedule
+        ? `<div class="schedule-box"><b>Schedule instead of publishing now</b><br><small>Time below is Dubai time (UTC+4).</small><br><input id="schedule-${esc(p.id)}" type="datetime-local"><button class="muted" ${busy?"disabled":""} onclick="schedulePost('${esc(p.id)}')">📅 Schedule</button></div>`
+        : `<div class="schedule-box"><small>Upload Instagram media before scheduling this post.</small></div>`;
+    }
+    if(activeView==="scheduled" && p.status==="SCHEDULED"){
+      actions = `<button class="muted" ${busy?"disabled":""} onclick="cancelSchedule('${esc(p.id)}')">↩ Return to Approval Queue</button>`;
+    }
+
+    if(activeView!=="deleted" && p.status!=="PUBLISHED"){
+      actions += `<button class="danger" ${busy?"disabled":""} onclick="deletePost('${esc(p.id)}')">🗑 Delete</button>`;
+    }
+    if(activeView==="deleted"){
+      actions = `<button class="muted" ${busy?"disabled":""} onclick="restorePost('${esc(p.id)}')">↩ Restore</button>`;
+    }
+
+    let media="";
+    if(activePlatform==="instagram"){
+      if(p.media_url){
+        const preview=["video","reel"].includes(String(p.media_type||"").toLowerCase())
+          ? `<video controls preload="metadata" src="${esc(p.media_url)}"></video>`
+          : `<img src="${esc(p.media_url)}" alt="Instagram media preview">`;
+        media=`<div class="media-box"><b>Uploaded media:</b> ${esc(p.media_type||"image")}<div class="media-preview">${preview}</div><div class="media-actions"><a href="${esc(p.media_url)}" target="_blank" rel="noopener">Open full media</a></div>${p.status!=="PUBLISHED"?uploadControl(p.id,true):""}</div>`;
+      }else{
+        media=`<div class="media-box"><b>Media:</b> Optional for draft • Required to publish on Instagram.${p.status!=="PUBLISHED"?uploadControl(p.id,false):""}</div>`;
+      }
+    } else if(p.media_url){
+      media=`<div class="media-box"><b>Media:</b> <a href="${esc(p.media_url)}" target="_blank" rel="noopener">Open media</a></div>`;
+    }
+
+    const publishError=p.publish_error?`<p style="color:#b42318"><b>Publish error:</b> ${esc(p.publish_error)}</p>`:"";
+    let rc={};
+    if(p.research_context){
+      if(typeof p.research_context==="object")rc=p.research_context;
+      else try{rc=JSON.parse(p.research_context)}catch{rc={reason:String(p.research_context)}}
+    }
+    const sourceLabel=p.generation_source==="auto_research"?(rc.source_type||"Autonomous Research"):p.source_url?"Website Product Link":"Manual AI Command";
+    const reason=p.opportunity_reason||rc.reason||"";
+    const matched=p.matched_product||rc.matched_product||"";
+    const confidence=p.agent_confidence||rc.confidence||"";
+    const intelTags=[p.audience_segment?`Audience: ${p.audience_segment}`:"",p.audience_location?`Market: ${p.audience_location}`:"",p.traveller_stage?`Stage: ${p.traveller_stage}`:"",p.content_pillar?`Pillar: ${p.content_pillar}`:"",p.intelligence_score?`Relevance: ${p.intelligence_score}/100`:""].filter(Boolean).map(x=>`<span class="intel-tag">${esc(x)}</span>`).join("");
+    const agentInfo=(p.generation_source==="auto_research"||reason)?`<div class="agent-reason"><b>Agent source:</b> ${esc(sourceLabel)}${reason?`<br><b>Why created:</b> ${esc(reason)}`:""}${matched?`<br><b>Matched product:</b> ${esc(matched)}`:""}${confidence?`<br><b>Confidence:</b> ${esc(confidence)}`:""}${intelTags?`<div class="intel-tags">${intelTags}</div>`:""}</div>`:"";
+    const deletedInfo=p.deleted_at?`<div class="deleted-note"><b>Deleted:</b> ${esc(new Date(p.deleted_at).toLocaleString())}</div>`:"";
+    const scheduledInfo=p.scheduled_at?`<div class="scheduled-note">📅 Scheduled: ${esc(formatDubaiTime(p.scheduled_at))}</div>`:"";
+    const publishedInfo=p.published_at?`<div class="history-note"><b>Published:</b> ${esc(new Date(p.published_at).toLocaleString())}${p.external_post_id?` • ID: ${esc(p.external_post_id)}`:""}</div>`:"";
+    return `<div class="card post"><span class="pill">${esc(p.status)}</span><h2>${esc(p.post_number)}. ${esc(p.hook||p.objective||"Post")}</h2><small>${esc(activePlatform)} • ${esc(p.content_type||"")} • ${esc(p.content_date||"")}</small>${agentInfo}${media}<p class="caption">${esc(p.caption||"")}</p><p><b>CTA:</b> ${esc(p.cta||"")}<br><b>Visual direction:</b> ${esc(p.visual_direction||"")}</p>${publishError}${scheduledInfo}${publishedInfo}${deletedInfo}${actions}</div>`;
+  }).join("")||`<div class='card'><h3>${activeView==="queue"?"Queue is clear":activeView==="scheduled"?"No scheduled posts":activeView==="deleted"?"Deleted is empty":"No publish history yet"}</h3>${activeView==="queue"?"Generate new content or switch platform.":activeView==="scheduled"?"Schedule a post from the Approval Queue.":activeView==="deleted"?"Deleted drafts will appear here and can be restored.":"Published, rejected, and failed posts will appear here."}</div>`;
+}
+
+async function deletePost(id){
+  if(!confirm("Move this post to Deleted? You can restore it later."))return;
+  publishingIds.add(id);await renderPosts();
+  try{
+    const {error}=await sb.from("content_posts").update({deleted_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq("id",id);
+    if(error)throw Error(error.message);
+  }catch(e){alert("Delete failed: "+(e?.message||String(e)));}
+  finally{publishingIds.delete(id);await renderPosts();}
+}
+
+async function restorePost(id){
+  publishingIds.add(id);await renderPosts();
+  try{
+    const {error}=await sb.from("content_posts").update({deleted_at:null,updated_at:new Date().toISOString()}).eq("id",id);
+    if(error)throw Error(error.message);
+    alert("Post restored to its relevant tab.");
+  }catch(e){alert("Restore failed: "+(e?.message||String(e)));}
+  finally{publishingIds.delete(id);await renderPosts();}
+}
+
+function formatDubaiTime(iso){
+  try{
+    return new Intl.DateTimeFormat("en-GB",{timeZone:"Asia/Dubai",year:"numeric",month:"short",day:"2-digit",hour:"2-digit",minute:"2-digit",hour12:true}).format(new Date(iso))+" Dubai";
+  }catch{return iso;}
+}
+
+async function schedulePost(id){
+  const input=$("schedule-"+id);
+  const value=input?.value;
+  if(!value){alert("Choose the Dubai date and time first.");return;}
+  const scheduled=new Date(value+":00+04:00");
+  if(Number.isNaN(scheduled.getTime())){alert("Invalid schedule date/time.");return;}
+  if(scheduled.getTime()<=Date.now()+60000){alert("Please choose a time at least 1 minute in the future.");return;}
+  publishingIds.add(id);await renderPosts();
+  try{
+    const {error}=await sb.from("content_posts").update({
+      status:"SCHEDULED",
+      scheduled_at:scheduled.toISOString(),
+      scheduled_timezone:"Asia/Dubai",
+      approved_at:new Date().toISOString(),
+      publish_error:null,
+      updated_at:new Date().toISOString()
+    }).eq("id",id);
+    if(error)throw Error(error.message);
+    await sb.from("approval_events").insert({post_id:id,action:"APPROVE",notes:"Scheduled for "+scheduled.toISOString()+" (Asia/Dubai)"});
+    alert("✅ Post scheduled for "+formatDubaiTime(scheduled.toISOString())+".");
+  }catch(e){alert("Scheduling failed: "+(e?.message||String(e)));}
+  finally{publishingIds.delete(id);await renderPosts();}
+}
+
+async function cancelSchedule(id){
+  publishingIds.add(id);await renderPosts();
+  try{
+    const {error}=await sb.from("content_posts").update({
+      status:"APPROVED",
+      scheduled_at:null,
+      publish_error:null,
+      updated_at:new Date().toISOString()
+    }).eq("id",id);
+    if(error)throw Error(error.message);
+    alert("Post returned to the Approval Queue.");
+  }catch(e){alert("Could not cancel schedule: "+(e?.message||String(e)));}
+  finally{publishingIds.delete(id);await renderPosts();}
+}
+
+function uploadControl(id,replace){
+  const safe=esc(id);
+  return `<div class="media-upload"><b>${replace?"Replace media":"Upload media"}</b><br><small>Image (JPG/PNG/WebP) or MP4 video. Media is optional until you publish.</small><input id="mediaFile-${safe}" type="file" accept="image/jpeg,image/png,image/webp,video/mp4"><button class="muted" onclick="uploadMedia('${safe}')">⬆ Upload</button></div>`;
+}
+
+async function generatePlatform(){
+  const btn=$("generatePlatformBtn"),original=btn.textContent;
+  const count=Math.max(1,Math.min(20,Math.floor(Number($("generateCount").value||1))));
+  const sourceUrl=$("productUrl").value.trim();
+  btn.disabled=true;btn.textContent="Generating…";
+  try{
+    const {data:{session}}=await sb.auth.getSession();
+    if(!session)throw Error("Your session expired. Please sign in again.");
+    const r=await fetch(SUPABASE_URL+"/functions/v1/generate-platform-content",{
+      method:"POST",
+      headers:{apikey:SUPABASE_KEY,Authorization:"Bearer "+session.access_token,"Content-Type":"application/json"},
+      body:JSON.stringify({platform:activePlatform,count,source_url:sourceUrl||null})
+    });
+    const text=await r.text();let j={};try{j=JSON.parse(text)}catch{}
+    if(!r.ok||!j.success)throw Error(j.error||text||("Generation failed with HTTP "+r.status));
+    activeView="queue";
+    $("queueTab").classList.add("active");$("scheduledTab").classList.remove("active");$("historyTab").classList.remove("active");$("deletedTab").classList.remove("active");
+    await renderPosts();
+    alert(`✅ ${count} ${activePlatform} post${count===1?"":"s"} generated${sourceUrl?" from the supplied product link":""} and added to the Approval Queue.`);
+  }catch(e){alert("Generation failed: "+(e?.message||String(e)))}
+  finally{btn.disabled=false;btn.textContent=original;}
+}
+
+async function uploadMedia(id){
+  const input=$("mediaFile-"+id);
+  const file=input?.files?.[0];
+  if(!file){alert("Please choose an image or MP4 video first.");return;}
+
+  const allowed=["image/jpeg","image/png","image/webp","video/mp4"];
+  if(!allowed.includes(file.type)){alert("Please upload JPG, PNG, WebP, or MP4 only.");return;}
+  if(file.size>100*1024*1024){alert("Please keep the file under 100 MB for this test stage.");return;}
+
+  publishingIds.add(id);await renderPosts();
+  try{
+    const ext=(file.name.split(".").pop()|| (file.type==="video/mp4"?"mp4":"jpg")).toLowerCase().replace(/[^a-z0-9]/g,"");
+    const path=`manual/${id}/${Date.now()}.${ext}`;
+    const {error:upErr}=await sb.storage.from("social-media").upload(path,file,{contentType:file.type,upsert:false});
+    if(upErr)throw Error("Upload failed: "+upErr.message);
+
+    const {data:urlData}=sb.storage.from("social-media").getPublicUrl(path);
+    const publicUrl=urlData?.publicUrl;
+    if(!publicUrl)throw Error("Could not create a public media URL.");
+
+    const mediaType=file.type==="video/mp4"?"reel":"image";
+    const {error:dbErr}=await sb.from("content_posts").update({
+      media_url:publicUrl,
+      media_type:mediaType,
+      media_generation_status:"MANUAL_UPLOAD",
+      media_generation_error:null,
+      publish_error:null,
+      updated_at:new Date().toISOString()
+    }).eq("id",id);
+    if(dbErr)throw Error("Media uploaded but post update failed: "+dbErr.message);
+
+    alert("✅ Media uploaded. Review it, then publish when ready.");
+  }catch(e){alert(e?.message||String(e));}
+  finally{publishingIds.delete(id);await renderPosts();}
+}
+
+async function callInstagramPublisher(id){
+  const {data:{session}}=await sb.auth.getSession();
+  if(!session)throw Error("Your session expired. Please sign in again.");
+  const r=await fetch(SUPABASE_URL+"/functions/v1/publish-instagram-post",{
+    method:"POST",
+    headers:{apikey:SUPABASE_KEY,Authorization:"Bearer "+session.access_token,"Content-Type":"application/json"},
+    body:JSON.stringify({post_id:id})
+  });
+  const text=await r.text();
+  let j={};try{j=JSON.parse(text)}catch{}
+  if(!r.ok||!j.success)throw Error(j.error||text||("Instagram publishing failed with HTTP "+r.status));
+  return j;
+}
+
+async function approveInstagramAndPublish(id){
+  if(publishingIds.has(id))return;publishingIds.add(id);await renderPosts();
+  try{
+    const {error}=await sb.from("content_posts").update({status:"APPROVED",approved_at:new Date().toISOString(),publish_error:null}).eq("id",id);
+    if(error)throw Error("Approval failed: "+error.message);
+    await sb.from("approval_events").insert({post_id:id,action:"APPROVE",notes:"Approved for live Instagram publishing"});
+    await callInstagramPublisher(id);
+    alert("✅ Published successfully to Instagram.");
+  }catch(e){alert("Instagram publishing did not complete: "+(e?.message||String(e)));}
+  finally{publishingIds.delete(id);await renderPosts();}
+}
+
+async function publishInstagram(id){
+  if(publishingIds.has(id))return;publishingIds.add(id);await renderPosts();
+  try{
+    await callInstagramPublisher(id);
+    alert("✅ Published successfully to Instagram.");
+  }catch(e){alert("Instagram publishing did not complete: "+(e?.message||String(e)));}
+  finally{publishingIds.delete(id);await renderPosts();}
+}
+
+async function approveFacebook(id){
+  if(publishingIds.has(id))return;publishingIds.add(id);await renderPosts();
+  try{
+    const {error}=await sb.from("content_posts").update({status:"APPROVED",approved_at:new Date().toISOString()}).eq("id",id);if(error)throw Error("Approval failed: "+error.message);
+    await sb.from("approval_events").insert({post_id:id,action:"APPROVE",notes:"Approved for live Facebook publishing"});
+    const {data:{session}}=await sb.auth.getSession();if(!session)throw Error("Session expired before publishing.");
+    const r=await fetch(SUPABASE_URL+"/functions/v1/publish-approved-post",{method:"POST",headers:{apikey:SUPABASE_KEY,Authorization:"Bearer "+session.access_token,"Content-Type":"application/json"},body:JSON.stringify({post_id:id})});
+    const j=await r.json().catch(()=>({}));if(!r.ok||!j.success)throw Error(j.error||("Publishing failed with HTTP "+r.status));
+    alert("✅ Published successfully to the Premier Express Tourism Facebook Page.");
+  }catch(e){alert("Facebook publishing did not complete: "+e.message)}finally{publishingIds.delete(id);await renderPosts();}
+}
+
+async function approveInstagramDraft(id){
+  if(publishingIds.has(id))return;publishingIds.add(id);await renderPosts();
+  try{
+    const {error}=await sb.from("content_posts").update({status:"APPROVED",approved_at:new Date().toISOString()}).eq("id",id);if(error)throw error;
+    await sb.from("approval_events").insert({post_id:id,action:"APPROVE",notes:"Instagram text draft approved; media can be uploaded later"});
+    alert("✅ Instagram draft approved. It has not been published because no media is attached. You can upload media later and then publish it.");
+  }catch(e){alert("Instagram approval failed: "+e.message)}finally{publishingIds.delete(id);await renderPosts();}
+}
+
+async function rejectPost(id){const reason=prompt("Reason (optional):")||"";const {error}=await sb.from("content_posts").update({status:"REJECTED",rejection_reason:reason}).eq("id",id);if(error){alert("Reject failed: "+error.message);return;}await sb.from("approval_events").insert({post_id:id,action:"REJECT",notes:reason});await renderPosts();}
+async function editPost(id){const {data,error}=await sb.from("content_posts").select("caption").eq("id",id).single();if(error){alert(error.message);return;}const value=prompt("Edit caption:",data.caption||"");if(value===null)return;if(!value.includes("+971 56 202 6553")){alert("The WhatsApp number +971 56 202 6553 must remain in every post.");return;}const {error:e}=await sb.from("content_posts").update({caption:value,status:"EDIT_REQUESTED"}).eq("id",id);if(e){alert(e.message);return;}await sb.from("approval_events").insert({post_id:id,action:"EDIT",notes:`${activePlatform} caption edited`});await renderPosts();}
+
+async function loadSocialConnections(){const fb=$("facebookStatus"),ig=$("instagramStatus");const {data,error}=await sb.from("social_connections").select("platform,account_name,connection_status,last_error").in("platform",["facebook","instagram"]);if(error){fb.textContent=ig.textContent="Connection status unavailable";return;}const rows=data||[];for(const [platform,el] of [["facebook",fb],["instagram",ig]]){const r=rows.find(x=>x.platform===platform);if(r?.connection_status==="connected"){el.textContent="🟢 Connected"+(r.account_name?" — "+r.account_name:"");el.className="connected";}else if(r?.connection_status==="error"){el.textContent="🔴 Reconnect required"+(r.last_error?" — "+r.last_error:"");el.className="not-connected";}else{el.textContent="Not connected";el.className="not-connected";}}}
+async function subscribeRealtime(){if(realtimeChannel)await sb.removeChannel(realtimeChannel);realtimeChannel=sb.channel("premier-platform-tabs-live").on("postgres_changes",{event:"*",schema:"public",table:"content_posts"},()=>renderPosts()).on("postgres_changes",{event:"*",schema:"public",table:"social_connections"},()=>loadSocialConnections()).subscribe(status=>{$("realtimeStatus").textContent=status==="SUBSCRIBED"?"● Live updates connected":status==="CHANNEL_ERROR"?"Live connection error — retrying…":"Live status: "+status;});}
+async function enterApp(){if(appStarting)return;appStarting=true;try{$("authCard").style.display="none";$("app").style.display="block";$("toolbar").style.display="block";await renderPosts();await loadSocialConnections();await loadAgentControl();await loadIntelligenceBrief();await subscribeRealtime();}finally{appStarting=false;}}
+async function leaveApp(){if(realtimeChannel){await sb.removeChannel(realtimeChannel);realtimeChannel=null;}$("app").style.display="none";$("toolbar").style.display="none";$("authCard").style.display="block";}
+async function logout(){await sb.auth.signOut();await leaveApp();$("authMsg").textContent="Signed out.";}
+$("signinBtn").onclick=async()=>{const email=$("email").value.trim(),password=$("password").value;if(!email||!password){$("authMsg").textContent="Please enter your email and password.";return;}$("signinBtn").disabled=true;$("authMsg").textContent="Signing in…";const {error}=await sb.auth.signInWithPassword({email,password});$("signinBtn").disabled=false;$("authMsg").textContent=error?error.message:"Signed in.";};
+$("signupBtn").onclick=async()=>{const email=$("email").value.trim(),password=$("password").value;if(!email||!password){$("authMsg").textContent="Please enter your email and password.";return;}const {data,error}=await sb.auth.signUp({email,password});$("authMsg").textContent=error?error.message:(data.session?"Account created and signed in.":"Account created. Check your email, then sign in.");};
+$("generatePlatformBtn").onclick=generatePlatform;$("logoutBtn").onclick=logout;$("refreshSocialBtn").onclick=loadSocialConnections;
+sb.auth.onAuthStateChange((event,session)=>{if(session)enterApp();else leaveApp();});sb.auth.getSession().then(({data})=>{if(data.session)enterApp();});
+</script>
+</body>
+</html>
