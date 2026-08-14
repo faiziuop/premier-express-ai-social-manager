@@ -105,6 +105,28 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
     <div class="card campaign-card">
       <div class="platform-head">
         <div>
+          <h2 style="margin:0">🛡 Agent Governance & Safety Infrastructure</h2>
+          <p style="margin:6px 0 0">Central authority matrix for future autonomy: global emergency stop, per-capability modes, kill switches, rate/error thresholds, anomaly detection and audit visibility.</p>
+        </div>
+        <button class="secondary" id="govBtn" onclick="loadGovernanceSafety()">↻ Refresh Governance</button>
+      </div>
+      <div id="govBanner" class="campaign-flow">Governance state has not been loaded yet.</div>
+      <div class="lead-summary">
+        <div class="lead-stat"><small>Capabilities</small><b id="govCapabilities">0</b></div>
+        <div class="lead-stat"><small>Autonomous allowed</small><b id="govAutonomous">0</b></div>
+        <div class="lead-stat"><small>Human required</small><b id="govHuman">0</b></div>
+        <div class="lead-stat"><small>Blocked</small><b id="govBlocked">0</b></div>
+        <div class="lead-stat"><small>Anomaly flags</small><b id="govAnomalies">0</b></div>
+      </div>
+      <div id="govThresholds" class="campaign-flow"></div>
+      <div id="govCapabilitiesGrid" class="campaign-grid"></div>
+      <div id="govAnomalyGrid" class="campaign-grid"></div>
+      <div id="govAudit" class="campaign-item"></div>
+    </div>
+
+    <div class="card campaign-card">
+      <div class="platform-head">
+        <div>
           <h2 style="margin:0">🚀 Live Launch Protocol & Autonomy Roadmap</h2>
           <p style="margin:6px 0 0">Controls the first real operating cycle while preserving the long-term goal: progressively autonomous multi-account social operations with auditability, rollback and human override.</p>
         </div>
@@ -788,6 +810,45 @@ async function savePipelineLead(id){
 
 
 
+
+let governanceSafetyData=null;
+async function loadGovernanceSafety(){
+  const btn=$("govBtn"),old=btn.textContent;btn.disabled=true;btn.textContent="Refreshing…";
+  try{
+    const {data:{session}}=await sb.auth.getSession();if(!session)throw Error("Your session expired. Please sign in again.");
+    const r=await fetch(SUPABASE_URL+"/functions/v1/agent-governance-safety",{method:"POST",headers:{apikey:SUPABASE_KEY,Authorization:"Bearer "+session.access_token,"Content-Type":"application/json"},body:"{}"});
+    const text=await r.text();let j={};try{j=JSON.parse(text)}catch{}
+    if(!r.ok||!j.success)throw Error(j.error||text||("Governance refresh failed with HTTP "+r.status));
+    governanceSafetyData=j;const s=j.summary||{},g=j.governance||{};
+    $("govCapabilities").textContent=s.capabilities??0;
+    $("govAutonomous").textContent=s.autonomous_allowed??0;
+    $("govHuman").textContent=s.human_required??0;
+    $("govBlocked").textContent=s.blocked??0;
+    $("govAnomalies").textContent=s.anomaly_flags??0;
+
+    $("govBanner").innerHTML=g.global_emergency_stop
+      ? "<b>⛔ GLOBAL EMERGENCY STOP ACTIVE:</b> All capabilities are effectively blocked."
+      : `<b>🟢 Governance active:</b> no global stop. ${esc(j.future_rule||"")}`;
+
+    $("govThresholds").innerHTML=`<b>Safety thresholds:</b> max publish attempts ${esc(g.max_publish_attempts??"—")} • max failures/hour ${esc(g.max_failures_per_hour??"—")} • max posts/hour ${esc(g.max_posts_per_hour??"—")} • anomaly detection ${g.anomaly_detection_enabled?"ON":"OFF"} • audit logging ${g.audit_logging_enabled?"ON":"OFF"}`;
+
+    $("govCapabilitiesGrid").innerHTML=(j.capabilities||[]).map(x=>`<div class="campaign-item">
+      <div class="platform-head"><h3 style="margin:0">${esc(x.label)}</h3><span class="opp-tag">${esc(x.effective_state||x.authority_mode)}</span></div>
+      <p><b>Configured mode:</b> ${esc(x.authority_mode)} • <b>Kill switch:</b> ${x.kill_switch?"ON":"OFF"} • <b>Human approval:</b> ${x.requires_human_approval?"YES":"NO"}</p>
+      ${x.max_actions_per_hour!==null&&x.max_actions_per_hour!==undefined?`<p><b>Rate limit:</b> ${esc(x.max_actions_per_hour)} action(s)/hour</p>`:""}
+      <div class="campaign-flow">${esc(x.notes||"")}</div>
+    </div>`).join("");
+
+    const anomalies=j.anomalies||[];
+    $("govAnomalyGrid").innerHTML=anomalies.length
+      ? anomalies.map(x=>`<div class="campaign-item"><div class="platform-head"><h3 style="margin:0">${esc(x.type)}</h3><span class="opp-tag">${esc(x.severity)}</span></div><p>${esc(x.detail||"")}</p></div>`).join("")
+      : '<div class="campaign-item"><b>✅ No governance anomaly currently detected.</b></div>';
+
+    const audit=j.recent_audit_events||[];
+    $("govAudit").innerHTML=`<h3 style="margin-top:0">Recent audit events</h3>${audit.length?audit.slice(0,20).map(x=>`<p><b>${esc(x.capability_key||"system")}</b> • ${esc(x.action)} • ${esc(x.outcome)} • ${esc(new Date(x.created_at).toLocaleString())}</p>`).join(""):'<p>No audit events recorded yet. The audit store is ready for future governed actions.</p>'}`;
+  }catch(e){$("govBanner").textContent="Governance refresh failed: "+(e?.message||String(e));}
+  finally{btn.disabled=false;btn.textContent=old;}
+}
 let liveLaunchProtocolData=null;
 async function loadLaunchProtocol(){
   const btn=$("launchBtn"),old=btn.textContent;btn.disabled=true;btn.textContent="Building…";
@@ -1403,6 +1464,7 @@ loadOrchestratedIntelligence();
 loadIntegrationMap();
 loadDailyExecutionPlan();
 loadLaunchProtocol();
+loadGovernanceSafety();
   }catch(e){alert("Could not save agent settings: "+(e?.message||String(e)));}
 }
 
