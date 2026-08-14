@@ -105,6 +105,26 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
     <div class="card campaign-card">
       <div class="platform-head">
         <div>
+          <h2 style="margin:0">🕸 System Integration & Readiness Map</h2>
+          <p style="margin:6px 0 0">Verifies the complete agent chain from research to commercial learning. It checks structural connections and separates integration failures from normal early-stage evidence gaps.</p>
+        </div>
+        <button class="secondary" id="integrationBtn" onclick="loadIntegrationMap()">↻ Verify Agent Chain</button>
+      </div>
+      <div id="integrationBanner" class="campaign-flow">The integrated agent chain has not been verified yet.</div>
+      <div class="lead-summary">
+        <div class="lead-stat"><small>Modules</small><b id="intModules">0</b></div>
+        <div class="lead-stat"><small>Ready</small><b id="intReady">0</b></div>
+        <div class="lead-stat"><small>Data gaps</small><b id="intGaps">0</b></div>
+        <div class="lead-stat"><small>Blocked</small><b id="intBlocked">0</b></div>
+        <div class="lead-stat"><small>Connected flows</small><b id="intConnections">0</b></div>
+      </div>
+      <div id="integrationFlow" class="campaign-flow"></div>
+      <div id="integrationGrid" class="campaign-grid"></div>
+    </div>
+
+    <div class="card campaign-card">
+      <div class="platform-head">
+        <div>
           <h2 style="margin:0">🧠 Mission-Orchestrated Decision Intelligence</h2>
           <p style="margin:6px 0 0">Combines commercial evidence, content supply, campaign context and mission priorities into advisory next-step recommendations. It cannot change generation, campaigns, scheduling or publishing.</p>
         </div>
@@ -725,6 +745,24 @@ async function savePipelineLead(id){
 
 
 
+
+let integrationMapData=null;
+async function loadIntegrationMap(){
+  const btn=$("integrationBtn"),old=btn.textContent;btn.disabled=true;btn.textContent="Verifying…";
+  try{
+    const {data:{session}}=await sb.auth.getSession();if(!session)throw Error("Your session expired. Please sign in again.");
+    const r=await fetch(SUPABASE_URL+"/functions/v1/system-integration-readiness-map",{method:"POST",headers:{apikey:SUPABASE_KEY,Authorization:"Bearer "+session.access_token,"Content-Type":"application/json"},body:"{}"});
+    const text=await r.text();let j={};try{j=JSON.parse(text)}catch{}
+    if(!r.ok||!j.success)throw Error(j.error||text||("Agent-chain verification failed with HTTP "+r.status));
+    integrationMapData=j;const s=j.summary||{};
+    $("intModules").textContent=s.modules??0;$("intReady").textContent=s.ready??0;$("intGaps").textContent=s.data_gaps??0;$("intBlocked").textContent=s.blocked??0;$("intConnections").textContent=s.connections??0;
+    $("integrationBanner").innerHTML=j.overall==="BLOCKED"?`<b>⛔ STRUCTURAL BLOCKER:</b> ${esc(j.interpretation||"")}`:j.overall==="INTEGRATED_READY"?`<b>✅ INTEGRATED READY:</b> ${esc(j.interpretation||"")}`:`<b>🟢 INTEGRATED WITH DATA GAPS:</b> ${esc(j.interpretation||"")} Human approval remains required.`;
+    const labels=Object.fromEntries((j.nodes||[]).map(x=>[x.key,x.label]));
+    $("integrationFlow").innerHTML="<b>Verified flow:</b> "+(j.edges||[]).map(x=>`${esc(labels[x.from]||x.from)} → ${esc(labels[x.to]||x.to)} [${esc(x.status)}]`).join(" &nbsp; • &nbsp; ");
+    $("integrationGrid").innerHTML=(j.nodes||[]).map((x,i)=>`<div class="campaign-item"><div class="platform-head"><h3 style="margin:0">#${i+1} ${esc(x.label)}</h3><span class="opp-tag">${esc(x.status)}</span></div><p>${esc(x.evidence||"")}</p></div>`).join("");
+  }catch(e){$("integrationBanner").textContent="Agent-chain verification failed: "+(e?.message||String(e));}
+  finally{btn.disabled=false;btn.textContent=old;}
+}
 let orchestratedIntelData=null;
 async function loadOrchestratedIntelligence(){
   const btn=$("orchestratorBtn"),old=btn.textContent;btn.disabled=true;btn.textContent="Reasoning…";
@@ -1283,6 +1321,7 @@ loadApprovalQueueIntelligence();
 loadMissionControl();
 loadAudienceTaxonomy();
 loadOrchestratedIntelligence();
+loadIntegrationMap();
   }catch(e){alert("Could not save agent settings: "+(e?.message||String(e)));}
 }
 
