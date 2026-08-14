@@ -745,7 +745,7 @@ function renderOrchestratedIntelligence(){
   const f=$("orcFilter")?.value||"ALL";let rows=orchestratedIntelData.recommendations||[];if(f!=="ALL")rows=rows.filter(x=>x.recommendation===f);
   $("orchestratorGrid").innerHTML=rows.length?rows.map((x,i)=>`<div class="campaign-item">
     <div class="platform-head"><h3 style="margin:0">#${i+1} ${esc(x.product)}</h3><span class="opp-tag">${esc(x.recommendation)}</span></div>
-    <p><b>Posts:</b> ${esc(x.posts)} • <b>Pending:</b> ${esc(x.pending)} • <b>Active campaign posts:</b> ${esc(x.active_campaign_posts)}</p>
+    <p><b>Posts:</b> ${esc(x.posts)} • <b>Pending:</b> ${esc(x.pending)} • <b>Content supply:</b> ${esc(x.content_supply||"—")} • <b>Active campaign posts:</b> ${esc(x.active_campaign_posts)}</p>
     <p><b>Useful measured:</b> ${esc(x.useful_measured)} • <b>Qualified leads:</b> ${esc(x.qualified_leads)} • <b>Bookings:</b> ${esc(x.bookings)} • <b>Revenue:</b> AED ${esc(Number(x.revenue_aed||0).toLocaleString())}</p>
     <p><b>Average intelligence:</b> ${esc(x.avg_intelligence_score)}/100</p>
     <div class="campaign-flow"><b>Why:</b> ${esc(x.reason||"")}</div>
