@@ -105,6 +105,33 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
     <div class="card campaign-card">
       <div class="platform-head">
         <div>
+          <h2 style="margin:0">🧩 Audience & Taxonomy Normalization Intelligence</h2>
+          <p style="margin:6px 0 0">Maps historical audience wording into canonical commercial segments without rewriting old posts. This keeps coverage, campaigns and future learning consistent.</p>
+        </div>
+        <button class="secondary" id="taxonomyBtn" onclick="loadAudienceTaxonomy()">↻ Analyse Taxonomy</button>
+      </div>
+      <div id="taxonomyBanner" class="campaign-flow">Audience taxonomy has not been analysed yet.</div>
+      <div class="lead-summary">
+        <div class="lead-stat"><small>Raw labels</small><b id="taxRaw">0</b></div>
+        <div class="lead-stat"><small>Canonical audiences</small><b id="taxCanonical">0</b></div>
+        <div class="lead-stat"><small>Covered audiences</small><b id="taxCovered">0</b></div>
+        <div class="lead-stat"><small>Unmapped posts</small><b id="taxUnmapped">0</b></div>
+        <div class="lead-stat"><small>Multi-audience posts</small><b id="taxMulti">0</b></div>
+      </div>
+      <div class="lead-toolbar">
+        <select id="taxView" onchange="renderAudienceTaxonomy()" style="padding:10px;border:1px solid #ccd1d9;border-radius:8px">
+          <option value="coverage">Canonical coverage</option>
+          <option value="raw">Raw label mapping</option>
+        </select>
+        <div class="command-help">Historical audience text remains unchanged.</div>
+        <div class="command-help">Future intelligence can use canonical keys instead of fragmented wording.</div>
+      </div>
+      <div id="taxonomyGrid" class="campaign-grid"></div>
+    </div>
+
+    <div class="card campaign-card">
+      <div class="platform-head">
+        <div>
           <h2 style="margin:0">🧭 Agent Mission & Decision Control</h2>
           <p style="margin:6px 0 0">The commercial objective hierarchy and non-negotiable guardrails shared across the agent. This panel is policy visibility only; it does not grant autonomous authority.</p>
         </div>
@@ -667,6 +694,39 @@ async function savePipelineLead(id){
 
 
 
+
+let audienceTaxonomyData=null;
+async function loadAudienceTaxonomy(){
+  const btn=$("taxonomyBtn"),old=btn.textContent;btn.disabled=true;btn.textContent="Analysing…";
+  try{
+    const {data:{session}}=await sb.auth.getSession();if(!session)throw Error("Your session expired. Please sign in again.");
+    const r=await fetch(SUPABASE_URL+"/functions/v1/audience-taxonomy-intelligence",{method:"POST",headers:{apikey:SUPABASE_KEY,Authorization:"Bearer "+session.access_token,"Content-Type":"application/json"},body:"{}"});
+    const text=await r.text();let j={};try{j=JSON.parse(text)}catch{}
+    if(!r.ok||!j.success)throw Error(j.error||text||("Taxonomy analysis failed with HTTP "+r.status));
+    audienceTaxonomyData=j;const s=j.summary||{};
+    $("taxRaw").textContent=s.raw_labels??0;
+    $("taxCanonical").textContent=s.canonical_audiences??0;
+    $("taxCovered").textContent=s.covered_canonical_audiences??0;
+    $("taxUnmapped").textContent=s.unmapped_posts??0;
+    $("taxMulti").textContent=s.multi_audience_posts??0;
+    $("taxonomyBanner").innerHTML=`<b>Normalized view:</b> ${esc(s.raw_labels??0)} historical audience labels map into ${esc(s.canonical_audiences??0)} canonical commercial audiences. ${esc(s.covered_canonical_audiences??0)} canonical audience(s) currently have coverage.`;
+    renderAudienceTaxonomy();
+    await loadMissionControl();
+  }catch(e){$("taxonomyBanner").textContent="Audience taxonomy analysis failed: "+(e?.message||String(e));}
+  finally{btn.disabled=false;btn.textContent=old;}
+}
+function renderAudienceTaxonomy(){
+  if(!audienceTaxonomyData){$("taxonomyGrid").innerHTML='<div class="campaign-item">Analyse Taxonomy first.</div>';return;}
+  const view=$("taxView")?.value||"coverage";
+  if(view==="raw"){
+    const rows=audienceTaxonomyData.raw_labels||[];
+    $("taxonomyGrid").innerHTML=rows.slice(0,60).map(x=>`<div class="campaign-item"><div class="platform-head"><h3 style="margin:0">${esc(x.label||"(blank)")}</h3><span class="opp-tag">${esc(x.count??0)} post(s)</span></div><p><b>Maps to:</b> ${(x.mapped||[]).length?esc((x.mapped||[]).join(" • ")):"Unmapped"}</p></div>`).join("");
+    return;
+  }
+  const rows=audienceTaxonomyData.coverage||[];
+  $("taxonomyGrid").innerHTML=rows.map(x=>`<div class="campaign-item"><div class="platform-head"><h3 style="margin:0">#${esc(x.priority_rank)} ${esc(x.label)}</h3><span class="opp-tag">${x.covered?"COVERED":"GAP"}</span></div><p><b>Historical mentions:</b> ${esc(x.post_mentions??0)}</p></div>`).join("");
+}
+
 let missionControlData=null;
 async function loadMissionControl(){
   const btn=$("missionBtn"),old=btn.textContent;btn.disabled=true;btn.textContent="Loading…";
@@ -1165,6 +1225,7 @@ runPreLiveReadiness();
 loadLiveOperations();
 loadApprovalQueueIntelligence();
 loadMissionControl();
+loadAudienceTaxonomy();
   }catch(e){alert("Could not save agent settings: "+(e?.message||String(e)));}
 }
 
