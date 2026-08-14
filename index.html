@@ -738,12 +738,32 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
       </div>
 
       <div class="card campaign-card">
+        <div class="platform-head">
+          <div>
+            <h2 style="margin:0">💬 Comments / Inbox Awareness</h2>
+            <p style="margin:6px 0 0">Checks whether each managed account has the permissions and operational state needed for comment and inbox monitoring. No live conversation is fetched or replied to in this version.</p>
+          </div>
+          <button class="secondary" id="interactionOpsBtn" onclick="loadInteractionAwareness()">↻ Refresh Interaction Awareness</button>
+        </div>
+        <div id="interactionOpsBanner" class="campaign-flow">Interaction awareness has not been loaded yet.</div>
+        <div class="lead-summary">
+          <div class="lead-stat"><small>Accounts</small><b id="iaAccounts">0</b></div>
+          <div class="lead-stat"><small>Comments capable</small><b id="iaComments">0</b></div>
+          <div class="lead-stat"><small>Inbox capable</small><b id="iaInbox">0</b></div>
+          <div class="lead-stat"><small>Open interactions</small><b id="iaOpen">0</b></div>
+          <div class="lead-stat"><small>High priority</small><b id="iaHigh">0</b></div>
+        </div>
+        <div id="interactionGovernance" class="campaign-flow"></div>
+        <div id="interactionAccountGrid" class="campaign-grid"></div>
+      </div>
+
+      <div class="card campaign-card">
         <h2 style="margin-top:0">📌 Operations Workspace</h2>
         <div class="account-ops-roadmap">
           <div class="account-op-item"><b>📝 Content Operations</b><p>Account-specific content inventory, lifecycle and publishing coordination.</p><span class="pill">ACTIVE</span></div>
           <div class="account-op-item"><b>📅 Scheduling Operations</b><p>Cross-account calendar, cadence, conflicts and governed scheduling automation.</p><span class="pill">ACTIVE</span></div>
           <div class="account-op-item"><b>🚀 Publishing Operations</b><p>Per-account publish health, retries, rollback and future supervised/autonomous execution.</p><span class="pill">ACTIVE</span></div>
-          <div class="account-op-item"><b>💬 Comments / Inbox Awareness</b><p>Future monitoring and response-intelligence layer for customer conversations.</p><span class="pill">PLANNED</span></div>
+          <div class="account-op-item"><b>💬 Comments / Inbox Awareness</b><p>Monitoring and response-intelligence readiness for customer conversations.</p><span class="pill">ACTIVE</span></div>
           <div class="account-op-item"><b>🪪 Profile / Page Maintenance</b><p>Future governed monitoring of business profile details, links, bios and account configuration.</p><span class="pill">PLANNED</span></div>
           <div class="account-op-item"><b>🧯 Anomaly Detection & Repair</b><p>Detect broken connections, publishing failures, configuration drift and governed recovery actions.</p><span class="pill">PLANNED</span></div>
           <div class="account-op-item"><b>🕸 Multi-Account Orchestration</b><p>Future central coordination of multiple brands, pages, profiles and social platforms.</p><span class="pill">PLANNED</span></div>
@@ -2081,6 +2101,32 @@ async function editPost(id){const {data,error}=await sb.from("content_posts").se
 
 
 
+
+let socialInteractionAwarenessData=null;
+async function loadInteractionAwareness(){
+  const btn=$("interactionOpsBtn"),old=btn?.textContent||"↻ Refresh Interaction Awareness";
+  if(btn){btn.disabled=true;btn.textContent="Checking…";}
+  try{
+    const {data:{session}}=await sb.auth.getSession();if(!session)throw Error("Your session expired. Please sign in again.");
+    const r=await fetch(SUPABASE_URL+"/functions/v1/social-interaction-awareness",{method:"POST",headers:{apikey:SUPABASE_KEY,Authorization:"Bearer "+session.access_token,"Content-Type":"application/json"},body:"{}"});
+    const text=await r.text();let j={};try{j=JSON.parse(text)}catch{}
+    if(!r.ok||!j.success)throw Error(j.error||text||("Interaction awareness failed with HTTP "+r.status));
+    socialInteractionAwarenessData=j;const s=j.summary||{},g=j.governance||{};
+    $("iaAccounts").textContent=s.accounts??0;$("iaComments").textContent=s.comments_capable??0;$("iaInbox").textContent=s.inbox_capable??0;$("iaOpen").textContent=s.open_interactions??0;$("iaHigh").textContent=s.high_priority_open??0;
+    $("interactionOpsBanner").innerHTML=`<b>Authority: ${esc(j.authority||"READ_ONLY_INTERACTION_AWARENESS")}</b> — ${esc(j.guardrail||"")}`;
+    $("interactionGovernance").innerHTML=`<b>Account-maintenance governance:</b> authority ${esc(g.account_maintenance_authority||"BLOCKED")} • human approval ${g.human_approval?"YES":"NO"} • kill switch ${g.kill_switch?"ON":"OFF"}`;
+    $("interactionAccountGrid").innerHTML=(j.accounts||[]).map(a=>`<div class="campaign-item">
+      <div class="platform-head"><h3 style="margin:0">${a.platform==="facebook"?"🔵":"📸"} ${esc(a.account_name||a.platform)}</h3><span class="opp-tag">${esc(a.health_status)}</span></div>
+      <p><b>Connection:</b> ${esc(a.connection_status)} • <b>Sync mode:</b> ${esc(a.sync_mode)} • <b>Response authority:</b> ${esc(a.response_authority)}</p>
+      <p><b>Comment monitoring:</b> ${a.comments_supported?"AVAILABLE":"NOT AVAILABLE"} • <b>Inbox monitoring:</b> ${a.inbox_supported?"AVAILABLE":"NOT AVAILABLE"}</p>
+      <p><b>Open interactions:</b> ${esc(a.open_interactions)} • <b>High priority:</b> ${esc(a.high_priority_open)} • <b>Human-required:</b> ${esc(a.human_required_open)}</p>
+      <p><b>Comment last sync:</b> ${a.comments_last_sync_at?esc(new Date(a.comments_last_sync_at).toLocaleString()):"Never"} • <b>Inbox last sync:</b> ${a.inbox_last_sync_at?esc(new Date(a.inbox_last_sync_at).toLocaleString()):"Never"}</p>
+      ${(a.issues||[]).length?`<div class="campaign-flow"><b>Attention:</b><ol>${a.issues.map(x=>`<li>${esc(x)}</li>`).join("")}</ol></div>`:"<div class='campaign-flow'><b>Readiness:</b> Stored connection scopes support the current monitoring prerequisites.</div>"}
+    </div>`).join("");
+  }catch(e){$("interactionOpsBanner").textContent="Interaction awareness failed: "+(e?.message||String(e));}
+  finally{if(btn){btn.disabled=false;btn.textContent=old;}}
+}
+
 let socialPublishingOperationsData=null;
 async function loadPublishingOperations(){
   const btn=$("publishingOpsBtn"),old=btn?.textContent||"↻ Refresh Publishing";
@@ -2201,7 +2247,7 @@ function switchMainTab(tab){
   $("socialOpsPanel").classList.toggle("active",!agent);
   $("mainAgentTabBtn").classList.toggle("active",agent);
   $("socialOpsTabBtn").classList.toggle("active",!agent);
-  if(!agent&&!socialAccountOpsLoaded){loadSocialAccountOperations();loadContentOperations();loadSchedulingOperations();loadPublishingOperations();}
+  if(!agent&&!socialAccountOpsLoaded){loadSocialAccountOperations();loadContentOperations();loadSchedulingOperations();loadPublishingOperations();loadInteractionAwareness();}
 }
 
 async function loadSocialAccountOperations(){
