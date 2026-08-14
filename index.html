@@ -685,10 +685,32 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
       </div>
 
       <div class="card campaign-card">
+        <div class="platform-head">
+          <div>
+            <h2 style="margin:0">📅 Scheduling Operations</h2>
+            <p style="margin:6px 0 0">Cross-account scheduling health in Dubai time: upcoming queue, overdue items, close-interval conflicts and daily load. Read-only during the current maintenance stage.</p>
+          </div>
+          <button class="secondary" id="scheduleOpsBtn" onclick="loadSchedulingOperations()">↻ Refresh Scheduling</button>
+        </div>
+        <div id="scheduleOpsBanner" class="campaign-flow">Scheduling Operations has not been loaded yet.</div>
+        <div class="lead-summary">
+          <div class="lead-stat"><small>Scheduled</small><b id="soScheduled">0</b></div>
+          <div class="lead-stat"><small>Upcoming</small><b id="soUpcoming">0</b></div>
+          <div class="lead-stat"><small>Overdue</small><b id="soOverdue">0</b></div>
+          <div class="lead-stat"><small>Conflicts</small><b id="soConflicts">0</b></div>
+          <div class="lead-stat"><small>Attention items</small><b id="soAttention">0</b></div>
+        </div>
+        <div id="scheduleCapability" class="campaign-flow"></div>
+        <div id="scheduleAccountGrid" class="campaign-grid"></div>
+        <div id="scheduleIssueGrid" class="campaign-grid"></div>
+        <div id="scheduleQueueGrid" class="campaign-grid"></div>
+      </div>
+
+      <div class="card campaign-card">
         <h2 style="margin-top:0">📌 Operations Workspace</h2>
         <div class="account-ops-roadmap">
           <div class="account-op-item"><b>📝 Content Operations</b><p>Account-specific content inventory, lifecycle and publishing coordination.</p><span class="pill">ACTIVE</span></div>
-          <div class="account-op-item"><b>📅 Scheduling Operations</b><p>Cross-account calendar, cadence, conflicts and governed scheduling automation.</p><span class="pill">PLANNED</span></div>
+          <div class="account-op-item"><b>📅 Scheduling Operations</b><p>Cross-account calendar, cadence, conflicts and governed scheduling automation.</p><span class="pill">ACTIVE</span></div>
           <div class="account-op-item"><b>🚀 Publishing Operations</b><p>Per-account publish health, retries, rollback and future supervised/autonomous execution.</p><span class="pill">PLANNED</span></div>
           <div class="account-op-item"><b>💬 Comments / Inbox Awareness</b><p>Future monitoring and response-intelligence layer for customer conversations.</p><span class="pill">PLANNED</span></div>
           <div class="account-op-item"><b>🪪 Profile / Page Maintenance</b><p>Future governed monitoring of business profile details, links, bios and account configuration.</p><span class="pill">PLANNED</span></div>
@@ -2026,6 +2048,29 @@ async function editPost(id){const {data,error}=await sb.from("content_posts").se
 
 
 
+
+let socialSchedulingOperationsData=null;
+async function loadSchedulingOperations(){
+  const btn=$("scheduleOpsBtn"),old=btn?.textContent||"↻ Refresh Scheduling";
+  if(btn){btn.disabled=true;btn.textContent="Checking…";}
+  try{
+    const {data:{session}}=await sb.auth.getSession();if(!session)throw Error("Your session expired. Please sign in again.");
+    const r=await fetch(SUPABASE_URL+"/functions/v1/social-scheduling-operations",{method:"POST",headers:{apikey:SUPABASE_KEY,Authorization:"Bearer "+session.access_token,"Content-Type":"application/json"},body:"{}"});
+    const text=await r.text();let j={};try{j=JSON.parse(text)}catch{}
+    if(!r.ok||!j.success)throw Error(j.error||text||("Scheduling Operations failed with HTTP "+r.status));
+    socialSchedulingOperationsData=j;const s=j.summary||{},c=j.capability||{};
+    $("soScheduled").textContent=s.scheduled??0;$("soUpcoming").textContent=s.upcoming??0;$("soOverdue").textContent=s.overdue??0;$("soConflicts").textContent=s.conflicts??0;$("soAttention").textContent=s.attention_items??0;
+    $("scheduleOpsBanner").innerHTML=`<b>Authority: ${esc(j.authority||"READ_ONLY_SCHEDULING")}</b> — ${esc(j.guardrail||"")}<br><b>Dubai now:</b> ${esc(j.dubai_now||"—")}`;
+    $("scheduleCapability").innerHTML=`<b>Governance:</b> authority ${esc(c.authority_mode||"—")} • human approval ${c.requires_human_approval?"YES":"NO"} • kill switch ${c.kill_switch?"ON":"OFF"}${c.max_actions_per_hour!==null&&c.max_actions_per_hour!==undefined?` • rate limit ${esc(c.max_actions_per_hour)}/hour`:""}`;
+    $("scheduleAccountGrid").innerHTML=(j.accounts||[]).map(a=>`<div class="campaign-item"><h3 style="margin-top:0">${a.platform==="facebook"?"🔵 Facebook":"📸 Instagram"}</h3><p><b>Scheduled:</b> ${esc(a.scheduled??0)} • <b>Overdue:</b> ${esc(a.overdue??0)} • <b>Max daily load:</b> ${esc(a.max_daily_load??0)}</p>${(a.daily_load||[]).length?`<div class="campaign-flow">${a.daily_load.map(x=>`${esc(x.date)}: ${esc(x.count)} post(s)`).join(" • ")}</div>`:"<div class='campaign-flow'>No scheduled load yet.</div>"}</div>`).join("");
+    const issues=j.issues||[];
+    $("scheduleIssueGrid").innerHTML=issues.length?issues.map(x=>`<div class="campaign-item"><div class="platform-head"><h3 style="margin:0">${esc(x.type)}</h3><span class="opp-tag">${esc(x.severity)}</span></div><p>${esc(x.detail||"")}</p></div>`).join(""):'<div class="campaign-item"><b>✅ No scheduling conflict or overdue item detected.</b></div>';
+    const rows=j.items||[];
+    $("scheduleQueueGrid").innerHTML=rows.length?rows.map(x=>`<div class="campaign-item"><div class="platform-head"><h3 style="margin:0">Post ${esc(x.post_number??"—")} • ${esc(x.product||"Unmapped")}</h3><span class="opp-tag">${esc(x.platform)}</span></div><p><b>Scheduled:</b> ${esc(new Date(x.scheduled_at).toLocaleString())} • <b>Status:</b> ${esc(x.status||"")}</p><p>${esc(x.hook||"")}</p>${x.is_overdue?"<div class='campaign-flow'><b>OVERDUE</b></div>":""}</div>`).join(""):'<div class="campaign-item"><b>No posts are currently scheduled.</b></div>';
+  }catch(e){$("scheduleOpsBanner").textContent="Scheduling Operations failed: "+(e?.message||String(e));}
+  finally{if(btn){btn.disabled=false;btn.textContent=old;}}
+}
+
 let socialContentOperationsData=null;
 async function loadContentOperations(){
   const btn=$("contentOpsBtn"),old=btn?.textContent||"↻ Refresh Content Operations";
@@ -2081,7 +2126,7 @@ function switchMainTab(tab){
   $("socialOpsPanel").classList.toggle("active",!agent);
   $("mainAgentTabBtn").classList.toggle("active",agent);
   $("socialOpsTabBtn").classList.toggle("active",!agent);
-  if(!agent&&!socialAccountOpsLoaded){loadSocialAccountOperations();loadContentOperations();}
+  if(!agent&&!socialAccountOpsLoaded){loadSocialAccountOperations();loadContentOperations();loadSchedulingOperations();}
 }
 
 async function loadSocialAccountOperations(){
