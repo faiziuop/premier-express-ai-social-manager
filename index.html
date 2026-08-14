@@ -668,7 +668,7 @@ async function loadApprovalQueueIntelligence(){
     $("aqMedium").textContent=s.medium_priority??0;
     $("aqDuplicates").textContent=s.high_duplicate_risk??0;
     $("aqCampaigns").textContent=s.campaign_linked??0;
-    $("approvalIntelBanner").innerHTML=`<b>Review priority only:</b> ${esc(s.high_priority??0)} high-priority draft(s), ${esc(s.high_duplicate_risk??0)} high duplicate-risk draft(s), and ${esc(s.stale_over_7_days??0)} stale draft(s). No action has been taken automatically.`;
+    $("approvalIntelBanner").innerHTML=`<b>Review priority only:</b> ${esc(s.high_priority??0)} top-tier draft(s), ${esc(s.medium_priority??0)} medium-tier draft(s), ${esc(s.high_duplicate_risk??0)} high duplicate-risk draft(s), and ${esc(s.stale_over_7_days??0)} stale draft(s). High priority is calibrated to roughly the top 20% of the queue after duplicate/quality safeguards. No action has been taken automatically.`;
     renderApprovalQueueIntelligence();
   }catch(e){
     $("approvalIntelBanner").textContent="Approval queue analysis failed: "+(e?.message||String(e));
@@ -688,7 +688,7 @@ function renderApprovalQueueIntelligence(){
   let rows=[...(approvalQueueIntelData.rows||[])];
 
   if(platform!=="ALL")rows=rows.filter(x=>x.primary_platform===platform);
-  if(filter==="HIGH")rows=rows.filter(x=>Number(x.priority_score)>=80);
+  if(filter==="HIGH")rows=rows.filter(x=>x.review_tier==="HIGH");
   if(filter==="CAMPAIGN")rows=rows.filter(x=>x.campaign_id);
   if(filter==="DUPLICATE")rows=rows.filter(x=>x.duplicate_risk==="high");
   if(filter==="STALE")rows=rows.filter(x=>Number(x.age_days)>7);
@@ -707,7 +707,7 @@ function renderApprovalQueueIntelligence(){
     return `<div class="campaign-item">
       <div class="platform-head">
         <h3 style="margin:0">#${i+1} • Post ${esc(x.post_number??"—")} • ${esc(x.matched_product||"Unmapped")}</h3>
-        <span class="opp-tag">Priority ${esc(score)}/100</span>
+        <span class="opp-tag">${esc(x.review_tier||"STANDARD")} • Score ${esc(score)}/100</span>
       </div>
       <div class="opp-meta">
         <span class="opp-tag">${esc(x.primary_platform||"")}</span>
