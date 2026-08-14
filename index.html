@@ -91,7 +91,14 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
         <div><label>Notes (optional)</label><input id="leadNotes" placeholder="What are they asking for?"></div>
       </div>
       <button class="primary" onclick="recordWhatsAppLead()">＋ Record WhatsApp Lead</button>
-      <p id="leadMessage" class="command-help">Use the reference shown in the customer's pre-filled WhatsApp message.</p>
+      <p id="leadMessage" class="command-help">Paste the tracking reference from the customer's pre-filled WhatsApp message. The system resolves the exact source post automatically.</p>
+      <div class="lead-summary" style="margin-top:12px">
+        <div class="lead-stat"><small>Tracked enquiries</small><b id="waTrackedLeads">0</b></div>
+        <div class="lead-stat"><small>Qualified</small><b id="waQualified">0</b></div>
+        <div class="lead-stat"><small>Booked</small><b id="waBooked">0</b></div>
+        <div class="lead-stat"><small>Lost</small><b id="waLost">0</b></div>
+        <div class="lead-stat"><small>Revenue</small><b id="waRevenue">AED 0</b></div>
+      </div>
       <div id="leadGrid" class="campaign-grid"></div>
     </div>
 
@@ -320,6 +327,9 @@ async function recordWhatsAppLead(){
       notes:$("leadNotes").value.trim()||null,
       booking_value:0,
       currency:"AED",
+      source_type:"manual_tracking_code",
+      first_contact_at:new Date().toISOString(),
+      conversion_updated_at:new Date().toISOString(),
       updated_at:new Date().toISOString()
     };
     const {error}=await sb.from("lead_attributions").insert(payload);
@@ -346,6 +356,9 @@ async function updateLeadAttribution(id){
       lead_status:status,
       booking_value:status==="BOOKED"?value:0,
       booked_at:status==="BOOKED"?new Date().toISOString():null,
+      qualified_at:status==="QUALIFIED"?new Date().toISOString():null,
+      lost_at:status==="LOST"?new Date().toISOString():null,
+      conversion_updated_at:new Date().toISOString(),
       notes,
       updated_at:new Date().toISOString()
     };
@@ -363,10 +376,18 @@ async function updateLeadAttribution(id){
 async function loadLeadAttributions(){
   try{
     const {data,error}=await sb.from("lead_attributions")
-      .select("id,post_id,tracking_code,platform,lead_status,customer_name,customer_contact,notes,booking_value,currency,created_at,booked_at,content_posts(post_number,hook,matched_product,primary_platform,campaign_id)")
+      .select("id,post_id,tracking_code,platform,lead_status,customer_name,customer_contact,notes,booking_value,currency,created_at,first_contact_at,qualified_at,booked_at,lost_at,source_type,content_posts(post_number,hook,matched_product,primary_platform,campaign_id)")
       .order("created_at",{ascending:false}).limit(50);
     if(error)throw error;
     const rows=data||[];
+    if($("waTrackedLeads")){
+      $("waTrackedLeads").textContent=rows.length;
+      $("waQualified").textContent=rows.filter(x=>x.lead_status==="QUALIFIED").length;
+      $("waBooked").textContent=rows.filter(x=>x.lead_status==="BOOKED").length;
+      $("waLost").textContent=rows.filter(x=>x.lead_status==="LOST").length;
+      const rev=rows.filter(x=>x.lead_status==="BOOKED").reduce((a,x)=>a+Number(x.booking_value||0),0);
+      $("waRevenue").textContent="AED "+rev.toLocaleString(undefined,{maximumFractionDigits:2});
+    }
     if(!rows.length){
       $("leadGrid").innerHTML='<div class="campaign-item"><b>No attributed WhatsApp leads yet.</b><p class="command-help">When a customer messages using a tracked Facebook WhatsApp action, enter the reference above.</p></div>';
       return;
@@ -417,7 +438,7 @@ function leadAgeText(ts){
 async function loadLeadPipeline(){
   try{
     const {data,error}=await sb.from("lead_attributions")
-      .select("id,post_id,tracking_code,platform,lead_status,customer_name,customer_contact,notes,booking_value,currency,created_at,updated_at,booked_at,content_posts(post_number,hook,matched_product,primary_platform,campaign_id)")
+      .select("id,post_id,tracking_code,platform,lead_status,customer_name,customer_contact,notes,booking_value,currency,created_at,updated_at,first_contact_at,qualified_at,booked_at,lost_at,source_type,content_posts(post_number,hook,matched_product,primary_platform,campaign_id)")
       .order("created_at",{ascending:false})
       .limit(250);
     if(error)throw error;
@@ -510,6 +531,9 @@ async function savePipelineLead(id){
       lead_status:status,
       booking_value:status==="BOOKED"?value:0,
       booked_at:status==="BOOKED"?(current?.booked_at||new Date().toISOString()):null,
+      qualified_at:status==="QUALIFIED"?(current?.qualified_at||new Date().toISOString()):null,
+      lost_at:status==="LOST"?(current?.lost_at||new Date().toISOString()):null,
+      conversion_updated_at:new Date().toISOString(),
       notes,
       updated_at:new Date().toISOString()
     };
