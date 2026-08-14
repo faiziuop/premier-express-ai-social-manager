@@ -98,6 +98,25 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
     <div class="card campaign-card">
       <div class="platform-head">
         <div>
+          <h2 style="margin:0">🛡 Data Quality & Attribution Audit</h2>
+          <p style="margin:6px 0 0">Checks whether performance and attribution data are trustworthy enough for future learning. Audit only — it never repairs, deletes or remaps records automatically.</p>
+        </div>
+        <button class="secondary" id="auditBtn" onclick="runDataQualityAudit()">↻ Run Audit</button>
+      </div>
+      <div id="auditStatus" class="command-help">No audit run yet.</div>
+      <div class="lead-summary">
+        <div class="lead-stat"><small>Learning blockers</small><b id="auditBlockers">0</b></div>
+        <div class="lead-stat"><small>Needs attention</small><b id="auditAttention">0</b></div>
+        <div class="lead-stat"><small>Published posts</small><b id="auditPublished">0</b></div>
+        <div class="lead-stat"><small>Metric records</small><b id="auditMetrics">0</b></div>
+        <div class="lead-stat"><small>Attributed leads</small><b id="auditLeads">0</b></div>
+      </div>
+      <div id="auditGrid" class="campaign-grid"></div>
+    </div>
+
+    <div class="card campaign-card">
+      <div class="platform-head">
+        <div>
           <h2 style="margin:0">🎯 Customer Acquisition Intelligence</h2>
           <p style="margin:6px 0 0">Ranks what is actually producing reach, enquiries, bookings and revenue. Observational only: it cannot change research, generation, scheduling or publishing.</p>
         </div>
@@ -481,6 +500,29 @@ async function savePipelineLead(id){
 }
 
 
+
+async function runDataQualityAudit(){
+  const btn=$("auditBtn"),old=btn.textContent;btn.disabled=true;btn.textContent="Auditing…";
+  try{
+    const {data:{session}}=await sb.auth.getSession();if(!session)throw Error("Your session expired. Please sign in again.");
+    const r=await fetch(SUPABASE_URL+"/functions/v1/data-quality-attribution-audit",{method:"POST",headers:{apikey:SUPABASE_KEY,Authorization:"Bearer "+session.access_token,"Content-Type":"application/json"},body:"{}"});
+    const text=await r.text();let j={};try{j=JSON.parse(text)}catch{}
+    if(!r.ok||!j.success)throw Error(j.error||text||("Audit failed with HTTP "+r.status));
+    const s=j.summary||{};
+    $("auditBlockers").textContent=s.learning_blockers??0;$("auditAttention").textContent=s.attention_items??0;$("auditPublished").textContent=s.published??0;$("auditMetrics").textContent=s.metrics_records??0;$("auditLeads").textContent=s.leads??0;
+    const msg=j.status==="healthy"?"✅ Data foundation is healthy for the checks currently available.":j.status==="needs_attention"?"⚠ Data is usable for observation, but some gaps need attention before learning.":"⛔ Future autonomous learning is blocked until the listed data-quality issues are resolved.";
+    $("auditStatus").textContent=msg;
+    const order={learning_blocker:0,needs_attention:1,healthy:2};
+    const issues=[...(j.issues||[])].sort((a,b)=>(order[a.severity]??9)-(order[b.severity]??9)||Number(b.count||0)-Number(a.count||0));
+    $("auditGrid").innerHTML=issues.map(x=>{
+      const label=x.severity==="learning_blocker"?"LEARNING BLOCKER":x.severity==="needs_attention"?"NEEDS ATTENTION":"HEALTHY";
+      const samples=(x.samples||[]).length?`<details><summary>Show sample records</summary><pre style="white-space:pre-wrap;font-size:11px">${esc(JSON.stringify(x.samples,null,2))}</pre></details>`:"";
+      return `<div class="campaign-item"><div class="platform-head"><h3 style="margin:0">${esc(x.title)}</h3><span class="opp-tag">${esc(label)}</span></div><p><b>Count:</b> ${esc(x.count??0)}</p><p>${esc(x.detail||"")}</p>${samples}</div>`;
+    }).join("");
+  }catch(e){$("auditStatus").textContent="Audit failed: "+(e?.message||String(e));}
+  finally{btn.disabled=false;btn.textContent=old;}
+}
+
 let acquisitionData=null;
 
 async function loadAcquisitionIntelligence(){
@@ -733,6 +775,7 @@ loadCampaigns();
 loadLeadAttributions();
 loadLeadPipeline();
 loadAcquisitionIntelligence();
+runDataQualityAudit();
   }catch(e){alert("Could not save agent settings: "+(e?.message||String(e)));}
 }
 
