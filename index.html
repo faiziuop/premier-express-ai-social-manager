@@ -116,7 +116,7 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
         <div class="lead-stat"><small>Autonomous candidates</small><b id="arAutonomous">0</b></div>
         <div class="lead-stat"><small>Supervised candidates</small><b id="arSupervised">0</b></div>
         <div class="lead-stat"><small>Assisted candidates</small><b id="arAssisted">0</b></div>
-        <div class="lead-stat"><small>Evidence-blocked</small><b id="arBlocked">0</b></div>
+        <div class="lead-stat"><small>Observe only</small><b id="arBlocked">0</b></div>
       </div>
       <div class="lead-toolbar">
         <select id="arFilter" onchange="renderAutonomyReadiness()" style="padding:10px;border:1px solid #ccd1d9;border-radius:8px">
@@ -850,7 +850,7 @@ async function loadAutonomyReadiness(){
     const text=await r.text();let j={};try{j=JSON.parse(text)}catch{}
     if(!r.ok||!j.success)throw Error(j.error||text||("Autonomy readiness failed with HTTP "+r.status));
     autonomyReadinessData=j;const s=j.summary||{};
-    $("arCapabilities").textContent=s.capabilities??0;$("arAutonomous").textContent=s.autonomous_candidates??0;$("arSupervised").textContent=s.supervised_candidates??0;$("arAssisted").textContent=s.assisted_candidates??0;$("arBlocked").textContent=s.blocked_by_evidence??0;
+    $("arCapabilities").textContent=s.capabilities??0;$("arAutonomous").textContent=s.autonomous_candidates??0;$("arSupervised").textContent=s.supervised_candidates??0;$("arAssisted").textContent=s.assisted_candidates??0;$("arBlocked").textContent=s.observe_only??0;
     $("autoReadyBanner").innerHTML=`<b>Authority: ${esc(j.authority||"ASSESSMENT_ONLY")}</b> — ${esc(j.promotion_rule||"")}<br><b>Demotion policy:</b> ${esc(j.demotion_policy||"")}`;
     renderAutonomyReadiness();
   }catch(e){$("autoReadyBanner").textContent="Autonomy readiness failed: "+(e?.message||String(e));}
@@ -865,7 +865,7 @@ function renderAutonomyReadiness(){
     <p><b>Promotion eligible now:</b> ${x.eligible_for_promotion?"YES":"NO"}</p>
     <div class="campaign-flow"><b>Evidence:</b> ${esc(JSON.stringify(x.evidence||{}))}</div>
     ${(x.blockers||[]).length?`<p><b>Promotion blockers:</b></p><ol>${x.blockers.map(b=>`<li>${esc(b)}</li>`).join("")}</ol>`:'<p><b>Promotion blockers:</b> none detected by the current evidence model.</p>'}
-    <details><summary>Automatic demotion rules</summary><ol>${(x.demotion_rules||[]).map(d=>`<li>${esc(d)}</li>`).join("")}</ol></details>
+    <div class="campaign-flow"><b>Automatic demotion rules:</b><ol>${(x.demotion_rules||[]).map(d=>`<li>${esc(d)}</li>`).join("")}</ol></div>
   </div>`).join(""):'<div class="campaign-item"><b>No capabilities in this readiness stage.</b></div>';
 }
 let governanceSafetyData=null;
