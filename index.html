@@ -105,6 +105,25 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
     <div class="card campaign-card">
       <div class="platform-head">
         <div>
+          <h2 style="margin:0">🚦 Pre-Live Readiness & Control Center</h2>
+          <p style="margin:6px 0 0">One operational check before live work. Publishing remains human-approved; observation gaps are shown separately from genuine blockers.</p>
+        </div>
+        <button class="primary" id="readinessBtn" onclick="runPreLiveReadiness()">Run Pre-Live Check</button>
+      </div>
+      <div id="readinessBanner" class="campaign-flow">Pre-live check has not been run yet.</div>
+      <div class="lead-summary">
+        <div class="lead-stat"><small>Ready</small><b id="readyCount">0</b></div>
+        <div class="lead-stat"><small>Needs attention</small><b id="attentionCount">0</b></div>
+        <div class="lead-stat"><small>Blocked</small><b id="blockedCount">0</b></div>
+        <div class="lead-stat"><small>Useful metrics</small><b id="readyUsefulMetrics">0</b></div>
+        <div class="lead-stat"><small>Bookings</small><b id="readyBookings">0</b></div>
+      </div>
+      <div id="readinessGrid" class="campaign-grid"></div>
+    </div>
+
+    <div class="card campaign-card">
+      <div class="platform-head">
+        <div>
           <h2 style="margin:0">🧠 Cautious Learning Intelligence — Shadow Mode</h2>
           <p style="margin:6px 0 0">Studies real performance and proposes human-reviewed optimization signals only after minimum evidence exists. It has zero authority to change the agent or publish anything.</p>
         </div>
@@ -552,6 +571,21 @@ async function savePipelineLead(id){
 
 
 
+
+async function runPreLiveReadiness(){
+  const btn=$("readinessBtn"),old=btn.textContent;btn.disabled=true;btn.textContent="Checking…";
+  try{
+    const {data:{session}}=await sb.auth.getSession();if(!session)throw Error("Your session expired. Please sign in again.");
+    const r=await fetch(SUPABASE_URL+"/functions/v1/pre-live-readiness",{method:"POST",headers:{apikey:SUPABASE_KEY,Authorization:"Bearer "+session.access_token,"Content-Type":"application/json"},body:"{}"});
+    const text=await r.text();let j={};try{j=JSON.parse(text)}catch{}
+    if(!r.ok||!j.success)throw Error(j.error||text||("Readiness check failed with HTTP "+r.status));
+    const s=j.summary||{};$("readyCount").textContent=s.ready??0;$("attentionCount").textContent=s.needs_attention??0;$("blockedCount").textContent=s.blocked??0;$("readyUsefulMetrics").textContent=s.useful_metric_records??0;$("readyBookings").textContent=s.bookings??0;
+    $("readinessBanner").innerHTML=j.overall==="BLOCKED"?"<b>⛔ BLOCKED:</b> Resolve blocking controls before unattended live operation.":j.overall==="READY"?"<b>✅ READY:</b> Critical operational controls passed. Human approval remains in force.":"<b>🟢 CONTROLLED LIVE READY:</b> No blocking controls. Remaining items are observation/data maturity gaps and do not prevent human-approved live publishing.";
+    $("readinessGrid").innerHTML=(j.checks||[]).map(x=>`<div class="campaign-item"><div class="platform-head"><h3 style="margin:0">${esc(x.title)}</h3><span class="opp-tag">${esc(x.status)}</span></div><p>${esc(x.detail||"")}</p></div>`).join("");
+  }catch(e){$("readinessBanner").textContent="Pre-live check failed: "+(e?.message||String(e));}
+  finally{btn.disabled=false;btn.textContent=old;}
+}
+
 let shadowLearningData=null;
 async function runShadowLearning(){
   const btn=$("shadowBtn"),old=btn.textContent;btn.disabled=true;btn.textContent="Learning in shadow…";
@@ -853,6 +887,7 @@ loadLeadPipeline();
 loadAcquisitionIntelligence();
 runDataQualityAudit();
 runShadowLearning();
+runPreLiveReadiness();
   }catch(e){alert("Could not save agent settings: "+(e?.message||String(e)));}
 }
 
