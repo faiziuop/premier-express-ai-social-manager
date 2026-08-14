@@ -723,6 +723,13 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
           <div class="lead-stat"><small>Missing Meta IDs</small><b id="poMissingMeta">0</b></div>
         </div>
         <div id="publishingGovernance" class="campaign-flow"></div>
+        <div class="campaign-item">
+          <div class="platform-head">
+            <div><b>🧪 Facebook Publishing Authorization Diagnostic</b><div class="command-help">Read-only. Checks token validity, Meta app match, Page identity and publishing scopes. It does not create a Facebook post.</div></div>
+            <button class="muted" id="fbDiagBtn" onclick="runFacebookPublishingDiagnostic()">Run Facebook Diagnostic</button>
+          </div>
+          <div id="fbDiagResult" class="command-help">Not run yet.</div>
+        </div>
         <div class="lead-toolbar">
           <select id="poPlatform" onchange="renderPublishingOperations()" style="padding:10px;border:1px solid #ccd1d9;border-radius:8px">
             <option value="facebook">Facebook</option>
@@ -1820,10 +1827,16 @@ async function renderPosts(){
     const busy=publishingIds.has(p.id);
     let actions="";
 
-    if(activePlatform==="facebook" && ["PENDING_APPROVAL","EDIT_REQUESTED"].includes(p.status)){
-      actions=`<button class="primary" ${busy?"disabled":""} onclick="approveFacebook('${esc(p.id)}')">${busy?"Publishing…":"✓ Approve &amp; Publish FB"}</button>`+
-              `<button class="muted" ${busy?"disabled":""} onclick="editPost('${esc(p.id)}')">✎ Edit</button>`+
-              `<button class="danger" ${busy?"disabled":""} onclick="rejectPost('${esc(p.id)}')">✕ Reject</button>`;
+    if(activePlatform==="facebook"){
+      if(["PENDING_APPROVAL","EDIT_REQUESTED"].includes(p.status)){
+        actions=`<button class="primary" ${busy?"disabled":""} onclick="approveFacebook('${esc(p.id)}')">${busy?"Publishing…":"✓ Approve &amp; Publish FB"}</button>`+
+                `<button class="muted" ${busy?"disabled":""} onclick="editPost('${esc(p.id)}')">✎ Edit</button>`+
+                `<button class="danger" ${busy?"disabled":""} onclick="rejectPost('${esc(p.id)}')">✕ Reject</button>`;
+      }else if(["APPROVED","READY_TO_PUBLISH"].includes(p.status)){
+        const fbLabel=p.publish_error?"↻ Retry Publish FB":"🚀 Publish FB";
+        actions=`<button class="primary" ${busy?"disabled":""} onclick="publishFacebook('${esc(p.id)}')">${busy?"Publishing…":fbLabel}</button>`+
+                `<button class="muted" ${busy?"disabled":""} onclick="editPost('${esc(p.id)}')">✎ Edit</button>`;
+      }
     }
 
     if(activePlatform==="instagram"){
@@ -1878,7 +1891,7 @@ async function renderPosts(){
       media+=`<div class="media-box"><b>WhatsApp action:</b> ${waState}</div>`;
     }
 
-    const publishError=p.publish_error?`<p style="color:#b42318"><b>Publish error:</b> ${esc(p.publish_error)}</p>`:"";
+    const publishError=p.publish_error?`<div class="campaign-flow" style="border-left:4px solid #b42318"><b>Publish error:</b> ${esc(p.publish_error)}${p.publish_attempts!==null&&p.publish_attempts!==undefined?`<br><b>Recorded attempts:</b> ${esc(p.publish_attempts)}`:""}${p.last_publish_attempt_at?` • <b>Last attempt:</b> ${esc(new Date(p.last_publish_attempt_at).toLocaleString())}`:""}<br><b>State:</b> Not published. The same approved post and WhatsApp tracking reference are preserved for retry.</div>`:"";
     let rc={};
     if(p.research_context){
       if(typeof p.research_context==="object")rc=p.research_context;
@@ -2069,20 +2082,36 @@ async function publishInstagram(id){
   finally{publishingIds.delete(id);await renderPosts();}
 }
 
+async function callFacebookPublisher(id){
+  const {data:{session}}=await sb.auth.getSession();if(!session)throw Error("Session expired before publishing.");
+  const r=await fetch(SUPABASE_URL+"/functions/v1/publish-approved-post",{method:"POST",headers:{apikey:SUPABASE_KEY,Authorization:"Bearer "+session.access_token,"Content-Type":"application/json"},body:JSON.stringify({post_id:id})});
+  const text=await r.text();let j={};try{j=JSON.parse(text)}catch{}
+  if(!r.ok||!j.success)throw Error(j.error||text||("Publishing failed with HTTP "+r.status));
+  return j;
+}
+
 async function approveFacebook(id){
   if(publishingIds.has(id))return;publishingIds.add(id);await renderPosts();
   try{
-    const {error}=await sb.from("content_posts").update({status:"APPROVED",approved_at:new Date().toISOString()}).eq("id",id);if(error)throw Error("Approval failed: "+error.message);
+    const {error}=await sb.from("content_posts").update({status:"APPROVED",approved_at:new Date().toISOString(),publish_error:null}).eq("id",id);if(error)throw Error("Approval failed: "+error.message);
     await sb.from("approval_events").insert({post_id:id,action:"APPROVE",notes:"Approved for live Facebook publishing"});
-    const {data:{session}}=await sb.auth.getSession();if(!session)throw Error("Session expired before publishing.");
-    const r=await fetch(SUPABASE_URL+"/functions/v1/publish-approved-post",{method:"POST",headers:{apikey:SUPABASE_KEY,Authorization:"Bearer "+session.access_token,"Content-Type":"application/json"},body:JSON.stringify({post_id:id})});
-    const j=await r.json().catch(()=>({}));if(!r.ok||!j.success)throw Error(j.error||("Publishing failed with HTTP "+r.status));
-    const waNote=j.native_whatsapp_cta
-      ?" Native WhatsApp CTA was accepted by Meta."
-      :" A tracked WhatsApp action link was included.";
+    const j=await callFacebookPublisher(id);
+    const waNote=j.native_whatsapp_cta?" Native WhatsApp CTA was accepted by Meta.":" A tracked WhatsApp action link was included.";
     const mediaNote=String(j.publish_mode||"").startsWith("image")?" Image included.":"";
     alert("✅ Published successfully to the Premier Express Tourism Facebook Page."+mediaNote+waNote);
-  }catch(e){alert("Facebook publishing did not complete: "+e.message)}finally{publishingIds.delete(id);await renderPosts();}
+  }catch(e){alert("Facebook publishing did not complete: "+(e?.message||String(e))+"\n\nThe post remains APPROVED and can be retried after the Facebook connection issue is repaired.");}
+  finally{publishingIds.delete(id);await renderPosts();}
+}
+
+async function publishFacebook(id){
+  if(publishingIds.has(id))return;publishingIds.add(id);await renderPosts();
+  try{
+    const j=await callFacebookPublisher(id);
+    const waNote=j.native_whatsapp_cta?" Native WhatsApp CTA was accepted by Meta.":" A tracked WhatsApp action link was included.";
+    const mediaNote=String(j.publish_mode||"").startsWith("image")?" Image included.":"";
+    alert("✅ Facebook retry succeeded."+mediaNote+waNote);
+  }catch(e){alert("Facebook publishing did not complete: "+(e?.message||String(e))+"\n\nThe post remains approved. Do not delete it; repair the connection and retry this same post.");}
+  finally{publishingIds.delete(id);await renderPosts();}
 }
 
 async function approveInstagramDraft(id){
@@ -2125,6 +2154,21 @@ async function loadInteractionAwareness(){
     </div>`).join("");
   }catch(e){$("interactionOpsBanner").textContent="Interaction awareness failed: "+(e?.message||String(e));}
   finally{if(btn){btn.disabled=false;btn.textContent=old;}}
+}
+
+
+async function runFacebookPublishingDiagnostic(){
+  const btn=$("fbDiagBtn"),old=btn.textContent;btn.disabled=true;btn.textContent="Checking…";
+  try{
+    const {data:{session}}=await sb.auth.getSession();if(!session)throw Error("Your session expired. Please sign in again.");
+    const r=await fetch(SUPABASE_URL+"/functions/v1/facebook-publishing-diagnostic",{method:"POST",headers:{apikey:SUPABASE_KEY,Authorization:"Bearer "+session.access_token,"Content-Type":"application/json"},body:"{}"});
+    const text=await r.text();let j={};try{j=JSON.parse(text)}catch{}
+    if(!r.ok||!j.success)throw Error(j.error||text||("Diagnostic failed with HTTP "+r.status));
+    const a=j.app||{},t=j.token||{},p=j.page||{};
+    const issues=j.issues||[];
+    $("fbDiagResult").innerHTML=`<div class="campaign-flow"><b>Status:</b> ${esc(j.status||"—")}<br><b>Configured app:</b> ${esc(a.configured_app_id||"—")} • <b>Token app:</b> ${esc(a.token_app_id||"—")} • <b>App match:</b> ${a.app_match?"YES":"NO"}<br><b>Token valid:</b> ${t.is_valid?"YES":"NO"} • <b>Token type:</b> ${esc(t.type||"—")} • <b>Meta user ID:</b> ${esc(t.user_id||"—")}<br><b>Configured Page:</b> ${esc(p.configured_name||"—")} (${esc(p.configured_page_id||"—")})<br><b>Token identity:</b> ${esc(p.token_identity_name||"—")} (${esc(p.token_identity_id||"—")}) • <b>Matches Page:</b> ${p.token_identity_matches_page?"YES":"NO"}<br><b>Missing required scopes:</b> ${(t.missing_required_scopes||[]).length?esc(t.missing_required_scopes.join(", ")):"None"}</div>${issues.length?`<div class="campaign-flow"><b>Repair required:</b><ol>${issues.map(x=>`<li>${esc(x)}</li>`).join("")}</ol></div>`:`<div class="campaign-flow"><b>Authorization structure looks consistent.</b></div>`}<div class="campaign-score">${esc(j.recommendation||"")}</div>`;
+  }catch(e){$("fbDiagResult").textContent="Facebook diagnostic failed: "+(e?.message||String(e));}
+  finally{btn.disabled=false;btn.textContent=old;}
 }
 
 let socialPublishingOperationsData=null;
