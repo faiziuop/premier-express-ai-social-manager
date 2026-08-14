@@ -105,6 +105,25 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
     <div class="card campaign-card">
       <div class="platform-head">
         <div>
+          <h2 style="margin:0">🧭 Agent Mission & Decision Control</h2>
+          <p style="margin:6px 0 0">The commercial objective hierarchy and non-negotiable guardrails shared across the agent. This panel is policy visibility only; it does not grant autonomous authority.</p>
+        </div>
+        <button class="secondary" id="missionBtn" onclick="loadMissionControl()">↻ Refresh Mission</button>
+      </div>
+      <div id="missionBanner" class="campaign-flow">Mission control has not been loaded yet.</div>
+      <div class="lead-summary">
+        <div class="lead-stat"><small>Primary objective</small><b id="missionPrimary">—</b></div>
+        <div class="lead-stat"><small>Human approval</small><b id="missionApproval">ON</b></div>
+        <div class="lead-stat"><small>Autonomous publishing</small><b id="missionAutoPublish">OFF</b></div>
+        <div class="lead-stat"><small>Learning authority</small><b id="missionLearning">OFF</b></div>
+      </div>
+      <div id="missionHierarchy" class="campaign-grid"></div>
+      <div id="missionGuardrails" class="campaign-item"></div>
+    </div>
+
+    <div class="card campaign-card">
+      <div class="platform-head">
+        <div>
           <h2 style="margin:0">✅ Approval Queue Intelligence</h2>
           <p style="margin:6px 0 0">Ranks pending drafts so you can review the strongest customer-acquisition content first. It never approves, rejects, deletes or publishes on its own.</p>
         </div>
@@ -647,6 +666,27 @@ async function savePipelineLead(id){
 
 
 
+
+let missionControlData=null;
+async function loadMissionControl(){
+  const btn=$("missionBtn"),old=btn.textContent;btn.disabled=true;btn.textContent="Loading…";
+  try{
+    const {data:{session}}=await sb.auth.getSession();if(!session)throw Error("Your session expired. Please sign in again.");
+    const r=await fetch(SUPABASE_URL+"/functions/v1/agent-mission-control",{method:"POST",headers:{apikey:SUPABASE_KEY,Authorization:"Bearer "+session.access_token,"Content-Type":"application/json"},body:"{}"});
+    const text=await r.text();let j={};try{j=JSON.parse(text)}catch{}
+    if(!r.ok||!j.success)throw Error(j.error||text||("Mission control failed with HTTP "+r.status));
+    missionControlData=j;
+    $("missionPrimary").textContent=(j.hierarchy?.[0]?.label||"Bookings & Revenue");
+    $("missionApproval").textContent=j.controls?.human_approval_required?"ON":"OFF";
+    $("missionAutoPublish").textContent=j.controls?.autonomous_publishing?"ON":"OFF";
+    $("missionLearning").textContent=j.controls?.learning_authority?"ON":"OFF";
+    $("missionBanner").innerHTML=`<b>Mission:</b> ${esc(j.mission||"")}<br><b>Decision rule:</b> ${esc(j.decision_rule||"")}`;
+    $("missionHierarchy").innerHTML=(j.hierarchy||[]).map(x=>`<div class="campaign-item"><div class="platform-head"><h3 style="margin:0">#${esc(x.rank)} ${esc(x.label)}</h3><span class="opp-tag">Weight ${esc(x.weight)}%</span></div><p>${esc(x.evidence||"")}</p></div>`).join("");
+    $("missionGuardrails").innerHTML=`<h3 style="margin-top:0">Non-negotiable guardrails</h3><ol>${(j.guardrails||[]).map(x=>`<li>${esc(x)}</li>`).join("")}</ol><div class="campaign-score">Authority state: ${esc(j.status||"CONTROLLED")} — policy visibility does not enable autonomy.</div>`;
+  }catch(e){$("missionBanner").textContent="Mission control failed: "+(e?.message||String(e));}
+  finally{btn.disabled=false;btn.textContent=old;}
+}
+
 let approvalQueueIntelData=null;
 
 async function loadApprovalQueueIntelligence(){
@@ -1124,6 +1164,7 @@ runShadowLearning();
 runPreLiveReadiness();
 loadLiveOperations();
 loadApprovalQueueIntelligence();
+loadMissionControl();
   }catch(e){alert("Could not save agent settings: "+(e?.message||String(e)));}
 }
 
