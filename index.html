@@ -105,6 +105,16 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
     <div class="card campaign-card">
       <div class="platform-head">
         <div>
+          <h2 style="margin:0">🔐 Governed Execution Broker</h2>
+          <p style="margin:6px 0 0">The first live enforcement integration. Research refresh and Meta performance sync now execute through governance instead of calling their target functions directly.</p>
+        </div>
+      </div>
+      <div class="campaign-flow"><b>Enforced now:</b> Research & Opportunity Refresh → Governed Broker → Gateway Rules → Research Engine<br><b>Enforced now:</b> Meta Performance Sync → Governed Broker → Gateway Rules → Meta Sync<br><b>Audit:</b> each real broker execution records SUCCESS / FAILURE / DENIED with duration and governance decision.</div>
+    </div>
+
+    <div class="card campaign-card">
+      <div class="platform-head">
+        <div>
           <h2 style="margin:0">🚪 Governed Action Gateway</h2>
           <p style="margin:6px 0 0">Runtime enforcement layer for every future agent action. It checks emergency stop, kill switch, authority mode, human approval, failure budget and hourly rate limits before execution.</p>
         </div>
@@ -1369,16 +1379,21 @@ async function syncMetaPerformance(){
   try{
     const {data:{session}}=await sb.auth.getSession();
     if(!session)throw Error("Your session expired. Please sign in again.");
-    const r=await fetch(SUPABASE_URL+"/functions/v1/meta-performance-sync",{
+    const r=await fetch(SUPABASE_URL+"/functions/v1/governed-execution-broker",{
       method:"POST",
       headers:{apikey:SUPABASE_KEY,Authorization:"Bearer "+session.access_token,"Content-Type":"application/json"},
-      body:"{}"
+      body:JSON.stringify({capability:"meta_sync",payload:{}})
     });
     const text=await r.text();let j={};try{j=JSON.parse(text)}catch{}
-    if(!r.ok||!j.success)throw Error(j.error||text||("Meta sync failed with HTTP "+r.status));
-    const errCount=Array.isArray(j.errors)?j.errors.length:0;
-    $("performanceSummary").textContent=`✅ Meta sync complete: ${j.synced??0} published post(s) synced, ${j.skipped??0} skipped${errCount?`, ${errCount} issue(s) reported`:""}. No publishing settings were changed.`;
+    if(!r.ok||!j.success)throw Error(j.error||text||("Governed Meta sync failed with HTTP "+r.status));
+    const result=j.target_result||{};
+    const errCount=Array.isArray(result.errors)?result.errors.length:Number(result.failed||0);
+    const useful=result.useful??result.synced??0;
+    const zero=result.zero_or_unavailable??result.skipped??0;
+    $("performanceSummary").textContent=`✅ Governed Meta sync complete: ${useful} useful/non-zero result(s), ${zero} zero or unavailable, ${errCount} failed. Governance decision: ${j.governance_decision||"ALLOW_ASSISTED"}. No publishing settings were changed.`;
     await refreshCampaignPerformance();
+    if(typeof loadGovernedGateway==="function")await loadGovernedGateway();
+    if(typeof loadGovernanceSafety==="function")await loadGovernanceSafety();
   }catch(e){
     $("performanceSummary").textContent="Meta performance sync failed: "+(e?.message||String(e));
   }finally{btn.disabled=false;btn.textContent=old;}
@@ -1470,10 +1485,11 @@ async function scanOpportunities(){
   const btn=$("scanOppBtn"),old=btn.textContent;btn.disabled=true;btn.textContent="Scanning…";
   try{
     const {data:{session}}=await sb.auth.getSession();if(!session)throw Error("Your session expired. Please sign in again.");
-    const r=await fetch(SUPABASE_URL+"/functions/v1/opportunity-research-engine",{method:"POST",headers:{apikey:SUPABASE_KEY,Authorization:"Bearer "+session.access_token,"Content-Type":"application/json"},body:"{}"});
+    const r=await fetch(SUPABASE_URL+"/functions/v1/governed-execution-broker",{method:"POST",headers:{apikey:SUPABASE_KEY,Authorization:"Bearer "+session.access_token,"Content-Type":"application/json"},body:JSON.stringify({capability:"research",payload:{}})});
     const text=await r.text();let j={};try{j=JSON.parse(text)}catch{}
-    if(!r.ok||!j.success)throw Error(j.error||text||("Opportunity scan failed with HTTP "+r.status));
-    const ops=j.opportunities||[];
+    if(!r.ok||!j.success)throw Error(j.error||text||("Governed opportunity scan failed with HTTP "+r.status));
+    const result=j.target_result||{};
+    const ops=result.opportunities||[];
     $("opportunitySummary").textContent=`✅ ${ops.length} customer opportunities identified. These are research opportunities only; nothing was published or scheduled.`;
     $("opportunityGrid").innerHTML=ops.map(o=>{const evidence=o.evidence_source_url?`<div class="opp-evidence"><b>Evidence:</b> ${esc(o.evidence_source_name||o.evidence_source_kind||"Source")} • <a href="${esc(o.evidence_source_url)}" target="_blank" rel="noopener">Open source</a>${o.evidence_published_at?`<br><b>Published:</b> ${esc(new Date(o.evidence_published_at).toLocaleString())}`:""}${o.evidence_fetched_at?`<br><b>Checked:</b> ${esc(new Intl.DateTimeFormat("en-GB",{timeZone:"Asia/Dubai",year:"numeric",month:"short",day:"2-digit",hour:"2-digit",minute:"2-digit",hour12:true}).format(new Date(o.evidence_fetched_at))+" Dubai")}`:""}</div>`:`<div class="opp-evidence"><b>Evidence:</b> Evergreen/planning opportunity — no current-trend claim used.</div>`;return `<div class="opp-item"><h3>${esc(o.matched_product||"Opportunity")}</h3><div class="opp-meta"><span class="opp-tag">${esc(o.opportunity_type||"")}</span><span class="opp-tag">${esc(o.customer_intent||"")}</span><span class="opp-tag">${esc(o.audience_segment||"")}</span><span class="opp-tag">${esc(o.origin_market_hint||"Worldwide")}</span></div><p><b>Customer problem:</b> ${esc(o.customer_problem||"")}</p><p><b>Why they may book:</b> ${esc(o.booking_trigger||"")}</p><p><b>Research reason:</b> ${esc(o.research_reason||"")}</p><div class="opp-score">Relevance: ${esc(o.relevance_score??"—")}/100</div>${evidence}</div>`}).join("");
   }catch(e){
