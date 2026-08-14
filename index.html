@@ -104,6 +104,7 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
         <button class="secondary" id="acquisitionBtn" onclick="loadAcquisitionIntelligence()">↻ Analyse Acquisition</button>
       </div>
       <div id="acquisitionReadiness" class="command-help">No acquisition analysis loaded yet.</div>
+      <div id="acquisitionConfidence" class="campaign-flow" style="margin-bottom:12px">Confidence: waiting for analysis.</div>
       <div class="lead-summary">
         <div class="lead-stat"><small>Measured posts</small><b id="acqMeasured">0</b></div>
         <div class="lead-stat"><small>Attributed leads</small><b id="acqLeads">0</b></div>
@@ -507,6 +508,9 @@ async function loadAcquisitionIntelligence(){
       eligible_for_cautious_learning:"Enough history exists for a future cautious-learning layer, but it is still disabled."
     }[s.learning_readiness]||"Observational analysis only.";
     $("acquisitionReadiness").textContent="🛡 "+readiness;
+    const conf=s.confidence||{};
+    const pretty=x=>x==="developing"?"Developing":x==="early"?"Early":x==="strong"?"Strong":"Insufficient";
+    $("acquisitionConfidence").innerHTML=`<b>Evidence quality:</b> Social ${pretty(conf.social)} • Acquisition ${pretty(conf.acquisition)} • Commercial ${pretty(conf.commercial)}<br><small>Social evidence comes from measured reach/engagement. Acquisition evidence requires real leads. Commercial evidence requires actual bookings/revenue.</small>`;
     renderAcquisitionRanking();
   }catch(e){
     $("acquisitionReadiness").textContent="Acquisition analysis failed: "+(e?.message||String(e));
@@ -520,13 +524,15 @@ function renderAcquisitionRanking(){
   rows.sort((a,b)=>Number(b[goal]||0)-Number(a[goal]||0)||Number(b.bookings||0)-Number(a.bookings||0)||Number(b.leads||0)-Number(a.leads||0));
   if(!rows.length){$("acquisitionGrid").innerHTML='<div class="campaign-item">No data available for this dimension yet.</div>';return;}
   $("acquisitionGrid").innerHTML=rows.slice(0,12).map((r,i)=>{
-    const evidence=r.evidence_level==="strong"?"Strong evidence":r.evidence_level==="developing"?"Developing evidence":"Insufficient evidence";
+    const friendly=r.label||r.key;
+    const pretty=x=>x==="strong"?"Strong":x==="developing"?"Developing":"Insufficient";
     return `<div class="campaign-item">
-      <div class="platform-head"><h3 style="margin:0">#${i+1} ${esc(r.key)}</h3><span class="opp-tag">${esc(evidence)}</span></div>
+      <div class="platform-head"><h3 style="margin:0">#${i+1} ${esc(friendly)}</h3><span class="opp-tag">${esc(pretty(r.overall_confidence))} overall</span></div>
       <p><b>Posts:</b> ${esc(r.posts??0)} &nbsp; <b>Measured:</b> ${esc(r.measured_posts??0)} &nbsp; <b>Reach:</b> ${esc(r.reach??0)}</p>
       <p><b>Leads:</b> ${esc(r.leads??0)} &nbsp; <b>Bookings:</b> ${esc(r.bookings??0)} &nbsp; <b>Revenue:</b> AED ${esc(Number(r.revenue_aed||0).toLocaleString())}</p>
       <p><b>Lead → booking:</b> ${r.lead_to_booking_rate===null?"—":esc(r.lead_to_booking_rate)+"%"} &nbsp; <b>Engagement rate:</b> ${r.engagement_rate===null?"—":esc(r.engagement_rate)+"%"} &nbsp; <b>Click rate:</b> ${r.click_rate===null?"—":esc(r.click_rate)+"%"}</p>
-      <div class="campaign-score">${r.evidence_level==="insufficient"?"Do not optimize from this yet.":"Useful observational signal."}</div>
+      <div class="campaign-flow"><b>Confidence:</b> Social ${pretty(r.social_confidence)} • Acquisition ${pretty(r.acquisition_confidence)} • Commercial ${pretty(r.commercial_confidence)}</div>
+      <div class="campaign-score">${r.commercial_confidence==="insufficient"&&r.acquisition_confidence==="insufficient"?"No commercial conclusion yet.":r.commercial_confidence==="insufficient"?"Acquisition signal only — not commercially proven.":"Commercial evidence available."}</div>
     </div>`;
   }).join("");
 }
