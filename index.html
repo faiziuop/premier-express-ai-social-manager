@@ -105,6 +105,40 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
     <div class="card campaign-card">
       <div class="platform-head">
         <div>
+          <h2 style="margin:0">✅ Approval Queue Intelligence</h2>
+          <p style="margin:6px 0 0">Ranks pending drafts so you can review the strongest customer-acquisition content first. It never approves, rejects, deletes or publishes on its own.</p>
+        </div>
+        <button class="primary" id="approvalIntelBtn" onclick="loadApprovalQueueIntelligence()">↻ Analyse Queue</button>
+      </div>
+      <div id="approvalIntelBanner" class="campaign-flow">Approval queue intelligence has not been loaded yet.</div>
+      <div class="lead-summary">
+        <div class="lead-stat"><small>Total pending</small><b id="aqTotal">0</b></div>
+        <div class="lead-stat"><small>High priority</small><b id="aqHigh">0</b></div>
+        <div class="lead-stat"><small>Medium priority</small><b id="aqMedium">0</b></div>
+        <div class="lead-stat"><small>High duplicate risk</small><b id="aqDuplicates">0</b></div>
+        <div class="lead-stat"><small>Campaign-linked</small><b id="aqCampaigns">0</b></div>
+      </div>
+      <div class="lead-toolbar">
+        <input id="aqSearch" placeholder="Search product, audience, hook, campaign" oninput="renderApprovalQueueIntelligence()">
+        <select id="aqFilter" onchange="renderApprovalQueueIntelligence()" style="padding:10px;border:1px solid #ccd1d9;border-radius:8px">
+          <option value="ALL">All pending</option>
+          <option value="HIGH">High priority</option>
+          <option value="CAMPAIGN">Campaign-linked</option>
+          <option value="DUPLICATE">High duplicate risk</option>
+          <option value="STALE">Older than 7 days</option>
+        </select>
+        <select id="aqPlatform" onchange="renderApprovalQueueIntelligence()" style="padding:10px;border:1px solid #ccd1d9;border-radius:8px">
+          <option value="ALL">All platforms</option>
+          <option value="facebook">Facebook</option>
+          <option value="instagram">Instagram</option>
+        </select>
+      </div>
+      <div id="approvalIntelGrid" class="campaign-grid"></div>
+    </div>
+
+    <div class="card campaign-card">
+      <div class="platform-head">
+        <div>
           <h2 style="margin:0">📡 Live Operations Dashboard</h2>
           <p style="margin:6px 0 0">Daily operating view for approvals, schedules, published posts, leads, campaigns and urgent failures. Read-only command center; it does not approve or publish anything.</p>
         </div>
@@ -612,6 +646,84 @@ async function savePipelineLead(id){
 
 
 
+
+let approvalQueueIntelData=null;
+
+async function loadApprovalQueueIntelligence(){
+  const btn=$("approvalIntelBtn"),old=btn.textContent;btn.disabled=true;btn.textContent="Analysing…";
+  try{
+    const {data:{session}}=await sb.auth.getSession();
+    if(!session)throw Error("Your session expired. Please sign in again.");
+    const r=await fetch(SUPABASE_URL+"/functions/v1/approval-queue-intelligence",{
+      method:"POST",
+      headers:{apikey:SUPABASE_KEY,Authorization:"Bearer "+session.access_token,"Content-Type":"application/json"},
+      body:"{}"
+    });
+    const text=await r.text();let j={};try{j=JSON.parse(text)}catch{}
+    if(!r.ok||!j.success)throw Error(j.error||text||("Queue analysis failed with HTTP "+r.status));
+    approvalQueueIntelData=j;
+    const s=j.summary||{};
+    $("aqTotal").textContent=s.total??0;
+    $("aqHigh").textContent=s.high_priority??0;
+    $("aqMedium").textContent=s.medium_priority??0;
+    $("aqDuplicates").textContent=s.high_duplicate_risk??0;
+    $("aqCampaigns").textContent=s.campaign_linked??0;
+    $("approvalIntelBanner").innerHTML=`<b>Review priority only:</b> ${esc(s.high_priority??0)} high-priority draft(s), ${esc(s.high_duplicate_risk??0)} high duplicate-risk draft(s), and ${esc(s.stale_over_7_days??0)} stale draft(s). No action has been taken automatically.`;
+    renderApprovalQueueIntelligence();
+  }catch(e){
+    $("approvalIntelBanner").textContent="Approval queue analysis failed: "+(e?.message||String(e));
+  }finally{
+    btn.disabled=false;btn.textContent=old;
+  }
+}
+
+function renderApprovalQueueIntelligence(){
+  if(!approvalQueueIntelData){
+    $("approvalIntelGrid").innerHTML='<div class="campaign-item">Analyse Queue first.</div>';
+    return;
+  }
+  const q=($("aqSearch")?.value||"").trim().toLowerCase();
+  const filter=$("aqFilter")?.value||"ALL";
+  const platform=$("aqPlatform")?.value||"ALL";
+  let rows=[...(approvalQueueIntelData.rows||[])];
+
+  if(platform!=="ALL")rows=rows.filter(x=>x.primary_platform===platform);
+  if(filter==="HIGH")rows=rows.filter(x=>Number(x.priority_score)>=80);
+  if(filter==="CAMPAIGN")rows=rows.filter(x=>x.campaign_id);
+  if(filter==="DUPLICATE")rows=rows.filter(x=>x.duplicate_risk==="high");
+  if(filter==="STALE")rows=rows.filter(x=>Number(x.age_days)>7);
+  if(q)rows=rows.filter(x=>[
+    x.matched_product,x.audience_segment,x.hook,x.campaign_name,x.primary_platform,x.traveller_stage,x.content_pillar
+  ].filter(Boolean).join(" ").toLowerCase().includes(q));
+
+  if(!rows.length){
+    $("approvalIntelGrid").innerHTML='<div class="campaign-item"><b>No drafts match this review view.</b></div>';
+    return;
+  }
+
+  $("approvalIntelGrid").innerHTML=rows.slice(0,60).map((x,i)=>{
+    const risk=x.duplicate_risk==="high"?"HIGH DUPLICATE RISK":x.duplicate_risk==="medium"?"MEDIUM DUPLICATE RISK":"LOW DUPLICATE RISK";
+    const score=Number(x.priority_score||0);
+    return `<div class="campaign-item">
+      <div class="platform-head">
+        <h3 style="margin:0">#${i+1} • Post ${esc(x.post_number??"—")} • ${esc(x.matched_product||"Unmapped")}</h3>
+        <span class="opp-tag">Priority ${esc(score)}/100</span>
+      </div>
+      <div class="opp-meta">
+        <span class="opp-tag">${esc(x.primary_platform||"")}</span>
+        ${x.audience_segment?`<span class="opp-tag">${esc(x.audience_segment)}</span>`:""}
+        ${x.traveller_stage?`<span class="opp-tag">${esc(x.traveller_stage)}</span>`:""}
+        ${x.content_pillar?`<span class="opp-tag">${esc(x.content_pillar)}</span>`:""}
+      </div>
+      <p><b>Hook:</b> ${esc(x.hook||"")}</p>
+      ${x.campaign_name?`<p><b>Campaign:</b> ${esc(x.campaign_name)} ${x.campaign_status?`• ${esc(x.campaign_status)}`:""}</p>`:""}
+      <p><b>Intelligence score:</b> ${esc(x.intelligence_score??"—")} &nbsp; <b>Agent confidence:</b> ${esc(x.agent_confidence||"—")} &nbsp; <b>Age:</b> ${esc(x.age_days??0)} day(s)</p>
+      <div class="campaign-flow"><b>${esc(risk)}</b>${x.duplicate_with?` • Similarity ${esc(x.duplicate_similarity)}% with Post ${esc(x.duplicate_with.post_number??"—")}: ${esc(x.duplicate_with.hook||"")}`:""}</div>
+      <div class="campaign-score">Human review required — no approval or rejection has been applied.</div>
+    </div>`;
+  }).join("");
+}
+
 let liveOperationsData=null;
 async function loadLiveOperations(){
   const btn=$("liveOpsBtn"),old=btn.textContent;btn.disabled=true;btn.textContent="Refreshing…";
@@ -1011,6 +1123,7 @@ runDataQualityAudit();
 runShadowLearning();
 runPreLiveReadiness();
 loadLiveOperations();
+loadApprovalQueueIntelligence();
   }catch(e){alert("Could not save agent settings: "+(e?.message||String(e)));}
 }
 
