@@ -723,7 +723,7 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
           <div class="lead-stat"><small>Missing Meta IDs</small><b id="poMissingMeta">0</b></div>
         </div>
         <div id="publishingGovernance" class="campaign-flow"></div>
-        <div class="campaign-flow"><b>Facebook image rule:</b> image posts now publish directly through Facebook's photo endpoint. If the photo endpoint fails, the system fails the publish attempt and keeps the post approved; it will no longer silently fall back to a text-only Facebook post.</div>
+        <div class="campaign-flow"><b>Facebook strict publish rule:</b> the agent now creates a Page timeline feed post with the uploaded image attached, requests the native <b>WHATSAPP_MESSAGE</b> CTA, and verifies the resulting Meta post is published and not hidden before accepting it as successful. No text-only fallback is allowed for image posts.</div>
         <div class="campaign-item">
           <div class="platform-head">
             <div><b>🧪 Facebook Publishing Authorization Diagnostic</b><div class="command-help">Read-only. Checks token validity, Meta app match, Page identity and publishing scopes. It does not create a Facebook post.</div></div>
@@ -739,7 +739,7 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
           <div class="platform-head">
             <div>
               <b>🔎 Facebook Post Visibility & Media Verification</b>
-              <div class="command-help">Inspects the exact Meta object saved for Post 28 (or another Facebook post number). It does not publish, edit or delete anything.</div>
+              <div class="command-help">Inspects the exact Meta object saved for any Facebook post number. It does not publish, edit or delete anything. New publishes are also automatically verified by the backend before being counted as successful.</div>
             </div>
             <button class="muted" id="fbVerifyBtn" onclick="verifyFacebookPost()">Verify Facebook Post</button>
           </div>
@@ -2118,9 +2118,10 @@ async function approveFacebook(id){
     const {error}=await sb.from("content_posts").update({status:"APPROVED",approved_at:new Date().toISOString(),publish_error:null}).eq("id",id);if(error)throw Error("Approval failed: "+error.message);
     await sb.from("approval_events").insert({post_id:id,action:"APPROVE",notes:"Approved for live Facebook publishing"});
     const j=await callFacebookPublisher(id);
-    const waNote=" A tracked WhatsApp link was included in the Facebook caption.";
-    const mediaNote=j.image_confirmed?" Image was published through Facebook's photo endpoint.":"";
-    alert("✅ Published successfully to the Premier Express Tourism Facebook Page."+mediaNote+waNote);
+    const mediaNote=j.image_confirmed?" Image confirmed.":"";
+    const waNote=j.native_whatsapp_cta?" Native WhatsApp CTA requested and accepted.":"";
+    const publicNote=j.public_verified?" Public Page-post state verified.":"";
+    alert("✅ Published successfully to the Premier Express Tourism Facebook Page."+mediaNote+waNote+publicNote);
   }catch(e){alert("Facebook publishing did not complete: "+(e?.message||String(e))+"\n\nThe post remains APPROVED. If authorization needs repair, open Social Account Operations → Publishing Operations → Facebook Diagnostic and reconnect Meta before retrying.");}
   finally{publishingIds.delete(id);await renderPosts();}
 }
@@ -2129,9 +2130,10 @@ async function publishFacebook(id){
   if(publishingIds.has(id))return;publishingIds.add(id);await renderPosts();
   try{
     const j=await callFacebookPublisher(id);
-    const waNote=" A tracked WhatsApp link was included in the Facebook caption.";
-    const mediaNote=j.image_confirmed?" Image was published through Facebook's photo endpoint.":"";
-    alert("✅ Facebook publish succeeded."+mediaNote+waNote);
+    const mediaNote=j.image_confirmed?" Image confirmed.":"";
+    const waNote=j.native_whatsapp_cta?" Native WhatsApp CTA requested and accepted.":"";
+    const publicNote=j.public_verified?" Public Page-post state verified.":"";
+    alert("✅ Facebook publish succeeded."+mediaNote+waNote+publicNote);
   }catch(e){alert("Facebook publishing did not complete: "+(e?.message||String(e))+"\n\nThe same post and tracking reference are preserved. Reconnect Meta first if the diagnostic reports an authorization problem.");}
   finally{publishingIds.delete(id);await renderPosts();}
 }
