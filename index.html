@@ -1920,7 +1920,8 @@ async function renderPosts(){
       media+=`<div class="media-box"><b>WhatsApp action:</b> ${waState}</div>`;
     }
 
-    const publishError=p.publish_error?`<div class="campaign-flow" style="border-left:4px solid #b42318"><b>Publish error:</b> ${esc(p.publish_error)}${p.publish_attempts!==null&&p.publish_attempts!==undefined?`<br><b>Recorded attempts:</b> ${esc(p.publish_attempts)}`:""}${p.last_publish_attempt_at?` • <b>Last attempt:</b> ${esc(new Date(p.last_publish_attempt_at).toLocaleString())}`:""}<br><b>State:</b> Not published. The same approved post and WhatsApp tracking reference are preserved for retry.</div>`:"";
+    const publishError=p.publish_error?`<div class="campaign-flow" style="border-left:4px solid #b42318"><b>Publish error:</b> ${esc(p.publish_error)}${p.publish_attempts!==null&&p.publish_attempts!==undefined?`<br><b>Recorded attempts:</b> ${esc(p.publish_attempts)}`:""}${p.last_publish_attempt_at?` • <b>Last attempt:</b> ${esc(new Date(p.last_publish_attempt_at).toLocaleString())}`:""}<br><b>State:</b> ${p.status==="PUBLISHED"?"Published; attention remains on a separate publishing sub-check.":"Not published. The same approved post and WhatsApp tracking reference are preserved for retry."}</div>`:"";
+    const whatsappCtaState=p.primary_platform==="facebook"?`<div class="campaign-flow"><b>WhatsApp CTA:</b> ${esc(p.whatsapp_cta_status||"NOT_CHECKED")}${p.whatsapp_cta_verified_at?` • <b>Verified:</b> ${esc(new Date(p.whatsapp_cta_verified_at).toLocaleString())}`:""}${p.whatsapp_cta_error?`<br><b>CTA note:</b> ${esc(p.whatsapp_cta_error)}`:""}</div>`:"";
     let rc={};
     if(p.research_context){
       if(typeof p.research_context==="object")rc=p.research_context;
@@ -1935,7 +1936,7 @@ async function renderPosts(){
     const deletedInfo=p.deleted_at?`<div class="deleted-note"><b>Deleted:</b> ${esc(new Date(p.deleted_at).toLocaleString())}</div>`:"";
     const scheduledInfo=p.scheduled_at?`<div class="scheduled-note">📅 Scheduled: ${esc(formatDubaiTime(p.scheduled_at))}</div>`:"";
     const publishedInfo=p.published_at?`<div class="history-note"><b>Published:</b> ${esc(new Date(p.published_at).toLocaleString())}${p.external_post_id?` • ID: ${esc(p.external_post_id)}`:""}</div>`:"";
-    return `<div class="card post"><span class="pill">${esc(p.status)}</span><h2>${esc(p.post_number)}. ${esc(p.hook||p.objective||"Post")}</h2><small>${esc(activePlatform)} • ${esc(p.content_type||"")} • ${esc(p.content_date||"")}</small>${agentInfo}${media}<p class="caption">${esc(p.caption||"")}</p><p><b>CTA:</b> ${esc(p.cta||"")}<br><b>Visual direction:</b> ${esc(p.visual_direction||"")}</p>${publishError}${scheduledInfo}${publishedInfo}${deletedInfo}${actions}</div>`;
+    return `<div class="card post"><span class="pill">${esc(p.status)}</span><h2>${esc(p.post_number)}. ${esc(p.hook||p.objective||"Post")}</h2><small>${esc(activePlatform)} • ${esc(p.content_type||"")} • ${esc(p.content_date||"")}</small>${agentInfo}${media}<p class="caption">${esc(p.caption||"")}</p><p><b>CTA:</b> ${esc(p.cta||"")}<br><b>Visual direction:</b> ${esc(p.visual_direction||"")}</p>${publishError}${whatsappCtaState}${scheduledInfo}${publishedInfo}${deletedInfo}${actions}</div>`;
   }).join("")||`<div class='card'><h3>${activeView==="queue"?"Queue is clear":activeView==="scheduled"?"No scheduled posts":activeView==="deleted"?"Deleted is empty":"No publish history yet"}</h3>${activeView==="queue"?"Generate new content or switch platform.":activeView==="scheduled"?"Schedule a post from the Approval Queue.":activeView==="deleted"?"Deleted drafts will appear here and can be restored.":"Published, rejected, and failed posts will appear here."}</div>`;
 }
 
