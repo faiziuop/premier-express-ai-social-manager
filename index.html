@@ -838,6 +838,32 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
       </div>
 
       <div class="card campaign-card">
+        <div class="platform-head">
+          <div>
+            <h2 style="margin:0">🧯 Anomaly Detection & Governed Repair</h2>
+            <p style="margin:6px 0 0">Cross-account operational fault detection with repair planning. Detection is active; repairs remain governance-controlled and are never executed from this panel.</p>
+          </div>
+          <button class="secondary" id="anomalyRepairBtn" onclick="loadAnomalyRepair()">↻ Scan Anomalies</button>
+        </div>
+
+        <div id="anomalyRepairBanner" class="campaign-flow">Anomaly detection has not been run yet.</div>
+
+        <div class="lead-summary">
+          <div class="lead-stat"><small>Signals checked</small><b id="arSignals">0</b></div>
+          <div class="lead-stat"><small>Critical</small><b id="arCritical">0</b></div>
+          <div class="lead-stat"><small>High</small><b id="arHigh">0</b></div>
+          <div class="lead-stat"><small>Medium</small><b id="arMedium">0</b></div>
+          <div class="lead-stat"><small>Informational</small><b id="arInfo">0</b></div>
+        </div>
+
+        <div class="campaign-flow">
+          <b>Authority: READ_ONLY_ANOMALY_DETECTION + GOVERNED_REPAIR_PLANNING</b> — This module may detect, classify and propose recovery steps. It cannot reconnect accounts, retry publishes, edit profiles, delete posts, change permissions or override governance.
+        </div>
+
+        <div id="anomalyRepairGrid" class="campaign-grid"></div>
+      </div>
+
+      <div class="card campaign-card">
         <h2 style="margin-top:0">📌 Operations Workspace</h2>
         <div class="account-ops-roadmap">
           <div class="account-op-item"><b>📝 Content Operations</b><p>Account-specific content inventory, lifecycle and publishing coordination.</p><span class="pill">ACTIVE</span></div>
@@ -845,7 +871,7 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
           <div class="account-op-item"><b>🚀 Publishing Operations</b><p>Per-account publish health, retries, rollback and future supervised/autonomous execution.</p><span class="pill">ACTIVE</span></div>
           <div class="account-op-item"><b>💬 Comments / Inbox Awareness</b><p>Monitoring and response-intelligence readiness for customer conversations.</p><span class="pill">ACTIVE</span></div>
           <div class="account-op-item"><b>🪪 Profile / Page Maintenance</b><p>Read-only monitoring of business identity, Page state, links/capabilities and account configuration readiness.</p><span class="pill">ACTIVE</span></div>
-          <div class="account-op-item"><b>🧯 Anomaly Detection & Repair</b><p>Detect broken connections, publishing failures, configuration drift and governed recovery actions.</p><span class="pill">PLANNED</span></div>
+          <div class="account-op-item"><b>🧯 Anomaly Detection & Repair</b><p>Detect broken connections, publishing failures, configuration drift and prepare governed recovery actions.</p><span class="pill">ACTIVE</span></div>
           <div class="account-op-item"><b>🕸 Multi-Account Orchestration</b><p>Future central coordination of multiple brands, pages, profiles and social platforms.</p><span class="pill">PLANNED</span></div>
           <div class="account-op-item"><b>🛡 Account Governance</b><p>Per-account authority, risk controls, audit history, kill switches and human override.</p><span class="pill">FOUNDATION ACTIVE</span></div>
         </div>
@@ -2376,6 +2402,199 @@ async function loadProfileMaintenance(){
 }
 
 
+
+let anomalyRepairData=null;
+
+function arPick(obj,...keys){
+  for(const k of keys){
+    const parts=k.split(".");
+    let v=obj;
+    for(const p of parts){v=v?.[p]}
+    if(v!==undefined&&v!==null)return v;
+  }
+  return undefined;
+}
+
+function arNum(obj,...keys){
+  const v=arPick(obj,...keys);
+  const n=Number(v);
+  return Number.isFinite(n)?n:0;
+}
+
+async function arCall(name){
+  const {data:{session}}=await sb.auth.getSession();
+  if(!session)throw Error("Your session expired. Please sign in again.");
+  const r=await fetch(SUPABASE_URL+"/functions/v1/"+name,{
+    method:"POST",
+    headers:{apikey:SUPABASE_KEY,Authorization:"Bearer "+session.access_token,"Content-Type":"application/json"},
+    body:"{}"
+  });
+  const raw=await r.text();let j={};try{j=JSON.parse(raw)}catch{}
+  if(!r.ok||j.success===false)throw Error(j.error||raw||(`${name} failed with HTTP ${r.status}`));
+  return j;
+}
+
+function arIssue(severity,area,title,evidence,repair,authority="GOVERNED"){
+  return {severity,area,title,evidence,repair,authority};
+}
+
+function arSeverityRank(x){return {CRITICAL:4,HIGH:3,MEDIUM:2,INFO:1}[x]||0}
+
+async function loadAnomalyRepair(){
+  const btn=$("anomalyRepairBtn"),old=btn?.textContent||"↻ Scan Anomalies";
+  if(btn){btn.disabled=true;btn.textContent="Scanning…";}
+  const banner=$("anomalyRepairBanner"),grid=$("anomalyRepairGrid");
+  try{
+    const names=[
+      "social-account-registry-health",
+      "social-scheduling-operations",
+      "social-publishing-operations",
+      "social-interaction-awareness",
+      "facebook-publishing-diagnostic",
+      "governed-action-gateway"
+    ];
+    const settled=await Promise.allSettled(names.map(arCall));
+    const data={};
+    settled.forEach((r,i)=>{if(r.status==="fulfilled")data[names[i]]=r.value});
+    const failedSources=settled.map((r,i)=>r.status==="rejected"?names[i]:null).filter(Boolean);
+
+    const issues=[];
+    const account=data["social-account-registry-health"]||{};
+    const scheduling=data["social-scheduling-operations"]||{};
+    const publishing=data["social-publishing-operations"]||{};
+    const interactions=data["social-interaction-awareness"]||{};
+    const fbdiag=data["facebook-publishing-diagnostic"]||{};
+    const gateway=data["governed-action-gateway"]||{};
+
+    const accounts=account.accounts||account.managed_accounts||[];
+    for(const a of accounts){
+      const platform=String(a.platform||"account");
+      const connection=String(a.connection_status||a.connection||"unknown").toLowerCase();
+      if(connection && !["connected","healthy","ok"].includes(connection)){
+        issues.push(arIssue("CRITICAL","Connection",`${platform} account connection is not healthy`,
+          `Observed connection state: ${connection}.`,
+          "Re-run platform authorization diagnostic, then reconnect only if token/account identity validation fails.",
+          "REQUIRE_HUMAN"));
+      }
+      const state=String(a.health||a.status||"").toUpperCase();
+      if(state.includes("NEEDS_ATTENTION")){
+        issues.push(arIssue("MEDIUM","Account Health",`${platform} account reports attention`,
+          (a.attention||a.issues||[]).join("; ")||"Account-level monitor returned NEEDS_ATTENTION.",
+          "Inspect the specific account health finding before any repair action."));
+      }
+    }
+
+    const fbTokenValid=arPick(fbdiag,"token.is_valid","token_valid");
+    const fbMatch=arPick(fbdiag,"page.token_identity_matches_page","matches_page","app_match");
+    const missingScopes=arPick(fbdiag,"token.missing_required_scopes","missing_required_scopes")||[];
+    if(fbTokenValid===false){
+      issues.push(arIssue("CRITICAL","Facebook Authorization","Facebook Page token is invalid",
+        "The publishing diagnostic reports token_valid = false.",
+        "Reconnect Facebook using the current Meta app, then rerun authorization diagnostics.",
+        "REQUIRE_HUMAN"));
+    }
+    if(fbMatch===false){
+      issues.push(arIssue("CRITICAL","Facebook Identity","Facebook token/Page identity mismatch",
+        "The connected token does not resolve to the configured Page identity.",
+        "Stop Facebook publishing, reconnect the intended Page and verify Page ID before resuming.",
+        "REQUIRE_HUMAN"));
+    }
+    if(Array.isArray(missingScopes)&&missingScopes.length){
+      issues.push(arIssue("HIGH","Facebook Permissions","Required Facebook scopes are missing",
+        `Missing: ${missingScopes.join(", ")}.`,
+        "Review the current Meta use case and reconnect only after the required scopes are present.",
+        "REQUIRE_HUMAN"));
+    }
+
+    const failedPublishes=arNum(publishing,"failed","totals.failed","summary.failed");
+    const retryEligible=arNum(publishing,"retry_eligible","totals.retry_eligible","summary.retry_eligible");
+    const missingMeta=arNum(publishing,"missing_meta_ids","totals.missing_meta_ids","summary.missing_meta_ids");
+    const exhausted=arNum(publishing,"retry_exhausted","totals.retry_exhausted","summary.retry_exhausted");
+    if(failedPublishes>0){
+      issues.push(arIssue(exhausted>0?"HIGH":"MEDIUM","Publishing",`${failedPublishes} publish failure(s) detected`,
+        `${retryEligible} retry eligible; ${exhausted} retry exhausted.`,
+        "Inspect the exact Meta response, authorization state and attempt budget before any governed retry.",
+        "REQUIRE_HUMAN"));
+    }
+    if(missingMeta>0){
+      issues.push(arIssue("MEDIUM","Measurement",`${missingMeta} published post(s) lack a saved Meta ID`,
+        "Performance measurement and post-level verification may not attach reliably.",
+        "Recover the external post ID where possible; otherwise retain as historical measurement gap."));
+    }
+
+    const overdue=arNum(scheduling,"overdue","totals.overdue","summary.overdue");
+    const conflicts=arNum(scheduling,"conflicts","totals.conflicts","summary.conflicts");
+    if(overdue>0)issues.push(arIssue("HIGH","Scheduling",`${overdue} scheduled post(s) are overdue`,
+      "Scheduled execution time passed without a confirmed publish outcome.",
+      "Freeze repeated retries, inspect scheduler/publisher state, then reschedule or publish through the governed path.",
+      "REQUIRE_HUMAN"));
+    if(conflicts>0)issues.push(arIssue("MEDIUM","Scheduling",`${conflicts} scheduling conflict(s) detected`,
+      "Two or more planned posts compete for the same account/cadence window.",
+      "Recalculate cadence and propose a conflict-free schedule; do not move posts automatically yet."));
+
+    const openInteractions=arNum(interactions,"open_interactions","totals.open_interactions","summary.open_interactions");
+    const highPriority=arNum(interactions,"high_priority","totals.high_priority","summary.high_priority");
+    if(highPriority>0)issues.push(arIssue("HIGH","Interactions",`${highPriority} high-priority customer interaction(s) need attention`,
+      `${openInteractions} total open interaction(s).`,
+      "Surface the interactions for response intelligence; do not send a reply until response authority is enabled.",
+      "REQUIRE_HUMAN"));
+    else if(openInteractions>0)issues.push(arIssue("MEDIUM","Interactions",`${openInteractions} open customer interaction(s)`,
+      "Stored interaction records are awaiting resolution.",
+      "Prioritize by commercial intent, urgency and customer risk."));
+
+    const capabilityRows=gateway.capabilities||[];
+    const maintenance=capabilityRows.find(x=>String(x.capability||x.name||"").toLowerCase().includes("social")&&String(x.capability||x.name||"").toLowerCase().includes("maintenance"));
+    if(maintenance&&String(maintenance.decision||"").toUpperCase()==="DENY"){
+      issues.push(arIssue("INFO","Governance","Autonomous social-account repair is intentionally blocked",
+        "Governed Action Gateway currently returns DENY for Social Account Maintenance.",
+        "Keep detection and repair planning active. Promotion to execution must occur capability-by-capability after validation.",
+        "DENY"));
+    }
+
+    if(failedSources.length){
+      issues.push(arIssue("INFO","Observability",`${failedSources.length} supporting monitor(s) were unavailable`,
+        failedSources.join(", "),
+        "Do not infer healthy/failed state for unavailable monitors. Re-run the scan after those endpoints recover."));
+    }
+
+    // Known Meta organic CTA limitation is explicitly informational, not an anomaly.
+    issues.push(arIssue("INFO","Platform Limitation","Native organic Facebook WhatsApp CTA remains API-limited",
+      "Publishing, images and public visibility are healthy; Meta rejected post-update CTA attachment and did not expose the manually-added composer CTA through Page Post fields.",
+      "Continue tracked wa.me attribution. Revisit only when Meta exposes a supported organic CTA surface.",
+      "NO_REPAIR"));
+
+    issues.sort((a,b)=>arSeverityRank(b.severity)-arSeverityRank(a.severity));
+    const counts={CRITICAL:0,HIGH:0,MEDIUM:0,INFO:0};
+    issues.forEach(x=>counts[x.severity]++);
+    $("arSignals").textContent=names.length-failedSources.length;
+    $("arCritical").textContent=counts.CRITICAL;
+    $("arHigh").textContent=counts.HIGH;
+    $("arMedium").textContent=counts.MEDIUM;
+    $("arInfo").textContent=counts.INFO;
+
+    const operational=issues.filter(x=>x.severity!=="INFO");
+    const headline=counts.CRITICAL?"⛔ CRITICAL ANOMALY DETECTED":
+      counts.HIGH?"⚠ HIGH-PRIORITY ANOMALY DETECTED":
+      counts.MEDIUM?"⚠ HEALTHY WITH ATTENTION":
+      "🟢 NO OPERATIONAL ANOMALY";
+    banner.innerHTML=`<b>${headline}:</b> ${operational.length?esc(operational.length+" operational finding(s) require review."):"No connection, publishing, scheduling or interaction failure was detected by the available monitors."} Repairs remain governance-controlled.`;
+
+    grid.innerHTML=issues.length?issues.map((x,i)=>`<div class="campaign-item">
+      <div class="platform-head"><h3 style="margin:0">#${i+1} • ${esc(x.area)} — ${esc(x.title)}</h3><span class="opp-tag">${esc(x.severity)}</span></div>
+      <div class="campaign-flow"><b>Evidence:</b> ${esc(x.evidence)}</div>
+      <div class="campaign-flow"><b>Recommended repair:</b> ${esc(x.repair)}</div>
+      <div class="campaign-score"><b>Execution authority:</b> ${esc(x.authority)}${["REQUIRE_HUMAN","DENY"].includes(x.authority)?" — no automatic repair will execute.":""}</div>
+    </div>`).join(""):`<div class="campaign-flow"><b>✅ No anomalies detected.</b></div>`;
+
+    anomalyRepairData={issues,failed_sources:failedSources,checked_at:new Date().toISOString()};
+  }catch(e){
+    banner.textContent="Anomaly detection failed: "+(e?.message||String(e));
+    grid.innerHTML="";
+  }finally{
+    if(btn){btn.disabled=false;btn.textContent=old;}
+  }
+}
+
 async function runFacebookPublishingDiagnostic(){
   const btn=$("fbDiagBtn"),old=btn.textContent;btn.disabled=true;btn.textContent="Checking…";
   try{
@@ -2564,7 +2783,7 @@ function switchMainTab(tab){
   $("socialOpsPanel").classList.toggle("active",!agent);
   $("mainAgentTabBtn").classList.toggle("active",agent);
   $("socialOpsTabBtn").classList.toggle("active",!agent);
-  if(!agent&&!socialAccountOpsLoaded){loadSocialAccountOperations();loadContentOperations();loadSchedulingOperations();loadPublishingOperations();loadInteractionAwareness();}
+  if(!agent&&!socialAccountOpsLoaded){loadSocialAccountOperations();loadContentOperations();loadSchedulingOperations();loadPublishingOperations();loadInteractionAwareness();loadProfileMaintenance();loadAnomalyRepair();}
 }
 
 async function loadSocialAccountOperations(){
