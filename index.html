@@ -738,6 +738,17 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
         <div class="campaign-item">
           <div class="platform-head">
             <div>
+              <b>💬 Facebook Native WhatsApp CTA Diagnostic</b>
+              <div class="command-help">Read-only. Checks whether the connected Facebook Page exposes a WhatsApp binding and Page CTA capability through Meta. It does not publish or modify anything.</div>
+            </div>
+            <button class="muted" id="fbWaDiagBtn" onclick="runFacebookWhatsAppDiagnostic()">Check WhatsApp CTA Capability</button>
+          </div>
+          <div id="fbWaDiagResult" class="command-help">Not run yet.</div>
+        </div>
+
+        <div class="campaign-item">
+          <div class="platform-head">
+            <div>
               <b>🔎 Facebook Post Visibility & Media Verification</b>
               <div class="command-help">Inspects the exact Meta object saved for any Facebook post number. It does not publish, edit or delete anything. New publishes are also automatically verified by the backend before being counted as successful.</div>
             </div>
@@ -2196,6 +2207,20 @@ async function runFacebookPublishingDiagnostic(){
   finally{btn.disabled=false;btn.textContent=old;}
 }
 
+
+
+async function runFacebookWhatsAppDiagnostic(){
+  const btn=$("fbWaDiagBtn"),old=btn.textContent;btn.disabled=true;btn.textContent="Checking…";
+  try{
+    const {data:{session}}=await sb.auth.getSession();if(!session)throw Error("Your session expired. Please sign in again.");
+    const r=await fetch(SUPABASE_URL+"/functions/v1/facebook-whatsapp-cta-diagnostic",{method:"POST",headers:{apikey:SUPABASE_KEY,Authorization:"Bearer "+session.access_token,"Content-Type":"application/json"},body:"{}"});
+    const text=await r.text();let j={};try{j=JSON.parse(text)}catch{}
+    if(!r.ok||!j.success)throw Error(j.error||text||("WhatsApp CTA diagnostic failed with HTTP "+r.status));
+    const p=j.page||{},ctas=j.page_call_to_actions||[];
+    $("fbWaDiagResult").innerHTML=`<div class="campaign-flow"><b>Page:</b> ${esc(p.name||"—")} (${esc(p.id||"—")})<br><b>Page published:</b> ${p.is_published===null||p.is_published===undefined?"UNAVAILABLE":(p.is_published?"YES":"NO")} • <b>Can post:</b> ${p.can_post===null||p.can_post===undefined?"UNAVAILABLE":(p.can_post?"YES":"NO")}<br><b>has_whatsapp_number:</b> ${p.has_whatsapp_number===null||p.has_whatsapp_number===undefined?"UNAVAILABLE":(p.has_whatsapp_number?"YES":"NO")} • <b>has_whatsapp_business_number:</b> ${p.has_whatsapp_business_number===null||p.has_whatsapp_business_number===undefined?"UNAVAILABLE":(p.has_whatsapp_business_number?"YES":"NO")}<br><b>WhatsApp number field:</b> ${esc(p.whatsapp_number||"Not returned")}<br><b>WhatsApp binding detected:</b> ${j.has_whatsapp_binding?"YES":"NO"}<br><b>Existing Page CTA objects:</b> ${esc(ctas.length)}</div>${j.call_to_actions_error?`<div class="campaign-flow"><b>CTA edge note:</b> ${esc(j.call_to_actions_error)}</div>`:""}<div class="campaign-score">${esc(j.recommendation||"")}</div>`;
+  }catch(e){$("fbWaDiagResult").textContent="WhatsApp CTA diagnostic failed: "+(e?.message||String(e));}
+  finally{btn.disabled=false;btn.textContent=old;}
+}
 
 async function verifyFacebookPost(){
   const btn=$("fbVerifyBtn"),old=btn.textContent;btn.disabled=true;btn.textContent="Verifying…";
