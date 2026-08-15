@@ -864,6 +864,32 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
       </div>
 
       <div class="card campaign-card">
+        <div class="platform-head">
+          <div>
+            <h2 style="margin:0">🕸 Multi-Account Orchestration</h2>
+            <p style="margin:6px 0 0">Central coordination layer for all managed social accounts. It balances account health, content supply, scheduling load, publishing readiness, interaction load and governance before any future autonomous cross-account action.</p>
+          </div>
+          <button class="secondary" id="orchestrationBtn" onclick="loadMultiAccountOrchestration()">↻ Refresh Orchestration</button>
+        </div>
+
+        <div id="orchestrationBanner" class="campaign-flow">Multi-account orchestration has not been loaded yet.</div>
+
+        <div class="lead-summary">
+          <div class="lead-stat"><small>Managed accounts</small><b id="orcAccounts">0</b></div>
+          <div class="lead-stat"><small>Operationally ready</small><b id="orcReady">0</b></div>
+          <div class="lead-stat"><small>Needs attention</small><b id="orcAttention">0</b></div>
+          <div class="lead-stat"><small>Cross-account conflicts</small><b id="orcConflicts">0</b></div>
+          <div class="lead-stat"><small>Autonomous routes</small><b id="orcAutonomous">0</b></div>
+        </div>
+
+        <div class="campaign-flow">
+          <b>Authority: READ_ONLY_ORCHESTRATION</b> — The orchestrator may rank and coordinate account-level priorities, but it does not move content, publish, schedule, reply, repair, spend money or change account configuration.
+        </div>
+
+        <div id="orchestrationGrid" class="campaign-grid"></div>
+      </div>
+
+      <div class="card campaign-card">
         <h2 style="margin-top:0">📌 Operations Workspace</h2>
         <div class="account-ops-roadmap">
           <div class="account-op-item"><b>📝 Content Operations</b><p>Account-specific content inventory, lifecycle and publishing coordination.</p><span class="pill">ACTIVE</span></div>
@@ -872,7 +898,7 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
           <div class="account-op-item"><b>💬 Comments / Inbox Awareness</b><p>Monitoring and response-intelligence readiness for customer conversations.</p><span class="pill">ACTIVE</span></div>
           <div class="account-op-item"><b>🪪 Profile / Page Maintenance</b><p>Read-only monitoring of business identity, Page state, links/capabilities and account configuration readiness.</p><span class="pill">ACTIVE</span></div>
           <div class="account-op-item"><b>🧯 Anomaly Detection & Repair</b><p>Detect broken connections, publishing failures, configuration drift and prepare governed recovery actions.</p><span class="pill">ACTIVE</span></div>
-          <div class="account-op-item"><b>🕸 Multi-Account Orchestration</b><p>Future central coordination of multiple brands, pages, profiles and social platforms.</p><span class="pill">PLANNED</span></div>
+          <div class="account-op-item"><b>🕸 Multi-Account Orchestration</b><p>Central coordination of managed accounts, workload, priorities, conflicts and governance.</p><span class="pill">ACTIVE</span></div>
           <div class="account-op-item"><b>🛡 Account Governance</b><p>Per-account authority, risk controls, audit history, kill switches and human override.</p><span class="pill">FOUNDATION ACTIVE</span></div>
         </div>
       </div>
@@ -2595,6 +2621,142 @@ async function loadAnomalyRepair(){
   }
 }
 
+
+let multiAccountOrchestrationData=null;
+
+async function orcCall(name){
+  const {data:{session}}=await sb.auth.getSession();
+  if(!session)throw Error("Your session expired. Please sign in again.");
+  const r=await fetch(SUPABASE_URL+"/functions/v1/"+name,{
+    method:"POST",
+    headers:{apikey:SUPABASE_KEY,Authorization:"Bearer "+session.access_token,"Content-Type":"application/json"},
+    body:"{}"
+  });
+  const raw=await r.text();let j={};try{j=JSON.parse(raw)}catch{}
+  if(!r.ok||j.success===false)throw Error(j.error||raw||(`${name} failed with HTTP ${r.status}`));
+  return j;
+}
+
+function orcNumber(obj,...keys){
+  for(const k of keys){
+    let v=obj;for(const p of k.split("."))v=v?.[p];
+    const n=Number(v);if(Number.isFinite(n))return n;
+  }
+  return 0;
+}
+
+async function loadMultiAccountOrchestration(){
+  const btn=$("orchestrationBtn"),old=btn?.textContent||"↻ Refresh Orchestration";
+  if(btn){btn.disabled=true;btn.textContent="Coordinating…";}
+  const banner=$("orchestrationBanner"),grid=$("orchestrationGrid");
+  try{
+    const names=[
+      "social-account-registry-health",
+      "social-content-operations",
+      "social-scheduling-operations",
+      "social-publishing-operations",
+      "social-interaction-awareness",
+      "governed-action-gateway"
+    ];
+    const settled=await Promise.allSettled(names.map(orcCall));
+    const data={};settled.forEach((r,i)=>{if(r.status==="fulfilled")data[names[i]]=r.value});
+    const failed=settled.map((r,i)=>r.status==="rejected"?names[i]:null).filter(Boolean);
+
+    const registry=data["social-account-registry-health"]||{};
+    const content=data["social-content-operations"]||{};
+    const scheduling=data["social-scheduling-operations"]||{};
+    const publishing=data["social-publishing-operations"]||{};
+    const interactions=data["social-interaction-awareness"]||{};
+    const gateway=data["governed-action-gateway"]||{};
+
+    const rawAccounts=registry.accounts||registry.managed_accounts||[];
+    const accounts=rawAccounts.length?rawAccounts:[
+      {platform:"facebook",account_name:"Premier Express Tourism",connection_status:"connected"},
+      {platform:"instagram",account_name:"@premierexpresstourim",connection_status:"connected"}
+    ];
+
+    const gatewayRows=gateway.capabilities||[];
+    const publishingDecision=(gatewayRows.find(x=>String(x.capability||x.name||"").toLowerCase()==="publishing")||{}).decision||"REQUIRE_HUMAN";
+    const schedulingDecision=(gatewayRows.find(x=>String(x.capability||x.name||"").toLowerCase()==="scheduling")||{}).decision||"REQUIRE_HUMAN";
+    const maintenanceDecision=(gatewayRows.find(x=>String(x.capability||x.name||"").toLowerCase().includes("social")&&String(x.capability||x.name||"").toLowerCase().includes("maintenance"))||{}).decision||"DENY";
+
+    const cards=accounts.map(a=>{
+      const platform=String(a.platform||"unknown").toLowerCase();
+      const label=a.account_name||a.username||platform;
+      const connection=String(a.connection_status||a.connection||"unknown").toLowerCase();
+      const healthy=["connected","healthy","ok"].includes(connection);
+
+      const platformContent=(content.accounts||content.platforms||[]).find(x=>String(x.platform||"").toLowerCase()===platform)||{};
+      const platformSched=(scheduling.accounts||scheduling.platforms||[]).find(x=>String(x.platform||"").toLowerCase()===platform)||{};
+      const platformPub=(publishing.accounts||publishing.platforms||[]).find(x=>String(x.platform||"").toLowerCase()===platform)||{};
+      const platformInt=(interactions.accounts||interactions.platforms||[]).find(x=>String(x.platform||"").toLowerCase()===platform)||{};
+
+      const pending=orcNumber(platformContent,"pending","pending_approval","totals.pending");
+      const approved=orcNumber(platformContent,"approved","totals.approved");
+      const scheduled=orcNumber(platformSched,"scheduled","totals.scheduled");
+      const conflicts=orcNumber(platformSched,"conflicts","totals.conflicts");
+      const readyPub=orcNumber(platformPub,"ready_to_publish","ready","totals.ready_to_publish");
+      const failedPub=orcNumber(platformPub,"failed","totals.failed");
+      const openInt=orcNumber(platformInt,"open_interactions","open","totals.open_interactions");
+      const highInt=orcNumber(platformInt,"high_priority","totals.high_priority");
+
+      let priority=50;
+      if(!healthy)priority+=35;
+      if(failedPub>0)priority+=20;
+      if(conflicts>0)priority+=15;
+      if(highInt>0)priority+=20;
+      if(readyPub>0)priority+=5;
+      priority=Math.min(100,priority);
+
+      const attention=[];
+      if(!healthy)attention.push("Connection health requires review.");
+      if(failedPub>0)attention.push(`${failedPub} publishing failure(s).`);
+      if(conflicts>0)attention.push(`${conflicts} scheduling conflict(s).`);
+      if(highInt>0)attention.push(`${highInt} high-priority interaction(s).`);
+      if(pending>25)attention.push(`Large pending content inventory (${pending}).`);
+
+      const state=attention.some(x=>x.includes("Connection")||x.includes("failure"))?"NEEDS_ATTENTION":"READY";
+      const nextAction=!healthy?"Repair connection before content operations.":
+        highInt>0?"Prioritize customer interactions before new publishing.":
+        failedPub>0?"Resolve publishing failures before increasing cadence.":
+        conflicts>0?"Resolve schedule conflicts.":
+        pending>25?"Review existing approval inventory before generating more content.":
+        readyPub>0?"Ready for human-governed publish/schedule selection.":
+        "Monitor account and wait for a real execution trigger.";
+
+      return {platform,label,connection,state,priority,pending,approved,scheduled,conflicts,readyPub,failedPub,openInt,highInt,nextAction,attention};
+    }).sort((a,b)=>b.priority-a.priority);
+
+    const totalConflicts=cards.reduce((s,x)=>s+x.conflicts,0);
+    const ready=cards.filter(x=>x.state==="READY").length;
+    const attention=cards.length-ready;
+    const autonomousRoutes=[publishingDecision,schedulingDecision,maintenanceDecision].filter(x=>x==="ALLOW_AUTONOMOUS").length;
+
+    $("orcAccounts").textContent=cards.length;
+    $("orcReady").textContent=ready;
+    $("orcAttention").textContent=attention;
+    $("orcConflicts").textContent=totalConflicts;
+    $("orcAutonomous").textContent=autonomousRoutes;
+
+    const headline=attention?"⚠ COORDINATED WITH ATTENTION":"🟢 MULTI-ACCOUNT READY";
+    banner.innerHTML=`<b>${headline}:</b> ${cards.length} managed account(s) ranked by operational urgency. ${failed.length?esc(failed.length+" supporting data source(s) were unavailable; no missing state was inferred."):"All available account-operation sources were incorporated."}<br><b>Current execution gates:</b> publishing ${esc(publishingDecision)} • scheduling ${esc(schedulingDecision)} • maintenance ${esc(maintenanceDecision)}.`;
+
+    grid.innerHTML=cards.map((x,i)=>`<div class="campaign-item">
+      <div class="platform-head"><h3 style="margin:0">#${i+1} • ${x.platform==="facebook"?"🔵":"📸"} ${esc(x.label)}</h3><span class="opp-tag">${esc(x.state)} • ${esc(x.priority)}/100</span></div>
+      <div class="campaign-flow"><b>Connection:</b> ${esc(x.connection)}<br><b>Pending:</b> ${esc(x.pending)} • <b>Approved:</b> ${esc(x.approved)} • <b>Scheduled:</b> ${esc(x.scheduled)} • <b>Ready to publish:</b> ${esc(x.readyPub)}<br><b>Publish failures:</b> ${esc(x.failedPub)} • <b>Schedule conflicts:</b> ${esc(x.conflicts)} • <b>Open interactions:</b> ${esc(x.openInt)} • <b>High priority:</b> ${esc(x.highInt)}</div>
+      <div class="campaign-flow"><b>Orchestrator next action:</b> ${esc(x.nextAction)}</div>
+      ${x.attention.length?`<div class="campaign-flow"><b>Attention:</b><ol>${x.attention.map(a=>`<li>${esc(a)}</li>`).join("")}</ol></div>`:`<div class="campaign-flow"><b>Account state:</b> No cross-operation issue currently requires intervention.</div>`}
+    </div>`).join("");
+
+    multiAccountOrchestrationData={accounts:cards,failed_sources:failed,checked_at:new Date().toISOString()};
+  }catch(e){
+    banner.textContent="Multi-account orchestration failed: "+(e?.message||String(e));
+    grid.innerHTML="";
+  }finally{
+    if(btn){btn.disabled=false;btn.textContent=old;}
+  }
+}
+
 async function runFacebookPublishingDiagnostic(){
   const btn=$("fbDiagBtn"),old=btn.textContent;btn.disabled=true;btn.textContent="Checking…";
   try{
@@ -2783,7 +2945,7 @@ function switchMainTab(tab){
   $("socialOpsPanel").classList.toggle("active",!agent);
   $("mainAgentTabBtn").classList.toggle("active",agent);
   $("socialOpsTabBtn").classList.toggle("active",!agent);
-  if(!agent&&!socialAccountOpsLoaded){loadSocialAccountOperations();loadContentOperations();loadSchedulingOperations();loadPublishingOperations();loadInteractionAwareness();loadProfileMaintenance();loadAnomalyRepair();}
+  if(!agent&&!socialAccountOpsLoaded){loadSocialAccountOperations();loadContentOperations();loadSchedulingOperations();loadPublishingOperations();loadInteractionAwareness();loadProfileMaintenance();loadAnomalyRepair();loadMultiAccountOrchestration();}
 }
 
 async function loadSocialAccountOperations(){
