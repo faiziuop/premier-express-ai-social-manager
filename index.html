@@ -810,13 +810,41 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
       </div>
 
       <div class="card campaign-card">
+        <div class="platform-head">
+          <div>
+            <h2 style="margin:0">🪪 Profile / Page Maintenance</h2>
+            <p style="margin:6px 0 0">Read-only business-account configuration intelligence. It checks identity, publication state, connection health, Page/post capability and WhatsApp exposure without changing profile settings.</p>
+          </div>
+          <button class="secondary" id="profileMaintenanceBtn" onclick="loadProfileMaintenance()">↻ Refresh Profile Maintenance</button>
+        </div>
+
+        <div id="profileMaintenanceBanner" class="campaign-flow">
+          Profile / Page Maintenance has not been loaded yet.
+        </div>
+
+        <div class="lead-summary">
+          <div class="lead-stat"><small>Accounts checked</small><b id="pmAccounts">0</b></div>
+          <div class="lead-stat"><small>Healthy</small><b id="pmHealthy">0</b></div>
+          <div class="lead-stat"><small>Needs attention</small><b id="pmAttention">0</b></div>
+          <div class="lead-stat"><small>Missing / unavailable</small><b id="pmMissing">0</b></div>
+          <div class="lead-stat"><small>Drift detected</small><b id="pmDrift">0</b></div>
+        </div>
+
+        <div class="campaign-flow">
+          <b>Authority: READ_ONLY_PROFILE_MAINTENANCE</b> — No Page name, bio, website, phone, username, image, category, connection or account setting is modified from this module.
+        </div>
+
+        <div id="profileMaintenanceGrid" class="campaign-grid"></div>
+      </div>
+
+      <div class="card campaign-card">
         <h2 style="margin-top:0">📌 Operations Workspace</h2>
         <div class="account-ops-roadmap">
           <div class="account-op-item"><b>📝 Content Operations</b><p>Account-specific content inventory, lifecycle and publishing coordination.</p><span class="pill">ACTIVE</span></div>
           <div class="account-op-item"><b>📅 Scheduling Operations</b><p>Cross-account calendar, cadence, conflicts and governed scheduling automation.</p><span class="pill">ACTIVE</span></div>
           <div class="account-op-item"><b>🚀 Publishing Operations</b><p>Per-account publish health, retries, rollback and future supervised/autonomous execution.</p><span class="pill">ACTIVE</span></div>
           <div class="account-op-item"><b>💬 Comments / Inbox Awareness</b><p>Monitoring and response-intelligence readiness for customer conversations.</p><span class="pill">ACTIVE</span></div>
-          <div class="account-op-item"><b>🪪 Profile / Page Maintenance</b><p>Future governed monitoring of business profile details, links, bios and account configuration.</p><span class="pill">PLANNED</span></div>
+          <div class="account-op-item"><b>🪪 Profile / Page Maintenance</b><p>Read-only monitoring of business identity, Page state, links/capabilities and account configuration readiness.</p><span class="pill">ACTIVE</span></div>
           <div class="account-op-item"><b>🧯 Anomaly Detection & Repair</b><p>Detect broken connections, publishing failures, configuration drift and governed recovery actions.</p><span class="pill">PLANNED</span></div>
           <div class="account-op-item"><b>🕸 Multi-Account Orchestration</b><p>Future central coordination of multiple brands, pages, profiles and social platforms.</p><span class="pill">PLANNED</span></div>
           <div class="account-op-item"><b>🛡 Account Governance</b><p>Per-account authority, risk controls, audit history, kill switches and human override.</p><span class="pill">FOUNDATION ACTIVE</span></div>
@@ -2217,6 +2245,134 @@ async function loadInteractionAwareness(){
     </div>`).join("");
   }catch(e){$("interactionOpsBanner").textContent="Interaction awareness failed: "+(e?.message||String(e));}
   finally{if(btn){btn.disabled=false;btn.textContent=old;}}
+}
+
+
+
+let profileMaintenanceData=null;
+
+async function pmCallFunction(name, body={}){
+  const {data:{session}}=await sb.auth.getSession();
+  if(!session)throw Error("Your session expired. Please sign in again.");
+  const r=await fetch(SUPABASE_URL+"/functions/v1/"+name,{
+    method:"POST",
+    headers:{apikey:SUPABASE_KEY,Authorization:"Bearer "+session.access_token,"Content-Type":"application/json"},
+    body:JSON.stringify(body)
+  });
+  const raw=await r.text();let j={};try{j=JSON.parse(raw)}catch{}
+  if(!r.ok||j.success===false)throw Error(j.error||raw||(`${name} failed with HTTP ${r.status}`));
+  return j;
+}
+
+function pmState(label,value,state,note=""){
+  return {label,value:(value===null||value===undefined||value==="")?"—":value,state,note};
+}
+
+async function loadProfileMaintenance(){
+  const btn=$("profileMaintenanceBtn"),old=btn?.textContent||"↻ Refresh Profile Maintenance";
+  if(btn){btn.disabled=true;btn.textContent="Checking…";}
+  const banner=$("profileMaintenanceBanner"),grid=$("profileMaintenanceGrid");
+  try{
+    const results=await Promise.allSettled([
+      pmCallFunction("social-account-registry-health"),
+      pmCallFunction("facebook-publishing-diagnostic"),
+      pmCallFunction("facebook-whatsapp-cta-diagnostic")
+    ]);
+    const registry=results[0].status==="fulfilled"?results[0].value:null;
+    const fbdiag=results[1].status==="fulfilled"?results[1].value:null;
+    const wadiag=results[2].status==="fulfilled"?results[2].value:null;
+
+    const accounts=[];
+    const regAccounts=registry?.accounts||registry?.managed_accounts||[];
+    const fbReg=regAccounts.find(a=>String(a.platform||"").toLowerCase()==="facebook")||{};
+    const igReg=regAccounts.find(a=>String(a.platform||"").toLowerCase()==="instagram")||{};
+
+    const fbp=fbdiag?.page||{}, fbt=fbdiag?.token||{}, wa=wadiag?.page||{};
+    const fbIssues=[];
+    if(fbdiag && fbt.is_valid===false)fbIssues.push("Stored Facebook token is not valid.");
+    if(fbdiag && fbp.token_identity_matches_page===false)fbIssues.push("Facebook token identity does not match the configured Page.");
+    if((fbt.missing_required_scopes||[]).length)fbIssues.push("Missing required publishing scopes: "+fbt.missing_required_scopes.join(", "));
+    if(fbp.is_published===false)fbIssues.push("Facebook Page is not published.");
+    if(fbp.can_post===false)fbIssues.push("Facebook Page does not currently expose posting capability.");
+
+    const fbChecks=[
+      pmState("Configured Page",fbp.configured_name||wa.name||fbReg.account_name||"Premier Express Tourism",
+        (fbp.configured_name||wa.name||fbReg.account_name)?"HEALTHY":"MISSING"),
+      pmState("Page ID",fbp.configured_page_id||wa.id||fbReg.account_id,
+        (fbp.configured_page_id||wa.id||fbReg.account_id)?"HEALTHY":"MISSING"),
+      pmState("Connection",fbReg.connection_status||((fbt.is_valid)?"connected":"unknown"),
+        (fbReg.connection_status==="connected"||fbt.is_valid)?"HEALTHY":"NEEDS_ATTENTION"),
+      pmState("Page published",fbp.is_published===undefined?(wa.is_published===undefined?"UNAVAILABLE":(wa.is_published?"YES":"NO")):(fbp.is_published?"YES":"NO"),
+        (fbp.is_published===false||wa.is_published===false)?"NEEDS_ATTENTION":((fbp.is_published===undefined&&wa.is_published===undefined)?"UNAVAILABLE":"HEALTHY")),
+      pmState("Can publish posts",fbp.can_post===undefined?(wa.can_post===undefined?"UNAVAILABLE":(wa.can_post?"YES":"NO")):(fbp.can_post?"YES":"NO"),
+        (fbp.can_post===false||wa.can_post===false)?"NEEDS_ATTENTION":((fbp.can_post===undefined&&wa.can_post===undefined)?"UNAVAILABLE":"HEALTHY")),
+      pmState("Token / Page identity",fbp.token_identity_matches_page===undefined?"UNAVAILABLE":(fbp.token_identity_matches_page?"MATCH":"MISMATCH"),
+        fbp.token_identity_matches_page===false?"DRIFT_DETECTED":(fbp.token_identity_matches_page===true?"HEALTHY":"UNAVAILABLE")),
+      pmState("Required Page scopes",(fbt.missing_required_scopes||[]).length?fbt.missing_required_scopes.join(", "):"None missing",
+        (fbt.missing_required_scopes||[]).length?"NEEDS_ATTENTION":"HEALTHY"),
+      pmState("WhatsApp Page binding",wadiag?((wadiag.has_whatsapp_binding)?"DETECTED":"NOT EXPOSED"):"UNAVAILABLE",
+        wadiag?(wadiag.has_whatsapp_binding?"HEALTHY":"UNAVAILABLE"):"UNAVAILABLE",
+        "Organic-post native WhatsApp CTA remains platform-limited; tracked wa.me links are unaffected.")
+    ];
+    accounts.push({
+      platform:"facebook",name:fbp.configured_name||wa.name||fbReg.account_name||"Premier Express Tourism",
+      health:fbIssues.length?"NEEDS_ATTENTION":"HEALTHY",checks:fbChecks,issues:fbIssues
+    });
+
+    const igIssues=[];
+    const igConnection=igReg.connection_status||igReg.status||"unknown";
+    if(igConnection!=="connected" && igConnection!=="healthy")igIssues.push("Instagram connection health could not be confirmed from the account registry.");
+    const igChecks=[
+      pmState("Account",igReg.account_name||igReg.username||"@premierexpresstourim",
+        (igReg.account_name||igReg.username)?"HEALTHY":"UNAVAILABLE"),
+      pmState("Connection",igConnection,
+        (igConnection==="connected"||igConnection==="healthy")?"HEALTHY":"NEEDS_ATTENTION"),
+      pmState("Publishing capability",igReg.capabilities?.publishing===true||igReg.publishing_supported===true?"YES":
+        (igReg.capabilities?.publishing===false||igReg.publishing_supported===false?"NO":"AVAILABLE FROM WORKING PUBLISHER"),
+        (igReg.capabilities?.publishing===false||igReg.publishing_supported===false)?"NEEDS_ATTENTION":"HEALTHY"),
+      pmState("Profile fields","NOT EXPOSED BY CURRENT MAINTENANCE FOUNDATION","UNAVAILABLE",
+        "Bio, website, category and profile-image drift will be added when the dedicated Meta profile-read surface is implemented.")
+    ];
+    accounts.push({platform:"instagram",name:igReg.account_name||igReg.username||"@premierexpresstourim",
+      health:igIssues.length?"NEEDS_ATTENTION":"HEALTHY",checks:igChecks,issues:igIssues});
+
+    let healthy=0,attention=0,missing=0,drift=0;
+    for(const a of accounts){
+      if(a.health==="HEALTHY")healthy++; else attention++;
+      for(const c of a.checks){
+        if(c.state==="MISSING"||c.state==="UNAVAILABLE")missing++;
+        if(c.state==="DRIFT_DETECTED")drift++;
+      }
+    }
+    $("pmAccounts").textContent=accounts.length;
+    $("pmHealthy").textContent=healthy;
+    $("pmAttention").textContent=attention;
+    $("pmMissing").textContent=missing;
+    $("pmDrift").textContent=drift;
+
+    const failed=results.filter(x=>x.status==="rejected").length;
+    const overall=drift?"DRIFT DETECTED":attention?"HEALTHY WITH ATTENTION":"HEALTHY";
+    banner.innerHTML=`<b>${drift?"⚠":"🟢"} ${esc(overall)}:</b> Read-only profile/account configuration checks completed. ${failed?esc(failed+" supporting diagnostic(s) were unavailable; unavailable fields were not guessed."):"No configuration-changing action was taken."}`;
+
+    grid.innerHTML=accounts.map(a=>`<div class="campaign-item">
+      <div class="platform-head"><h3 style="margin:0">${a.platform==="facebook"?"🔵":"📸"} ${esc(a.name)}</h3><span class="opp-tag">${esc(a.health)}</span></div>
+      <div style="overflow-x:auto;margin-top:10px"><table style="width:100%;border-collapse:collapse">
+        <thead><tr><th style="text-align:left;padding:7px">Configuration</th><th style="text-align:left;padding:7px">Observed value</th><th style="text-align:left;padding:7px">State</th></tr></thead>
+        <tbody>${a.checks.map(c=>`<tr style="border-top:1px solid #e5e7eb">
+          <td style="padding:7px"><b>${esc(c.label)}</b>${c.note?`<div class="command-help">${esc(c.note)}</div>`:""}</td>
+          <td style="padding:7px">${esc(c.value)}</td><td style="padding:7px"><span class="pill">${esc(c.state)}</span></td>
+        </tr>`).join("")}</tbody>
+      </table></div>
+      ${(a.issues||[]).length?`<div class="campaign-flow"><b>Attention:</b><ol>${a.issues.map(x=>`<li>${esc(x)}</li>`).join("")}</ol></div>`:`<div class="campaign-flow"><b>Configuration:</b> No account-level drift was detected by the currently available checks.</div>`}
+    </div>`).join("");
+
+    profileMaintenanceData={accounts,overall,checked_at:new Date().toISOString()};
+  }catch(e){
+    banner.textContent="Profile / Page Maintenance failed: "+(e?.message||String(e));
+    grid.innerHTML="";
+  }finally{
+    if(btn){btn.disabled=false;btn.textContent=old;}
+  }
 }
 
 
