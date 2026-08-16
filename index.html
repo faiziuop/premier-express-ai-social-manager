@@ -677,6 +677,23 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
         <div class="campaign-flow"><b>Operating rule:</b> Use existing inventory first. Rotate products/audiences, require media for Instagram, prefer media for Facebook, and keep every live action inside the working approval → scheduling → publishing path. Review performance weekly.</div>
         <div id="growthPlanGrid" class="campaign-grid"></div>
         <div class="campaign-flow"><b>Weekly learning rule:</b> Every 7 days compare reach, engagement, interactions, attributed leads and bookings by platform, product and publishing time. The next week's daily volume should be increased, held or reduced from evidence—not from a fixed posting quota.</div>
+        <div class="campaign-flow" style="margin-top:14px">
+          <div class="platform-head">
+            <div>
+              <b>📈 Growth Learning & Performance Optimization</b>
+              <div style="margin-top:5px"><small>Compares the latest 7 days with the previous 7 days. Recommendations are advisory only and never change approval, scheduling or publishing automatically.</small></div>
+            </div>
+            <button class="secondary" id="growthLearningBtn" onclick="loadGrowthLearning()">↻ Refresh Learning</button>
+          </div>
+        </div>
+        <div class="lead-summary">
+          <div class="lead-stat"><small>Learning state</small><b id="glState">—</b></div>
+          <div class="lead-stat"><small>Facebook decision</small><b id="glFacebook">—</b></div>
+          <div class="lead-stat"><small>Instagram decision</small><b id="glInstagram">—</b></div>
+          <div class="lead-stat"><small>Evidence rule</small><b>5 posts + 3 metrics</b></div>
+        </div>
+        <div id="growthLearningBanner" class="campaign-flow">Growth learning has not been refreshed yet.</div>
+        <div id="growthLearningGrid" class="campaign-grid"></div>
       </div>
 
 
@@ -3099,6 +3116,78 @@ function gpScore(p){
   return score;
 }
 
+
+let growthLearningData=null;
+
+function growthDecisionLabel(v){
+  const x=String(v||"HOLD").toUpperCase();
+  if(x==="INCREASE_BY_1")return "↑ +1/day";
+  if(x==="DECREASE_BY_1")return "↓ -1/day";
+  return "HOLD";
+}
+
+async function loadGrowthLearning(){
+  const btn=$("growthLearningBtn"),old=btn?.textContent||"↻ Refresh Learning";
+  if(btn){btn.disabled=true;btn.textContent="Learning…";}
+  try{
+    const {data:{session}}=await sb.auth.getSession();
+    if(!session)throw Error("Your session expired. Please sign in again.");
+    const r=await fetch(SUPABASE_URL+"/functions/v1/growth-learning-optimizer",{
+      method:"POST",
+      headers:{apikey:SUPABASE_KEY,Authorization:"Bearer "+session.access_token,"Content-Type":"application/json"},
+      body:"{}"
+    });
+    const raw=await r.text();let j={};try{j=JSON.parse(raw)}catch{}
+    if(!r.ok||!j.success)throw Error(j.error||raw||("Growth learning failed with HTTP "+r.status));
+    growthLearningData=j;
+    $("glState").textContent=j.learning_state||"—";
+    const fb=(j.recommendations||[]).find(x=>x.platform==="facebook");
+    const ig=(j.recommendations||[]).find(x=>x.platform==="instagram");
+    $("glFacebook").textContent=growthDecisionLabel(fb?.decision);
+    $("glInstagram").textContent=growthDecisionLabel(ig?.decision);
+    $("growthLearningBanner").innerHTML=`<b>${esc(j.learning_state==="EVIDENCE_READY"?"🟢 EVIDENCE READY":"🟡 LEARNING")}</b> — ${esc(j.guardrail||"Recommendations are advisory only.")}${j.checked_at?`<br><b>Checked:</b> ${esc(new Date(j.checked_at).toLocaleString())}`:""}`;
+    renderGrowthLearning();
+  }catch(e){
+    $("growthLearningBanner").textContent="Could not refresh growth learning: "+(e?.message||String(e));
+    $("growthLearningGrid").innerHTML="";
+  }finally{
+    if(btn){btn.disabled=false;btn.textContent=old;}
+  }
+}
+
+function renderGrowthLearning(){
+  const grid=$("growthLearningGrid");
+  if(!growthLearningData){grid.innerHTML='<div class="campaign-item">Refresh Learning to calculate the current weekly recommendation.</div>';return;}
+  const recs=growthLearningData.recommendations||[];
+  grid.innerHTML=recs.map(r=>{
+    const e=r.evidence||{},c=r.comparison||{};
+    const products=r.top_products||[],hours=r.best_publishing_hours||[];
+    const ready=r.state==="EVIDENCE_READY";
+    return `<div class="campaign-item">
+      <div class="platform-head">
+        <h3 style="margin:0">${r.platform==="facebook"?"🔵 Facebook":"📸 Instagram"} • ${esc(growthDecisionLabel(r.decision))}</h3>
+        <span class="opp-tag">${esc(r.state||"LEARNING")}</span>
+      </div>
+      <div class="campaign-score"><b>Recommendation:</b> ${esc(r.reason||"")}</div>
+      <div class="campaign-flow">
+        <b>Current 7 days</b><br>
+        Published: ${esc(e.published_last_7d??0)} • Useful metric rows: ${esc(e.useful_metric_rows??0)} / minimum ${esc(e.minimum_useful_metric_rows??3)}<br>
+        Reach: ${esc(e.reach??0)} • Engagements: ${esc(e.engagements??0)} • Clicks: ${esc(e.clicks??0)}<br>
+        Attributed leads: ${esc(e.attributed_leads??0)} • Bookings: ${esc(e.bookings??0)} • Revenue: AED ${esc(e.revenue_aed??0)}
+      </div>
+      <div class="campaign-flow">
+        <b>Previous 7 days</b><br>
+        Published: ${esc(c.published_previous_7d??0)} • Useful metric rows: ${esc(c.useful_metric_rows??0)}<br>
+        Reach: ${esc(c.reach??0)} • Engagements: ${esc(c.engagements??0)} • Clicks: ${esc(c.clicks??0)}<br>
+        Attributed leads: ${esc(c.attributed_leads??0)} • Bookings: ${esc(c.bookings??0)}
+      </div>
+      ${products.length?`<div class="campaign-flow"><b>Best current product evidence</b><br>${products.map(x=>`${esc(x.product)} — ${esc(x.posts)} post(s), reach ${esc(x.reach)}, engagements ${esc(x.engagements)}, leads ${esc(x.leads)}`).join("<br>")}</div>`:""}
+      ${hours.length?`<div class="campaign-flow"><b>Publishing-time evidence (Dubai)</b><br>${hours.map(x=>`${esc(x.dubai_hour)}:00 — ${esc(x.posts)} post(s), reach ${esc(x.reach)}, engagements ${esc(x.engagements)}, clicks ${esc(x.clicks)}`).join("<br>")}</div>`:""}
+      <div class="campaign-flow"><b>Human control:</b> ${ready?"Evidence is sufficient for a recommendation, but you still decide whether to change the Daily Growth Plan volume.":"Volume is locked to HOLD until enough reliable evidence exists."}</div>
+    </div>`;
+  }).join("")||'<div class="campaign-item">No platform recommendation returned.</div>';
+}
+
 function gpDubaiParts(){
   const parts=new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Dubai",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hour12:false}).formatToParts(new Date());
   const get=t=>Number(parts.find(x=>x.type===t)?.value||0);
@@ -3594,6 +3683,7 @@ function switchMainTab(tab){
   $("whatsappTabBtn").classList.toggle("active",whatsapp);
   if(social&&!socialAccountOpsLoaded){loadSocialAccountOperations();loadContentOperations();loadSchedulingOperations();loadPublishingOperations();loadInteractionAwareness();loadProfileMaintenance();loadAnomalyRepair();loadMultiAccountOrchestration();loadAccountGovernance();}
   if(growth&&growthCycleRows.length===0)buildGrowthCycle(false);
+  if(growth&&!growthLearningData)loadGrowthLearning();
 }
 
 async function loadSocialAccountOperations(){
