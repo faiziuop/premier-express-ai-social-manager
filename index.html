@@ -50,6 +50,7 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
       <button class="main-nav-tab active" id="mainAgentTabBtn" onclick="switchMainTab('agent')">🧠 Agent Intelligence & Content</button>
       <button class="main-nav-tab" id="socialOpsTabBtn" onclick="switchMainTab('social-ops')">🌐 Social Account Operations</button>
       <button class="main-nav-tab" id="growthTabBtn" onclick="switchMainTab('growth')">🎯 Growth Operations</button>
+      <button class="main-nav-tab" id="whatsappTabBtn" onclick="switchMainTab('whatsapp')">💬 WhatsApp Operations</button>
     </div>
 
     <div id="agentMainPanel" class="main-tab-panel active">
@@ -679,6 +680,57 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
       </div>
 
 
+    </div>
+
+    <div id="whatsappMainPanel" class="main-tab-panel">
+      <div class="card campaign-card">
+        <div class="platform-head">
+          <div>
+            <h2 style="margin:0">💬 WhatsApp Operations</h2>
+            <p style="margin:6px 0 0">Operational alerts and future customer messaging for the autonomous agent. This is separate from tracked wa.me acquisition links.</p>
+          </div>
+          <span class="pill">SETUP REQUIRED</span>
+        </div>
+
+        <div class="campaign-flow"><b>Current stage:</b> WhatsApp Business Platform connection is not yet activated in this agent. No automated WhatsApp message is sent from this panel.</div>
+
+        <div class="lead-summary">
+          <div class="lead-stat"><small>Owner alerts</small><b>PLANNED</b></div>
+          <div class="lead-stat"><small>Customer messaging</small><b>PLANNED</b></div>
+          <div class="lead-stat"><small>wa.me tracking</small><b>ACTIVE</b></div>
+          <div class="lead-stat"><small>Auto-send authority</small><b>OFF</b></div>
+        </div>
+
+        <div class="campaign-grid">
+          <div class="campaign-item">
+            <h3>1. Meta WhatsApp Business Platform</h3>
+            <p>Add the Meta app use case <b>Connect with customers through WhatsApp</b> and complete the WhatsApp Business Platform setup.</p>
+            <div class="campaign-flow"><b>Needed:</b> WhatsApp Business Account, sending phone number, phone-number ID and a server-side access token.</div>
+          </div>
+
+          <div class="campaign-item">
+            <h3>2. Owner Operations Number</h3>
+            <p>Choose the WhatsApp number that will receive agent alerts. Keep it separate from public customer-tracking logic.</p>
+            <div class="campaign-flow"><b>Planned alerts:</b> publish success • publish failure • urgent interaction • new qualified lead • booking/revenue event.</div>
+          </div>
+
+          <div class="campaign-item">
+            <h3>3. Approved Alert Template</h3>
+            <p>Create an approved WhatsApp message template for business-initiated operational notifications.</p>
+            <div class="campaign-flow"><b>Recommended template name:</b> <code>agent_operations_alert</code><br><b>Suggested body:</b> Premier Express Agent Alert: {{1}}. Platform: {{2}}. Item: {{3}}. Status: {{4}}. Dubai time: {{5}}.</div>
+          </div>
+
+          <div class="campaign-item">
+            <h3>4. Agent Event Wiring</h3>
+            <p>After the WhatsApp connection is verified, publishing/scheduling, interaction intelligence, leads and bookings will emit alert events to one notification service.</p>
+            <div class="campaign-flow"><b>Design rule:</b> operational alerts should never block the underlying publish/booking action if WhatsApp itself is temporarily unavailable.</div>
+          </div>
+        </div>
+
+        <div class="campaign-flow">
+          <b>Alert policy when activated:</b> successful scheduled publish → send success alert; terminal publish failure → send failure alert; high-priority interaction → send attention alert; qualified lead/booking → send commercial alert. Repeated low-value events will be deduplicated to avoid notification spam.
+        </div>
+      </div>
     </div>
 
     <div id="socialOpsPanel" class="main-tab-panel">
@@ -3429,13 +3481,15 @@ function renderContentOperations(){
 
 let socialAccountOpsLoaded=false;
 function switchMainTab(tab){
-  const agent=tab==="agent",social=tab==="social-ops",growth=tab==="growth";
+  const agent=tab==="agent",social=tab==="social-ops",growth=tab==="growth",whatsapp=tab==="whatsapp";
   $("agentMainPanel").classList.toggle("active",agent);
   $("socialOpsPanel").classList.toggle("active",social);
   $("growthMainPanel").classList.toggle("active",growth);
+  $("whatsappMainPanel").classList.toggle("active",whatsapp);
   $("mainAgentTabBtn").classList.toggle("active",agent);
   $("socialOpsTabBtn").classList.toggle("active",social);
   $("growthTabBtn").classList.toggle("active",growth);
+  $("whatsappTabBtn").classList.toggle("active",whatsapp);
   if(social&&!socialAccountOpsLoaded){loadSocialAccountOperations();loadContentOperations();loadSchedulingOperations();loadPublishingOperations();loadInteractionAwareness();loadProfileMaintenance();loadAnomalyRepair();loadMultiAccountOrchestration();loadAccountGovernance();}
   if(growth&&growthCycleRows.length===0)buildGrowthCycle(false);
 }
