@@ -49,6 +49,7 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
     <div class="main-nav-tabs">
       <button class="main-nav-tab active" id="mainAgentTabBtn" onclick="switchMainTab('agent')">🧠 Agent Intelligence & Content</button>
       <button class="main-nav-tab" id="socialOpsTabBtn" onclick="switchMainTab('social-ops')">🌐 Social Account Operations</button>
+      <button class="main-nav-tab" id="growthTabBtn" onclick="switchMainTab('growth')">🎯 Growth Operations</button>
     </div>
 
     <div id="agentMainPanel" class="main-tab-panel active">
@@ -639,6 +640,30 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
     <div id="posts"></div>
     </div>
 
+    <div id="growthMainPanel" class="main-tab-panel">
+<div class="card campaign-card">
+        <div class="platform-head">
+          <div>
+            <h2 style="margin:0">🎯 Growth Operations — 7-Day Growth Cycle</h2>
+            <p style="margin:6px 0 0">Uses the existing draft inventory to build a balanced short-term publishing plan focused on reach, enquiry potential and product diversity. It does not generate extra drafts while supply is already high.</p>
+          </div>
+          <button class="secondary" id="growthPlanBtn" onclick="buildGrowthCycle()">↻ Build 7-Day Growth Plan</button>
+        </div>
+        <div id="growthPlanBanner" class="campaign-flow">Growth plan has not been built yet.</div>
+        <div class="lead-summary">
+          <div class="lead-stat"><small>Planned posts</small><b id="gpCount">0</b></div>
+          <div class="lead-stat"><small>Facebook</small><b id="gpFb">0</b></div>
+          <div class="lead-stat"><small>Instagram</small><b id="gpIg">0</b></div>
+          <div class="lead-stat"><small>Products covered</small><b id="gpProducts">0</b></div>
+          <div class="lead-stat"><small>Human approval</small><b>YES</b></div>
+        </div>
+        <div class="campaign-flow"><b>Operating rule:</b> Use existing inventory first. Prefer high-intelligence drafts, rotate products/audiences, avoid back-to-back duplication and keep every live action inside the working approval → scheduling → publishing path.</div>
+        <div id="growthPlanGrid" class="campaign-grid"></div>
+      </div>
+
+
+    </div>
+
     <div id="socialOpsPanel" class="main-tab-panel">
       <div class="card account-health-card">
         <div class="platform-head">
@@ -938,27 +963,7 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
         <div id="accountGovGrid" class="campaign-grid"></div>
       </div>
 
-      <div class="card campaign-card">
-        <div class="platform-head">
-          <div>
-            <h2 style="margin:0">🎯 7-Day Growth Cycle</h2>
-            <p style="margin:6px 0 0">Uses the existing draft inventory to build a balanced short-term publishing plan focused on reach, enquiry potential and product diversity. It does not generate extra drafts while supply is already high.</p>
-          </div>
-          <button class="secondary" id="growthPlanBtn" onclick="buildGrowthCycle()">↻ Build 7-Day Growth Plan</button>
-        </div>
-        <div id="growthPlanBanner" class="campaign-flow">Growth plan has not been built yet.</div>
-        <div class="lead-summary">
-          <div class="lead-stat"><small>Planned posts</small><b id="gpCount">0</b></div>
-          <div class="lead-stat"><small>Facebook</small><b id="gpFb">0</b></div>
-          <div class="lead-stat"><small>Instagram</small><b id="gpIg">0</b></div>
-          <div class="lead-stat"><small>Products covered</small><b id="gpProducts">0</b></div>
-          <div class="lead-stat"><small>Human approval</small><b>YES</b></div>
-        </div>
-        <div class="campaign-flow"><b>Operating rule:</b> Use existing inventory first. Prefer high-intelligence drafts, rotate products/audiences, avoid back-to-back duplication and keep every live action inside the working approval → scheduling → publishing path.</div>
-        <div id="growthPlanGrid" class="campaign-grid"></div>
-      </div>
-
-      <div class="card campaign-card">
+            <div class="card campaign-card">
         <h2 style="margin-top:0">📌 Operations Workspace</h2>
         <div class="account-ops-roadmap">
           <div class="account-op-item"><b>📝 Content Operations</b><p>Account-specific content inventory, lifecycle and publishing coordination.</p><span class="pill">ACTIVE</span></div>
@@ -3289,12 +3294,15 @@ function renderContentOperations(){
 
 let socialAccountOpsLoaded=false;
 function switchMainTab(tab){
-  const agent=tab==="agent";
+  const agent=tab==="agent",social=tab==="social-ops",growth=tab==="growth";
   $("agentMainPanel").classList.toggle("active",agent);
-  $("socialOpsPanel").classList.toggle("active",!agent);
+  $("socialOpsPanel").classList.toggle("active",social);
+  $("growthMainPanel").classList.toggle("active",growth);
   $("mainAgentTabBtn").classList.toggle("active",agent);
-  $("socialOpsTabBtn").classList.toggle("active",!agent);
-  if(!agent&&!socialAccountOpsLoaded){loadSocialAccountOperations();loadContentOperations();loadSchedulingOperations();loadPublishingOperations();loadInteractionAwareness();loadProfileMaintenance();loadAnomalyRepair();loadMultiAccountOrchestration();loadAccountGovernance();}
+  $("socialOpsTabBtn").classList.toggle("active",social);
+  $("growthTabBtn").classList.toggle("active",growth);
+  if(social&&!socialAccountOpsLoaded){loadSocialAccountOperations();loadContentOperations();loadSchedulingOperations();loadPublishingOperations();loadInteractionAwareness();loadProfileMaintenance();loadAnomalyRepair();loadMultiAccountOrchestration();loadAccountGovernance();}
+  if(growth&&growthCycleRows.length===0)buildGrowthCycle();
 }
 
 async function loadSocialAccountOperations(){
