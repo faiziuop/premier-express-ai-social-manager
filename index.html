@@ -650,13 +650,19 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
           <button class="secondary" id="growthPlanBtn" onclick="buildGrowthCycle()">↻ Build Daily Growth Plan</button>
         </div>
         <div class="campaign-flow">
-          <b>Daily volume:</b>
-          <label style="margin-left:10px">Facebook
-            <select id="gpFbTarget" onchange="buildGrowthCycle()"><option>1</option><option>2</option><option selected>3</option><option>4</option><option>5</option></select>
-          </label>
-          <label style="margin-left:10px">Instagram
-            <select id="gpIgTarget" onchange="buildGrowthCycle()"><option>1</option><option>2</option><option selected>3</option><option>4</option><option>5</option></select>
-          </label>
+          <b>Daily volume</b>
+          <div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:10px;align-items:end">
+            <label style="min-width:160px"><span style="display:block;font-size:12px;font-weight:700;margin-bottom:5px">Facebook posts/day</span>
+              <select id="gpFbTarget" onchange="buildGrowthCycle()" style="width:100%;padding:9px;border:1px solid #ccd1d9;border-radius:8px;background:#fff">
+                <option value="1">1 post</option><option value="2">2 posts</option><option value="3" selected>3 posts</option><option value="4">4 posts</option><option value="5">5 posts</option>
+              </select>
+            </label>
+            <label style="min-width:160px"><span style="display:block;font-size:12px;font-weight:700;margin-bottom:5px">Instagram posts/day</span>
+              <select id="gpIgTarget" onchange="buildGrowthCycle()" style="width:100%;padding:9px;border:1px solid #ccd1d9;border-radius:8px;background:#fff">
+                <option value="1">1 post</option><option value="2">2 posts</option><option value="3" selected>3 posts</option><option value="4">4 posts</option><option value="5">5 posts</option>
+              </select>
+            </label>
+          </div>
           <small style="display:block;margin-top:6px">Start at 3 + 3 daily. Increase toward 5 + 5 only if the weekly report shows healthy reach/engagement and content quality remains strong.</small>
         </div>
         <div id="growthPlanBanner" class="campaign-flow">Daily growth plan has not been built yet.</div>
@@ -3059,7 +3065,7 @@ async function buildGrowthCycle(){
   const banner=$("growthPlanBanner"),grid=$("growthPlanGrid");
   try{
     const {data,error}=await sb.from("content_posts")
-      .select("id,post_number,primary_platform,status,hook,caption,matched_product,campaign_id,media_url,media_type,created_at,visual_direction,cta,audience,market,traveller_stage,content_pillar,whatsapp_tracking_code")
+      .select("*")
       .in("status",["PENDING_APPROVAL","EDIT_REQUESTED","APPROVED","READY_TO_PUBLISH"])
       .is("deleted_at",null)
       .order("created_at",{ascending:false})
@@ -3115,9 +3121,16 @@ async function buildGrowthCycle(){
       <p><b>Post:</b> ${esc(p.post_number??"—")} • <b>Planned Dubai time:</b> ${esc(new Date(p.planned_at).toLocaleString("en-GB",{timeZone:"Asia/Dubai"}))}</p>
       <div class="campaign-flow"><b>Hook:</b> ${esc(p.hook||"—")}</div>
       <div class="campaign-flow"><b>Full post:</b><div style="white-space:pre-wrap;margin-top:6px">${esc(p.caption||"No caption")}</div></div>
-      ${p.cta?`<div class="campaign-flow"><b>CTA:</b> ${esc(p.cta)}</div>`:""}
-      ${p.visual_direction?`<div class="campaign-flow"><b>Visual direction:</b> ${esc(p.visual_direction)}</div>`:""}
-      <div class="opp-meta">${p.audience?`<span class="opp-tag">${esc(p.audience)}</span>`:""}${p.market?`<span class="opp-tag">${esc(p.market)}</span>`:""}${p.traveller_stage?`<span class="opp-tag">${esc(p.traveller_stage)}</span>`:""}${p.content_pillar?`<span class="opp-tag">${esc(p.content_pillar)}</span>`:""}${p.campaign_id?'<span class="opp-tag">CAMPAIGN</span>':""}${p.media_url?'<span class="opp-tag">MEDIA READY</span>':'<span class="opp-tag">MEDIA MISSING</span>'}</div>
+      ${(p.cta||p.call_to_action)?`<div class="campaign-flow"><b>CTA:</b> ${esc(p.cta||p.call_to_action)}</div>`:""}
+      ${(p.visual_direction||p.visual_prompt||p.image_prompt)?`<div class="campaign-flow"><b>Visual direction:</b> ${esc(p.visual_direction||p.visual_prompt||p.image_prompt)}</div>`:""}
+      <div class="opp-meta">
+        ${(p.audience||p.target_audience)?`<span class="opp-tag">${esc(p.audience||p.target_audience)}</span>`:""}
+        ${(p.market||p.target_market)?`<span class="opp-tag">${esc(p.market||p.target_market)}</span>`:""}
+        ${(p.traveller_stage||p.traveler_stage||p.stage)?`<span class="opp-tag">${esc(p.traveller_stage||p.traveler_stage||p.stage)}</span>`:""}
+        ${(p.content_pillar||p.pillar)?`<span class="opp-tag">${esc(p.content_pillar||p.pillar)}</span>`:""}
+        ${p.campaign_id?'<span class="opp-tag">CAMPAIGN</span>':""}
+        ${p.media_url?'<span class="opp-tag">MEDIA READY</span>':'<span class="opp-tag">MEDIA MISSING</span>'}
+      </div>
       ${p.media_url?`<div class="media-box"><b>Current media</b><div class="media-preview">${["video","reel"].includes(String(p.media_type||"").toLowerCase())?`<video controls preload="metadata" src="${esc(p.media_url)}"></video>`:`<img src="${esc(p.media_url)}" alt="Growth plan media preview">`}</div></div>`:""}
       ${growthUploadControl(p.id,!!p.media_url,p.primary_platform)}
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
