@@ -28,6 +28,16 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
 .account-op-item{border:1px solid #e5e7eb;border-radius:10px;padding:12px;background:#fafafa}
 .health-good{color:#087f5b;font-weight:700}.health-warn{color:#b45309;font-weight:700}.health-bad{color:#b42318;font-weight:700}
 @media(max-width:760px){.account-ops-roadmap{grid-template-columns:1fr}}
+
+#queueOrganizer{border-left:4px solid #2563eb}
+.queue-priority{display:inline-block;border-radius:999px;padding:3px 8px;font-size:11px;font-weight:800;margin-left:6px}
+.queue-priority.high{background:#dcfce7;color:#166534}
+.queue-priority.medium{background:#fef3c7;color:#92400e}
+.queue-priority.standard{background:#eef2f7;color:#475467}
+.queue-priority.duplicate{background:#fee2e2;color:#991b1b}
+.queue-rank-note{margin:8px 0;padding:8px 10px;border-radius:8px;background:#f8fafc;border:1px solid #e2e8f0;font-size:12px}
+@media(max-width:800px){#queueOrganizer .command-grid{grid-template-columns:1fr!important}}
+
 </style>
 </head>
 <body>
@@ -631,6 +641,28 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
       <button class="workflow-tab" id="scheduledTab" onclick="switchView('scheduled')">📅 Scheduled</button>
       <button class="workflow-tab" id="historyTab" onclick="switchView('history')">🕘 Publish History</button>
       <button class="workflow-tab" id="deletedTab" onclick="switchView('deleted')">🗑 Deleted</button>
+    </div>
+
+
+    <div id="queueOrganizer" class="card" style="padding:14px;margin-bottom:12px">
+      <div class="platform-head">
+        <div>
+          <h3 style="margin:0">🧭 Draft Queue Organizer</h3>
+          <p style="margin:5px 0 0">Your existing draft cards stay below. Use these controls only to find the best drafts faster.</p>
+        </div>
+        <button class="muted" id="queueRankBtn" onclick="refreshQueueRanking()">↻ Refresh Ranking</button>
+      </div>
+      <div class="command-grid" style="grid-template-columns:1.3fr 1fr 1fr 1fr">
+        <div><label>Search drafts</label><input id="queueSearch" type="search" placeholder="Hook, product, audience…" oninput="queueOrganizerChanged()"></div>
+        <div><label>Product</label><select id="queueProduct" onchange="queueOrganizerChanged()"><option value="ALL">All products</option></select></div>
+        <div><label>Review priority</label><select id="queuePriority" onchange="queueOrganizerChanged()"><option value="ALL">All priorities</option><option value="HIGH">High first</option><option value="MEDIUM">Medium</option><option value="STANDARD">Standard</option><option value="DUPLICATE">High duplicate risk</option></select></div>
+        <div><label>Sort</label><select id="queueSort" onchange="queueOrganizerChanged()"><option value="PRIORITY">Best drafts first</option><option value="NEWEST">Newest first</option><option value="OLDEST">Oldest first</option><option value="PRODUCT">Product A–Z</option></select></div>
+      </div>
+      <div class="command-grid" style="grid-template-columns:1fr auto auto;align-items:end">
+        <div id="queueOrganizerSummary" class="command-help">Ranking loads automatically for the Approval Queue.</div>
+        <div><label>Cards per page</label><select id="queuePageSize" onchange="queueOrganizerChanged()"><option value="20">20</option><option value="30" selected>30</option><option value="50">50</option><option value="100">100</option></select></div>
+        <div style="display:flex;gap:7px"><button class="muted" id="queuePrevBtn" onclick="queuePageMove(-1)">← Previous</button><button class="muted" id="queueNextBtn" onclick="queuePageMove(1)">Next →</button></div>
+      </div>
     </div>
 
     <div class="stats">
@@ -2131,6 +2163,8 @@ async function researchNow(){
 
 function switchPlatform(platform){
   activePlatform=platform;
+  queueCurrentPage=1;
+  queueRankingLoadedFor="";
   $("tabFacebook").classList.toggle("active",platform==="facebook");
   $("tabInstagram").classList.toggle("active",platform==="instagram");
   $("platformTitle").textContent=platform==="facebook"?"Facebook Content":"Instagram Content";
@@ -2153,17 +2187,95 @@ function switchView(view){
   $("deletedTab").classList.toggle("active",view==="deleted");
   renderPosts();
 }
+
+let queueRankingMap=new Map();
+let queueRankingLoadedFor="";
+let queueCurrentPage=1;
+let queueVisibleCount=0;
+
+function queueOrganizerChanged(){
+  queueCurrentPage=1;
+  renderPosts();
+}
+function queuePageMove(delta){
+  const size=Math.max(1,Number($("queuePageSize")?.value||30));
+  const maxPage=Math.max(1,Math.ceil(queueVisibleCount/size));
+  queueCurrentPage=Math.max(1,Math.min(maxPage,queueCurrentPage+delta));
+  renderPosts();
+}
+function queuePopulateProducts(rows){
+  const sel=$("queueProduct");if(!sel)return;
+  const current=sel.value||"ALL";
+  const names=[...new Set(rows.map(x=>x.matched_product).filter(Boolean))].sort((a,b)=>String(a).localeCompare(String(b)));
+  sel.innerHTML='<option value="ALL">All products</option>'+names.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join("");
+  if([...sel.options].some(o=>o.value===current))sel.value=current;
+}
+async function refreshQueueRanking(silent=false){
+  const btn=$("queueRankBtn"),old=btn?.textContent||"↻ Refresh Ranking";
+  if(btn&&!silent){btn.disabled=true;btn.textContent="Ranking…";}
+  try{
+    const {data:{session}}=await sb.auth.getSession();
+    if(!session)throw Error("Your session expired. Please sign in again.");
+    const r=await fetch(SUPABASE_URL+"/functions/v1/approval-queue-intelligence",{method:"POST",headers:{apikey:SUPABASE_KEY,Authorization:"Bearer "+session.access_token,"Content-Type":"application/json"},body:"{}"});
+    const raw=await r.text();let j={};try{j=JSON.parse(raw)}catch{}
+    if(!r.ok||!j.success)throw Error(j.error||raw||("Queue ranking failed with HTTP "+r.status));
+    queueRankingMap=new Map((j.rows||[]).map(x=>[String(x.id),x]));
+    queueRankingLoadedFor=activePlatform;
+    const platformRows=(j.rows||[]).filter(x=>x.primary_platform===activePlatform);
+    const high=platformRows.filter(x=>x.review_tier==="HIGH").length;
+    const dup=platformRows.filter(x=>x.duplicate_risk==="high").length;
+    if($("queueOrganizerSummary"))$("queueOrganizerSummary").innerHTML=`<b>${esc(platformRows.length)}</b> pending draft(s) ranked for ${esc(activePlatform)} • <b>${esc(high)}</b> high priority • <b>${esc(dup)}</b> high duplicate-risk. Ranking never approves or deletes anything.`;
+    if(!silent)await renderPosts();
+  }catch(e){
+    if($("queueOrganizerSummary"))$("queueOrganizerSummary").textContent="Ranking unavailable: "+(e?.message||String(e))+". Drafts remain fully usable.";
+  }finally{
+    if(btn){btn.disabled=false;btn.textContent=old;}
+  }
+}
 async function renderPosts(){
-  const {data,error}=await sb.from("content_posts").select("*").eq("primary_platform",activePlatform).order("created_at",{ascending:false}).limit(100);
+  const {data,error}=await sb.from("content_posts").select("*").eq("primary_platform",activePlatform).order("created_at",{ascending:false}).limit(500);
   if(error){$("posts").innerHTML="<div class='card'><b>Database error</b><pre>"+esc(JSON.stringify(error,null,2))+"</pre></div>";return;}
   const allRows=data||[];
   const activeRows=allRows.filter(x=>!x.deleted_at);
   const queueStatuses=["PENDING_APPROVAL","EDIT_REQUESTED","APPROVED","READY_TO_PUBLISH"];
   const historyStatuses=["PUBLISHED","REJECTED","FAILED"];
-  const rows=activeView==="deleted"?allRows.filter(x=>!!x.deleted_at):activeRows.filter(x=>activeView==="queue"?queueStatuses.includes(x.status):activeView==="scheduled"?x.status==="SCHEDULED":historyStatuses.includes(x.status));
+  let rows=activeView==="deleted"?allRows.filter(x=>!!x.deleted_at):activeRows.filter(x=>activeView==="queue"?queueStatuses.includes(x.status):activeView==="scheduled"?x.status==="SCHEDULED":historyStatuses.includes(x.status));
   $("total").textContent=activeRows.length;
   $("pending").textContent=activeRows.filter(x=>["PENDING_APPROVAL","EDIT_REQUESTED"].includes(x.status)).length;
   $("approved").textContent=activeRows.filter(x=>x.status==="PUBLISHED").length;
+
+  if($("queueOrganizer"))$("queueOrganizer").style.display=activeView==="queue"?"block":"none";
+  if(activeView==="queue"){
+    queuePopulateProducts(rows);
+    const q=String($("queueSearch")?.value||"").trim().toLowerCase();
+    const product=$("queueProduct")?.value||"ALL";
+    const priority=$("queuePriority")?.value||"ALL";
+    const sort=$("queueSort")?.value||"PRIORITY";
+    if(q)rows=rows.filter(x=>[x.hook,x.caption,x.matched_product,x.audience_segment,x.traveller_stage,x.content_pillar].filter(Boolean).join(" ").toLowerCase().includes(q));
+    if(product!=="ALL")rows=rows.filter(x=>String(x.matched_product||"")===product);
+    if(priority!=="ALL")rows=rows.filter(x=>{const r=queueRankingMap.get(String(x.id));if(priority==="DUPLICATE")return r?.duplicate_risk==="high";return r?.review_tier===priority;});
+    rows.sort((a,b)=>{
+      if(sort==="NEWEST")return new Date(b.created_at).getTime()-new Date(a.created_at).getTime();
+      if(sort==="OLDEST")return new Date(a.created_at).getTime()-new Date(b.created_at).getTime();
+      if(sort==="PRODUCT")return String(a.matched_product||"").localeCompare(String(b.matched_product||""))||new Date(b.created_at).getTime()-new Date(a.created_at).getTime();
+      const ar=queueRankingMap.get(String(a.id)),br=queueRankingMap.get(String(b.id));
+      const as=Number(ar?.priority_score??-1),bs=Number(br?.priority_score??-1);
+      return bs-as||new Date(b.created_at).getTime()-new Date(a.created_at).getTime();
+    });
+    queueVisibleCount=rows.length;
+    const pageSize=Math.max(1,Number($("queuePageSize")?.value||30));
+    const maxPage=Math.max(1,Math.ceil(queueVisibleCount/pageSize));
+    queueCurrentPage=Math.min(queueCurrentPage,maxPage);
+    const start=(queueCurrentPage-1)*pageSize;
+    rows=rows.slice(start,start+pageSize);
+    if($("queuePrevBtn"))$("queuePrevBtn").disabled=queueCurrentPage<=1;
+    if($("queueNextBtn"))$("queueNextBtn").disabled=queueCurrentPage>=maxPage;
+    if($("queueOrganizerSummary")&&queueRankingMap.size){
+      const base=$("queueOrganizerSummary").innerHTML.split("<br>")[0];
+      $("queueOrganizerSummary").innerHTML=base+`<br>Showing ${esc(start+1)}–${esc(Math.min(start+pageSize,queueVisibleCount))} of ${esc(queueVisibleCount)} matching draft(s) • Page ${esc(queueCurrentPage)}/${esc(maxPage)}.`;
+    }
+    if(queueRankingLoadedFor!==activePlatform&&queueRankingMap.size===0)setTimeout(()=>refreshQueueRanking(true),0);
+  }
 
   $("posts").innerHTML=rows.map(p=>{
     const busy=publishingIds.has(p.id);
@@ -2249,7 +2361,10 @@ async function renderPosts(){
     const deletedInfo=p.deleted_at?`<div class="deleted-note"><b>Deleted:</b> ${esc(new Date(p.deleted_at).toLocaleString())}</div>`:"";
     const scheduledInfo=p.scheduled_at?`<div class="scheduled-note">📅 Scheduled: ${esc(formatDubaiTime(p.scheduled_at))}</div>`:"";
     const publishedInfo=p.published_at?`<div class="history-note"><b>Published:</b> ${esc(new Date(p.published_at).toLocaleString())}${p.external_post_id?` • ID: ${esc(p.external_post_id)}`:""}</div>`:"";
-    return `<div class="card post"><span class="pill">${esc(p.status)}</span><h2>${esc(p.post_number)}. ${esc(p.hook||p.objective||"Post")}</h2><small>${esc(activePlatform)} • ${esc(p.content_type||"")} • ${esc(p.content_date||"")}</small>${agentInfo}${media}<p class="caption">${esc(p.caption||"")}</p><p><b>CTA:</b> ${esc(p.cta||"")}<br><b>Visual direction:</b> ${esc(p.visual_direction||"")}</p>${publishError}${whatsappCtaState}${scheduledInfo}${publishedInfo}${deletedInfo}${actions}</div>`;
+    const qr=queueRankingMap.get(String(p.id));
+    const priorityBadge=activeView==="queue"&&qr?`<span class="queue-priority ${String(qr.review_tier||"STANDARD").toLowerCase()}">${esc(qr.review_tier||"STANDARD")} • ${esc(qr.priority_score??"—")}/100</span>${qr.duplicate_risk==="high"?`<span class="queue-priority duplicate">DUPLICATE RISK ${esc(qr.duplicate_similarity??0)}%</span>`:""}`:"";
+    const rankNote=activeView==="queue"&&qr?`<div class="queue-rank-note"><b>Review rank #${esc(qr.queue_rank??"—")}</b> • Age ${esc(qr.age_days??0)} day(s)${qr.duplicate_with?` • Similar to Post ${esc(qr.duplicate_with.post_number??"—")}`:""}<br><small>Ranking is advisory only. Your existing approve/edit/reject/schedule controls are unchanged.</small></div>`:"";
+    return `<div class="card post"><span class="pill">${esc(p.status)}</span>${priorityBadge}<h2>${esc(p.post_number)}. ${esc(p.hook||p.objective||"Post")}</h2><small>${esc(activePlatform)} • ${esc(p.content_type||"")} • ${esc(p.content_date||"")}</small>${rankNote}${agentInfo}${media}<p class="caption">${esc(p.caption||"")}</p><p><b>CTA:</b> ${esc(p.cta||"")}<br><b>Visual direction:</b> ${esc(p.visual_direction||"")}</p>${publishError}${whatsappCtaState}${scheduledInfo}${publishedInfo}${deletedInfo}${actions}</div>`;
   }).join("")||`<div class='card'><h3>${activeView==="queue"?"Queue is clear":activeView==="scheduled"?"No scheduled posts":activeView==="deleted"?"Deleted is empty":"No publish history yet"}</h3>${activeView==="queue"?"Generate new content or switch platform.":activeView==="scheduled"?"Schedule a post from the Approval Queue.":activeView==="deleted"?"Deleted drafts will appear here and can be restored.":"Published, rejected, and failed posts will appear here."}</div>`;
 }
 
