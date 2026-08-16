@@ -1248,7 +1248,7 @@ async function loadExecutionCoverage(){
       {name:"Meta Performance Sync",key:"meta_sync",authority:get("meta performance","AGENT_ASSISTED"),broker:true,mutation:"READ_ONLY_EXTERNAL"},
       {name:"Campaign Strategy Planning",key:"campaign_strategy",authority:get("campaign strategy","AGENT_ASSISTED"),broker:false,mutation:"INTERNAL"},
       {name:"Draft Generation",key:"draft_generation",authority:get("draft generation","AGENT_ASSISTED"),broker:false,mutation:"INTERNAL"},
-      {name:"Final Content Approval",key:"final_approval",authority:get("final content","HUMAN_REQUIRED"),broker:false,mutation:"STATE_CHANGE"},
+      {name:"Final Content Approval",key:"final_approval",authority:get("final content","HUMAN_REQUIRED"),broker:true,mutation:"STATE_CHANGE"},
       {name:"Publishing",key:"publishing",authority:get("publishing","HUMAN_REQUIRED"),broker:true,mutation:"PUBLIC_EXTERNAL"},
       {name:"Scheduling",key:"scheduling",authority:get("scheduling","HUMAN_REQUIRED"),broker:true,mutation:"PUBLIC_FUTURE"},
       {name:"Lead Attribution",key:"lead_attribution",authority:get("lead attribution","HUMAN_REQUIRED"),broker:false,mutation:"COMMERCIAL_TRUTH"},
@@ -1271,7 +1271,7 @@ async function loadExecutionCoverage(){
     $("covSafe").textContent=safe;
     $("covUnsafe").textContent=unsafe;
 
-    const next=["Final Content Approval","Lead Attribution","Booking & Revenue Updates"];
+    const next=["Lead Attribution","Booking & Revenue Updates"];
     banner.innerHTML=`<b>${unsafe?"⛔ EXECUTION GAP":"🟢 CONTROLLED EXPANSION READY"}:</b> ${enforced}/${caps.length} capabilities currently have confirmed broker enforcement. Non-broker external/commercial capabilities remain human-gated or blocked, so no unsafe autonomy gap is exposed.<br><b>Next broker expansion:</b> ${next.join(" → ")}.`;
 
     grid.innerHTML=caps.map((c,i)=>{
@@ -1284,7 +1284,7 @@ async function loadExecutionCoverage(){
         : c.name==="Scheduling"
           ?"Route schedule create/move/cancel through the broker with conflict, cadence and approval checks."
         : c.name==="Final Content Approval"
-          ?"Keep human-controlled; broker should verify an explicit approval record before downstream execution."
+          ?"Final approval is broker-enforced and remains human-controlled; downstream publishing/scheduling must retain approval evidence checks."
         : c.name==="Lead Attribution"||c.name==="Booking & Revenue Updates"
           ?"Preserve real-customer/commercial truth; broker should validate source references and reject fabricated outcomes."
         : c.name==="Social Account Maintenance"
@@ -2320,15 +2320,28 @@ async function callInstagramPublisher(id){
   return j.target_result||{};
 }
 
+async function callApprovalBroker(operation,id,extra={}){
+  const {data:{session}}=await sb.auth.getSession();
+  if(!session)throw Error("Your session expired. Please sign in again.");
+  const payload={operation,post_id:id,...extra};
+  const r=await fetch(SUPABASE_URL+"/functions/v1/governed-execution-broker",{
+    method:"POST",
+    headers:{apikey:SUPABASE_KEY,Authorization:"Bearer "+session.access_token,"Content-Type":"application/json"},
+    body:JSON.stringify({capability:"approval",human_execute:true,payload})
+  });
+  const text=await r.text();let j={};try{j=JSON.parse(text)}catch{}
+  if(!r.ok||!j.success)throw Error(j.error||text||("Governed approval failed with HTTP "+r.status));
+  if(j.governance_decision!=="ALLOW_HUMAN_GOVERNED")throw Error("Approval broker did not grant the human-governed execution permit.");
+  return j;
+}
+
 async function approveInstagramAndPublish(id){
   if(publishingIds.has(id))return;publishingIds.add(id);await renderPosts();
   try{
-    const {error}=await sb.from("content_posts").update({status:"APPROVED",approved_at:new Date().toISOString(),publish_error:null}).eq("id",id);
-    if(error)throw Error("Approval failed: "+error.message);
-    await sb.from("approval_events").insert({post_id:id,action:"APPROVE",notes:"Approved for live Instagram publishing"});
+    await callApprovalBroker("approve",id,{notes:"Approved for live Instagram publishing"});
     await callInstagramPublisher(id);
-    alert("✅ Published successfully to Instagram.");
-  }catch(e){alert("Instagram publishing did not complete: "+(e?.message||String(e)));}
+    alert("✅ Approved through the Governance Broker and published successfully to Instagram.");
+  }catch(e){alert("Instagram approval/publishing did not complete: "+(e?.message||String(e)));}
   finally{publishingIds.delete(id);await renderPosts();}
 }
 
@@ -2366,13 +2379,12 @@ async function callFacebookPublisher(id){
 async function approveFacebook(id){
   if(publishingIds.has(id))return;publishingIds.add(id);await renderPosts();
   try{
-    const {error}=await sb.from("content_posts").update({status:"APPROVED",approved_at:new Date().toISOString(),publish_error:null}).eq("id",id);if(error)throw Error("Approval failed: "+error.message);
-    await sb.from("approval_events").insert({post_id:id,action:"APPROVE",notes:"Approved for live Facebook publishing"});
+    await callApprovalBroker("approve",id,{notes:"Approved for live Facebook publishing"});
     const j=await callFacebookPublisher(id);
     const mediaNote=j.image_confirmed?" Image confirmed.":"";
     const publicNote=j.public_verified?" Public Page-post state verified.":"";
-    alert("✅ Published successfully to the Premier Express Tourism Facebook Page through the Governed Execution Broker."+mediaNote+publicNote);
-  }catch(e){alert("Facebook publishing did not complete: "+(e?.message||String(e))+"\n\nThe post remains APPROVED. If authorization needs repair, open Social Account Operations → Publishing Operations → Facebook Diagnostic and reconnect Meta before retrying.");}
+    alert("✅ Approved through the Governance Broker and published to Facebook."+mediaNote+publicNote);
+  }catch(e){alert("Facebook approval/publishing did not complete: "+(e?.message||String(e))+"\n\nIf the post was approved but publishing failed, it remains APPROVED for retry.");}
   finally{publishingIds.delete(id);await renderPosts();}
 }
 
@@ -2390,13 +2402,20 @@ async function publishFacebook(id){
 async function approveInstagramDraft(id){
   if(publishingIds.has(id))return;publishingIds.add(id);await renderPosts();
   try{
-    const {error}=await sb.from("content_posts").update({status:"APPROVED",approved_at:new Date().toISOString()}).eq("id",id);if(error)throw error;
-    await sb.from("approval_events").insert({post_id:id,action:"APPROVE",notes:"Instagram text draft approved; media can be uploaded later"});
-    alert("✅ Instagram draft approved. It has not been published because no media is attached. You can upload media later and then publish it.");
-  }catch(e){alert("Instagram approval failed: "+e.message)}finally{publishingIds.delete(id);await renderPosts();}
+    await callApprovalBroker("approve",id,{notes:"Instagram text draft approved; media can be uploaded later"});
+    alert("✅ Instagram draft approved through the Governed Execution Broker. It has not been published because no media is attached.");
+  }catch(e){alert("Instagram approval failed: "+(e?.message||String(e)));}
+  finally{publishingIds.delete(id);await renderPosts();}
 }
 
-async function rejectPost(id){const reason=prompt("Reason (optional):")||"";const {error}=await sb.from("content_posts").update({status:"REJECTED",rejection_reason:reason}).eq("id",id);if(error){alert("Reject failed: "+error.message);return;}await sb.from("approval_events").insert({post_id:id,action:"REJECT",notes:reason});await renderPosts();}
+async function rejectPost(id){
+  const reason=prompt("Reason (optional):")||"";
+  try{
+    await callApprovalBroker("reject",id,{reason});
+    alert("Post rejected through the Governed Execution Broker.");
+    await renderPosts();
+  }catch(e){alert("Reject failed: "+(e?.message||String(e)));}
+}
 async function editPost(id){const {data,error}=await sb.from("content_posts").select("caption").eq("id",id).single();if(error){alert(error.message);return;}const value=prompt("Edit caption:",data.caption||"");if(value===null)return;if(!value.includes("+971 56 202 6553")){alert("The WhatsApp number +971 56 202 6553 must remain in every post.");return;}const {error:e}=await sb.from("content_posts").update({caption:value,status:"EDIT_REQUESTED"}).eq("id",id);if(e){alert(e.message);return;}await sb.from("approval_events").insert({post_id:id,action:"EDIT",notes:`${activePlatform} caption edited`});await renderPosts();}
 
 
