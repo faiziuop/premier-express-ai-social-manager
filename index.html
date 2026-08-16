@@ -693,7 +693,7 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
           <div class="lead-stat"><small>Evidence rule</small><b>5 posts + 3 metrics</b></div>
         </div>
         <div id="growthLearningBanner" class="campaign-flow">Growth learning has not been refreshed yet.</div>
-        <div id="growthLearningGrid" class="campaign-grid"></div>
+        <div id="growthLearningGrid" class="campaign-grid"></div><div class="campaign-flow" style="margin-top:14px"><div class="platform-head"><div><b>🎯 Engagement Improvement Intelligence</b><div style="margin-top:5px"><small>Diagnoses creative repetition and zero-response patterns. It does not edit, approve, schedule, boost or publish anything.</small></div></div><button class="secondary" id="engagementIntelBtn" onclick="loadEngagementIntel()">↻ Analyze Engagement</button></div></div><div class="lead-summary"><div class="lead-stat"><small>Recent published</small><b id="eiPublished">—</b></div><div class="lead-stat"><small>Zero response</small><b id="eiZero">—</b></div><div class="lead-stat"><small>Repeated openings</small><b id="eiFormula">—</b></div><div class="lead-stat"><small>Image-led posts</small><b id="eiImages">—</b></div></div><div id="engagementIntelBanner" class="campaign-flow">Engagement diagnosis has not been refreshed yet.</div><div id="engagementIntelGrid" class="campaign-grid"></div>
       </div>
 
 
@@ -3117,6 +3117,19 @@ function gpScore(p){
 }
 
 
+let engagementIntelData=null;
+async function loadEngagementIntel(){
+ const btn=$("engagementIntelBtn"),old=btn?.textContent||"↻ Analyze Engagement";if(btn){btn.disabled=true;btn.textContent="Analyzing…";}
+ try{const {data:{session}}=await sb.auth.getSession();if(!session)throw Error("Your session expired. Please sign in again.");
+ const r=await fetch(SUPABASE_URL+"/functions/v1/engagement-improvement-intelligence",{method:"POST",headers:{apikey:SUPABASE_KEY,Authorization:"Bearer "+session.access_token,"Content-Type":"application/json"},body:"{}"});
+ const raw=await r.text();let j={};try{j=JSON.parse(raw)}catch{}if(!r.ok||!j.success)throw Error(j.error||raw||("Engagement analysis failed with HTTP "+r.status));
+ engagementIntelData=j;const s=j.summary||{};$("eiPublished").textContent=s.published_posts??0;$("eiZero").textContent=s.zero_response_posts??0;$("eiFormula").textContent=s.formulaic_openings??0;$("eiImages").textContent=s.image_posts??0;
+ $("engagementIntelBanner").innerHTML="<b>Creative experiment mode</b> — Posting volume stays unchanged. Future autonomous drafts must pass the engagement-variety quality gate before they can enter the approval queue.";renderEngagementIntel();
+ }catch(e){$("engagementIntelBanner").textContent="Could not analyze engagement: "+(e?.message||String(e));$("engagementIntelGrid").innerHTML="";}finally{if(btn){btn.disabled=false;btn.textContent=old;}}
+}
+function renderEngagementIntel(){const grid=$("engagementIntelGrid");if(!engagementIntelData){grid.innerHTML='<div class="campaign-item">Run Analyze Engagement to inspect recent creative patterns.</div>';return;}
+ grid.innerHTML=(engagementIntelData.platforms||[]).map(p=>`<div class="campaign-item"><div class="platform-head"><h3 style="margin:0">${p.platform==="facebook"?"🔵 Facebook":"📸 Instagram"}</h3><span class="opp-tag">EXPERIMENT</span></div><p><b>7-day published:</b> ${esc(p.published_7d??0)} • <b>Zero response:</b> ${esc(p.zero_response_posts??0)}</p><p><b>Repeated planning/question openings:</b> ${esc(p.formulaic_openings??0)} • <b>Question hooks:</b> ${esc(p.question_hooks??0)} • <b>Long hooks:</b> ${esc(p.long_hooks??0)}</p><p><b>Images:</b> ${esc(p.image_posts??0)} • <b>Video/Reel:</b> ${esc(p.video_or_reel_posts??0)} • <b>No attached media:</b> ${esc(p.no_media_posts??0)}</p>${(p.findings||[]).length?`<div class="campaign-flow"><b>Observed patterns</b><ul>${p.findings.map(x=>`<li>${esc(x)}</li>`).join("")}</ul></div>`:""}<div class="campaign-flow"><b>Next creative tests</b><ol>${(p.actions||[]).map(x=>`<li>${esc(x)}</li>`).join("")}</ol></div><div class="campaign-flow"><b>Control:</b> These are experiments, not promises of engagement. Approval and Daily Growth Plan controls remain unchanged.</div></div>`).join("");
+}
 let growthLearningData=null;
 
 function growthDecisionLabel(v){
@@ -3684,6 +3697,7 @@ function switchMainTab(tab){
   if(social&&!socialAccountOpsLoaded){loadSocialAccountOperations();loadContentOperations();loadSchedulingOperations();loadPublishingOperations();loadInteractionAwareness();loadProfileMaintenance();loadAnomalyRepair();loadMultiAccountOrchestration();loadAccountGovernance();}
   if(growth&&growthCycleRows.length===0)buildGrowthCycle(false);
   if(growth&&!growthLearningData)loadGrowthLearning();
+  if(growth&&!engagementIntelData)loadEngagementIntel();
 }
 
 async function loadSocialAccountOperations(){
