@@ -3047,24 +3047,30 @@ async function buildGrowthCycle(){
     const platformTarget={facebook:5,instagram:5};
     const platformCount={facebook:0,instagram:0};
 
-    for(const p of rows.sort((a,b)=>gpScore(b)-gpScore(a))){
-      const platform=String(p.primary_platform||"").toLowerCase();
-      if(platformCount[platform]>=platformTarget[platform])continue;
-      const product=String(p.matched_product||"Unmapped");
-      const hook=String(p.hook||"").trim().toLowerCase();
-      if(hook&&usedHooks.has(hook))continue;
-      const productUsed=usedProducts.get(product)||0;
-      if(productUsed>=2)continue;
-      chosen.push(p);
-      platformCount[platform]++;
-      usedProducts.set(product,productUsed+1);
-      if(hook)usedHooks.add(hook);
+    // Prefer broad commercial coverage first: one product at a time before repeats.
+    const sorted=[...rows].sort((a,b)=>gpScore(b)-gpScore(a));
+    for(const maxPerProduct of [1,2]){
+      for(const p of sorted){
+        if(chosen.some(x=>x.id===p.id))continue;
+        const platform=String(p.primary_platform||"").toLowerCase();
+        if(platformCount[platform]>=platformTarget[platform])continue;
+        const product=String(p.matched_product||"Unmapped");
+        const hook=String(p.hook||"").trim().toLowerCase();
+        if(hook&&usedHooks.has(hook))continue;
+        const productUsed=usedProducts.get(product)||0;
+        if(productUsed>=maxPerProduct)continue;
+        chosen.push(p);
+        platformCount[platform]++;
+        usedProducts.set(product,productUsed+1);
+        if(hook)usedHooks.add(hook);
+        if(chosen.length>=10)break;
+      }
       if(chosen.length>=10)break;
     }
 
-    // Fill remaining slots if diversity constraints left gaps.
+    // Fill only if platform balance still leaves gaps.
     if(chosen.length<10){
-      for(const p of rows.sort((a,b)=>gpScore(b)-gpScore(a))){
+      for(const p of sorted){
         if(chosen.some(x=>x.id===p.id))continue;
         const platform=String(p.primary_platform||"").toLowerCase();
         if(platformCount[platform]>=platformTarget[platform])continue;
@@ -3073,21 +3079,41 @@ async function buildGrowthCycle(){
       }
     }
 
-    const fbTimes=[[1,11,30],[2,18,30],[4,12,0],[5,19,0],[7,13,0]];
-    const igTimes=[[1,19,30],[3,12,30],[4,20,0],[6,13,0],[7,20,0]];
-    let fi=0,ii=0;
-    growthCycleRows=chosen.map(p=>{
-      const platform=String(p.primary_platform).toLowerCase();
-      const t=platform==="facebook"?fbTimes[fi++]:igTimes[ii++];
-      return {...p,planned_at:gpDubaiDate(t[0],t[1],t[2])};
-    }).sort((a,b)=>new Date(a.planned_at)-new Date(b.planned_at));
+    // Spread posts across the week. Same product is never assigned twice within 48 hours.
+    const slots=[
+      ["facebook",1,11,30],["instagram",1,19,30],
+      ["facebook",2,18,30],
+      ["instagram",3,12,30],
+      ["facebook",4,12,0],["instagram",4,20,0],
+      ["facebook",5,19,0],
+      ["instagram",6,13,0],
+      ["facebook",7,13,0],["instagram",7,20,0]
+    ];
+
+    const remaining=[...chosen];
+    growthCycleRows=[];
+    for(const [platform,day,hour,minute] of slots){
+      const candidates=remaining.filter(p=>String(p.primary_platform).toLowerCase()===platform);
+      if(!candidates.length)continue;
+      const slotAt=gpDubaiDate(day,hour,minute);
+      let pick=candidates.find(p=>{
+        const product=String(p.matched_product||"Unmapped");
+        return !growthCycleRows.some(x=>
+          String(x.matched_product||"Unmapped")===product &&
+          Math.abs(new Date(slotAt)-new Date(x.planned_at)) < 48*60*60*1000
+        );
+      }) || candidates[0];
+      growthCycleRows.push({...pick,planned_at:slotAt});
+      remaining.splice(remaining.findIndex(x=>x.id===pick.id),1);
+    }
+    growthCycleRows.sort((a,b)=>new Date(a.planned_at)-new Date(b.planned_at));
 
     $("gpCount").textContent=growthCycleRows.length;
     $("gpFb").textContent=growthCycleRows.filter(x=>x.primary_platform==="facebook").length;
     $("gpIg").textContent=growthCycleRows.filter(x=>x.primary_platform==="instagram").length;
     $("gpProducts").textContent=new Set(growthCycleRows.map(x=>x.matched_product||"Unmapped")).size;
 
-    banner.innerHTML=`<b>🟢 GROWTH PLAN READY:</b> ${growthCycleRows.length} existing high-value draft(s) selected for a controlled 7-day cycle. No new draft generation was triggered.`;
+    banner.innerHTML=`<b>🟢 GROWTH PLAN READY:</b> ${growthCycleRows.length} existing draft(s) selected for a diversified 7-day growth cycle. No new draft generation was triggered.`;
 
     grid.innerHTML=growthCycleRows.length?growthCycleRows.map((p,i)=>`<div class="campaign-item">
       <div class="platform-head"><h3 style="margin:0">#${i+1} • ${p.primary_platform==="facebook"?"🔵":"📸"} ${esc(p.matched_product||"Unmapped")}</h3><span class="opp-tag">${esc(p.status)}</span></div>
@@ -3106,9 +3132,13 @@ async function buildGrowthCycle(){
 
 async function growthApproveAndSchedule(id,plannedAt){
   try{
-    await callApprovalBroker("approve",id,{notes:"Approved from 7-Day Growth Cycle"});
+    const row=growthCycleRows.find(x=>x.id===id);
+    if(!row)throw Error("Growth-plan post could not be resolved.");
+    if(!["APPROVED","READY_TO_PUBLISH"].includes(String(row.status||"").toUpperCase())){
+      await callApprovalBroker("approve",id,{notes:"Approved from 7-Day Growth Cycle"});
+    }
     await callSchedulingBroker("schedule",id,plannedAt);
-    alert("✅ Approved and scheduled through the governed growth cycle.");
+    alert("✅ Post scheduled through the governed growth cycle.");
     await buildGrowthCycle();
     if(typeof renderPosts==="function")await renderPosts();
   }catch(e){alert("Growth-cycle scheduling failed: "+(e?.message||String(e)));}
