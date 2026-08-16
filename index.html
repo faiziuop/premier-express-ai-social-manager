@@ -28,6 +28,34 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
 .account-op-item{border:1px solid #e5e7eb;border-radius:10px;padding:12px;background:#fafafa}
 .health-good{color:#087f5b;font-weight:700}.health-warn{color:#b45309;font-weight:700}.health-bad{color:#b42318;font-weight:700}
 @media(max-width:760px){.account-ops-roadmap{grid-template-columns:1fr}}
+
+/* ===== Organized Command Center v1 ===== */
+.main-nav-tabs{display:none!important}
+.org-nav{display:flex;gap:8px;flex-wrap:wrap;position:sticky;top:0;z-index:50;background:#f5f7fb;padding:10px 0;margin:10px 0 16px}
+.org-nav button{background:#fff;color:#172033;border:1px solid #d7dce5;border-radius:10px;padding:10px 14px;font-weight:700}
+.org-nav button.active{background:#111827;color:#fff;border-color:#111827}
+.org-panel{display:none}.org-panel.active{display:block}
+.org-hero{background:linear-gradient(135deg,#111827,#25324a);color:#fff;border-radius:16px;padding:18px;margin-bottom:14px}
+.org-hero h2{margin:0 0 6px}.org-hero p{margin:0;color:#e5e7eb}
+.org-kpis{display:grid;grid-template-columns:repeat(5,minmax(120px,1fr));gap:10px;margin:12px 0 16px}
+.org-kpi{background:#fff;border:1px solid #e3e7ee;border-radius:12px;padding:13px;box-shadow:0 2px 8px rgba(15,23,42,.04)}
+.org-kpi small{display:block;color:#667085;margin-bottom:5px}.org-kpi b{font-size:21px}
+.org-account-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
+.org-account-card,.org-action-card{background:#fff;border:1px solid #e3e7ee;border-radius:14px;padding:16px;box-shadow:0 3px 10px rgba(15,23,42,.04)}
+.org-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.org-actions button{padding:9px 12px}
+.org-section-title{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:18px 0 10px}
+.org-section-title h2,.org-section-title h3{margin:0}
+.org-status-good{color:#087f5b;font-weight:800}.org-status-warn{color:#b45309;font-weight:800}.org-status-bad{color:#b42318;font-weight:800}
+.org-post-list{display:grid;gap:8px}.org-post-row{border:1px solid #e5e7eb;border-radius:10px;padding:11px;background:#fafafa}
+.org-post-row .meta{font-size:12px;color:#667085;margin-top:5px}
+.org-empty{padding:18px;border:1px dashed #cfd6df;border-radius:12px;background:#fafafa;color:#667085}
+.org-subnav{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}.org-subnav button{background:#fff;color:#172033;border:1px solid #d7dce5}
+.org-tool-intro{background:#eef6ff;border:1px solid #cfe2ff;border-radius:12px;padding:13px;margin:10px 0 14px}
+.org-advanced-note{background:#fff8e6;border:1px solid #f2d58a;border-radius:12px;padding:12px;margin:12px 0}
+#agentMainPanel,#growthMainPanel,#socialOpsPanel,#whatsappMainPanel{display:none!important}
+@media(max-width:900px){.org-kpis{grid-template-columns:repeat(2,1fr)}.org-account-grid{grid-template-columns:1fr}}
+@media(max-width:520px){.org-kpis{grid-template-columns:1fr}.org-nav{position:static}.org-nav button{flex:1 1 45%}}
+
 </style>
 </head>
 <body>
@@ -46,7 +74,67 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
   <div id="app" style="display:none">
     <div class="card notice"><b>Live mode:</b> database changes are synchronized automatically. <span id="realtimeStatus" class="live">Connecting to live updates…</span></div>
 
-    <div class="main-nav-tabs">
+    
+<div id="organizedCommandCenter">
+  <div class="org-nav">
+    <button id="orgTabDashboard" class="active" onclick="orgSwitch('dashboard')">🏠 Main Dashboard</button>
+    <button id="orgTabFacebook" onclick="orgSwitch('facebook')">🔵 Facebook</button>
+    <button id="orgTabInstagram" onclick="orgSwitch('instagram')">📸 Instagram</button>
+    <button id="orgTabContent" onclick="orgSwitch('content')">✍️ Content & Growth</button>
+    <button id="orgTabSystem" onclick="orgSwitch('system')">⚙️ System</button>
+    <button id="orgTabWhatsapp" onclick="orgSwitch('whatsapp')">💬 WhatsApp</button>
+  </div>
+
+  <section id="orgPanelDashboard" class="org-panel active">
+    <div class="org-hero"><h2>Premier Express Social Command Center</h2><p>Daily actions first. Facebook and Instagram are separated; technical controls are moved to System.</p></div>
+    <div class="org-kpis">
+      <div class="org-kpi"><small>Pending approval</small><b id="orgPending">—</b></div>
+      <div class="org-kpi"><small>Scheduled</small><b id="orgScheduled">—</b></div>
+      <div class="org-kpi"><small>Published today</small><b id="orgPublishedToday">—</b></div>
+      <div class="org-kpi"><small>Open interactions</small><b id="orgOpenInteractions">—</b></div>
+      <div class="org-kpi"><small>High-priority leads</small><b id="orgHighInteractions">—</b></div>
+    </div>
+    <div class="org-section-title"><h2>Accounts</h2><button class="secondary" onclick="loadMainDashboard()">↻ Refresh</button></div>
+    <div id="orgAccountOverview" class="org-account-grid"></div>
+    <div class="org-section-title"><h2>Quick Actions</h2></div>
+    <div class="org-account-grid">
+      <div class="org-action-card"><b>✍️ Content workflow</b><p>Research, review drafts, approve, and build the Daily Growth Plan.</p><div class="org-actions"><button class="primary" onclick="orgSwitch('content')">Open Content & Growth</button></div></div>
+      <div class="org-action-card"><b>💬 Customer interactions</b><p>Sync Facebook/Instagram comments, identify buying intent, and prepare draft replies.</p><div class="org-actions"><button onclick="orgSwitch('facebook')">Facebook</button><button onclick="orgSwitch('instagram')">Instagram</button></div></div>
+    </div>
+  </section>
+
+  <section id="orgPanelFacebook" class="org-panel">
+    <div class="org-hero"><h2>🔵 Facebook Command Center</h2><p>Connection, posts, schedule, publishing health, comments and suggested replies in one place.</p></div>
+    <div id="orgFacebookCenter"></div>
+  </section>
+
+  <section id="orgPanelInstagram" class="org-panel">
+    <div class="org-hero"><h2>📸 Instagram Command Center</h2><p>Connection, posts, schedule, publishing health, comments and suggested replies in one place.</p></div>
+    <div id="orgInstagramCenter"></div>
+  </section>
+
+  <section id="orgPanelContent" class="org-panel">
+    <div class="org-hero"><h2>✍️ Content & Growth</h2><p>Only the content actions you use regularly: research, approval, content intelligence, campaigns, Daily Growth Plan and learning.</p></div>
+    <div class="org-tool-intro"><b>Recommended daily flow:</b> Research → Review/Approve → Generate media if needed → Daily Growth Plan → Schedule → Monitor performance.</div>
+    <div id="orgGrowthTools"></div>
+    <div id="orgContentTools"></div>
+  </section>
+
+  <section id="orgPanelSystem" class="org-panel">
+    <div class="org-hero"><h2>⚙️ System & Advanced Operations</h2><p>Governance, brokers, readiness, diagnostics and shared account infrastructure. These are kept away from the daily workflow.</p></div>
+    <div class="org-advanced-note"><b>Advanced area:</b> You normally do not need these controls for daily posting. Existing safety and governance rules remain active.</div>
+    <div id="orgSystemSocialTools"></div>
+    <div id="orgSystemTools"></div>
+  </section>
+
+  <section id="orgPanelWhatsapp" class="org-panel">
+    <div class="org-hero"><h2>💬 WhatsApp — Manual Contact Mode</h2><p>Your current WhatsApp number remains a customer CTA. Paid WhatsApp Business API automation is intentionally not enabled.</p></div>
+    <div class="org-tool-intro"><b>Current mode:</b> Posts can invite customers to WhatsApp, but this dashboard will not send automated WhatsApp messages or require paid WhatsApp API services.</div>
+    <div id="orgWhatsappTools"></div>
+  </section>
+</div>
+
+<div class="main-nav-tabs">
       <button class="main-nav-tab active" id="mainAgentTabBtn" onclick="switchMainTab('agent')">🧠 Agent Intelligence & Content</button>
       <button class="main-nav-tab" id="socialOpsTabBtn" onclick="switchMainTab('social-ops')">🌐 Social Account Operations</button>
       <button class="main-nav-tab" id="growthTabBtn" onclick="switchMainTab('growth')">🎯 Growth Operations</button>
@@ -3684,6 +3772,92 @@ function renderContentOperations(){
 }
 
 let socialAccountOpsLoaded=false;
+
+let orgLayoutReady=false;
+let orgPlatformCache={};
+
+function orgCardTitle(card){return String(card.querySelector('h2')?.textContent||'').replace(/\s+/g,' ').trim();}
+function orgFindCard(fragment){return [...document.querySelectorAll('.card')].find(c=>orgCardTitle(c).toLowerCase().includes(String(fragment).toLowerCase()));}
+function orgScrollCard(fragment){const c=orgFindCard(fragment);if(c)c.scrollIntoView({behavior:'smooth',block:'start'});}
+
+function organizeDashboardLayout(){
+  if(orgLayoutReady)return;orgLayoutReady=true;
+  const contentHost=$('orgContentTools'),systemHost=$('orgSystemTools'),growthHost=$('orgGrowthTools'),socialHost=$('orgSystemSocialTools'),waHost=$('orgWhatsappTools');
+  const contentNames=['Autonomous Agent Control Center','Opportunity Research Engine','Approval Queue Intelligence','Live Operations Dashboard','Customer Acquisition Intelligence','Lead Management Intelligence','Campaign Performance & Learning','Campaign Intelligence','Content Intelligence Memory','Facebook Content'];
+  [...document.querySelectorAll('#agentMainPanel > .card')].forEach(card=>{const t=orgCardTitle(card);(contentNames.some(n=>t.includes(n))?contentHost:systemHost).appendChild(card);});
+  [...document.querySelectorAll('#growthMainPanel > .card')].forEach(card=>growthHost.appendChild(card));
+  [...document.querySelectorAll('#socialOpsPanel > .card')].forEach(card=>socialHost.appendChild(card));
+  [...document.querySelectorAll('#whatsappMainPanel > .card')].forEach(card=>waHost.appendChild(card));
+}
+
+async function orgFn(name,body={}){
+  const {data:{session}}=await sb.auth.getSession();if(!session)throw Error('Your session expired. Please sign in again.');
+  const r=await fetch(SUPABASE_URL+'/functions/v1/'+name,{method:'POST',headers:{apikey:SUPABASE_KEY,Authorization:'Bearer '+session.access_token,'Content-Type':'application/json'},body:JSON.stringify(body)});
+  const raw=await r.text();let j={};try{j=JSON.parse(raw)}catch{}if(!r.ok||j.success===false)throw Error(j.error||raw||(name+' failed'));return j;
+}
+
+function orgSwitch(tab){
+  organizeDashboardLayout();
+  ['dashboard','facebook','instagram','content','system','whatsapp'].forEach(x=>{
+    $('orgPanel'+x.charAt(0).toUpperCase()+x.slice(1))?.classList.toggle('active',x===tab);
+    $('orgTab'+x.charAt(0).toUpperCase()+x.slice(1))?.classList.toggle('active',x===tab);
+  });
+  if(tab==='dashboard')loadMainDashboard();
+  if(tab==='facebook')loadPlatformCenter('facebook');
+  if(tab==='instagram')loadPlatformCenter('instagram');
+  if(tab==='content'){if(growthCycleRows.length===0)buildGrowthCycle(false);if(!growthLearningData)loadGrowthLearning();if(!engagementIntelData)loadEngagementIntel();}
+  if(tab==='system'&&!socialAccountOpsLoaded){loadSocialAccountOperations();loadContentOperations();loadSchedulingOperations();loadPublishingOperations();loadInteractionAwareness();loadProfileMaintenance();loadAnomalyRepair();loadMultiAccountOrchestration();loadAccountGovernance();}
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+async function loadMainDashboard(){
+  try{
+    const todayDubai=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Dubai',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+    const [postsQ,connQ,ia]=await Promise.all([
+      sb.from('content_posts').select('id,status,primary_platform,published_at,scheduled_at').is('deleted_at',null).in('primary_platform',['facebook','instagram']),
+      sb.from('social_connections').select('platform,account_name,connection_status,last_error').in('platform',['facebook','instagram']),
+      orgFn('social-interaction-awareness').catch(()=>({summary:{},accounts:[]}))
+    ]);
+    const posts=postsQ.data||[],conns=connQ.data||[],sum=ia.summary||{};
+    const isToday=x=>x&&new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Dubai',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(x))===todayDubai;
+    $('orgPending').textContent=posts.filter(x=>x.status==='PENDING_APPROVAL').length;
+    $('orgScheduled').textContent=posts.filter(x=>x.status==='SCHEDULED').length;
+    $('orgPublishedToday').textContent=posts.filter(x=>x.status==='PUBLISHED'&&isToday(x.published_at)).length;
+    $('orgOpenInteractions').textContent=sum.open_interactions??0;$('orgHighInteractions').textContent=sum.high_priority_open??0;
+    $('orgAccountOverview').innerHTML=['facebook','instagram'].map(platform=>{const c=conns.find(x=>x.platform===platform),pp=posts.filter(x=>x.primary_platform===platform),a=(ia.accounts||[]).find(x=>x.platform===platform);const ok=c?.connection_status==='connected';return `<div class="org-account-card"><div class="platform-head"><h3 style="margin:0">${platform==='facebook'?'🔵 Facebook':'📸 Instagram'}</h3><span class="${ok?'org-status-good':'org-status-bad'}">${esc(c?.connection_status||'unknown')}</span></div><p><b>${esc(c?.account_name||platform)}</b></p><p>Pending: <b>${pp.filter(x=>x.status==='PENDING_APPROVAL').length}</b> • Scheduled: <b>${pp.filter(x=>x.status==='SCHEDULED').length}</b> • Published today: <b>${pp.filter(x=>x.status==='PUBLISHED'&&isToday(x.published_at)).length}</b></p><p>Open interactions: <b>${esc(a?.open_interactions??0)}</b> • High priority: <b>${esc(a?.high_priority_open??0)}</b></p><div class="org-actions"><button class="primary" onclick="orgSwitch('${platform}')">Open ${platform==='facebook'?'Facebook':'Instagram'}</button></div></div>`}).join('');
+  }catch(e){$('orgAccountOverview').innerHTML=`<div class="org-empty">Dashboard refresh failed: ${esc(e?.message||String(e))}</div>`;}
+}
+
+async function orgDraftReplies(platform){
+  const target=$(platform==='facebook'?'orgFacebookReplies':'orgInstagramReplies');target.innerHTML='<div class="org-empty">Preparing suggested replies…</div>';
+  try{const j=await orgFn('interaction-response-drafter',{platform});const drafts=j.drafts||[];target.innerHTML=drafts.length?drafts.map(d=>`<div class="org-post-row"><b>${esc(d.recommended_action||'REVIEW')}</b>${d.human_review_required?' • <span class="org-status-warn">Human review required</span>':''}<p>${esc(d.suggested_reply||'')}</p><div class="meta">${esc(d.reason||'')} • Draft only — not sent</div></div>`).join(''):'<div class="org-empty">No open synced interactions need a draft reply right now.</div>';}catch(e){target.innerHTML=`<div class="org-empty">Could not prepare reply drafts: ${esc(e?.message||String(e))}</div>`;}
+}
+
+async function orgSyncComments(platform){
+  try{await syncLiveInteractions();await loadPlatformCenter(platform);}catch(e){}
+}
+
+async function loadPlatformCenter(platform){
+  const host=$(platform==='facebook'?'orgFacebookCenter':'orgInstagramCenter');host.innerHTML='<div class="org-empty">Loading account command center…</div>';
+  try{
+    const [postQ,connQ,pub,growth,ia]=await Promise.all([
+      sb.from('content_posts').select('id,post_number,status,matched_product,hook,media_type,media_url,scheduled_at,published_at,publish_error').eq('primary_platform',platform).is('deleted_at',null).order('created_at',{ascending:false}).limit(30),
+      sb.from('social_connections').select('platform,account_name,connection_status,last_error').eq('platform',platform).maybeSingle(),
+      orgFn('social-publishing-operations').catch(()=>({accounts:[]})),
+      orgFn('growth-learning-optimizer').catch(()=>({recommendations:[]})),
+      orgFn('social-interaction-awareness').catch(()=>({accounts:[],interactions:[]}))
+    ]);
+    const posts=postQ.data||[],c=connQ.data||{},pa=(pub.accounts||[]).find(x=>x.platform===platform)||{},gr=(growth.recommendations||[]).find(x=>x.platform===platform)||{},iaa=(ia.accounts||[]).find(x=>x.platform===platform)||{},ix=(ia.interactions||[]).filter(x=>x.platform===platform);const statusClass=c.connection_status==='connected'?'org-status-good':'org-status-bad';
+    const centerId=platform==='facebook'?'orgFacebookReplies':'orgInstagramReplies';
+    host.innerHTML=`<div class="org-kpis"><div class="org-kpi"><small>Connection</small><b class="${statusClass}">${esc(c.connection_status||'unknown')}</b></div><div class="org-kpi"><small>Scheduled</small><b>${posts.filter(x=>x.status==='SCHEDULED').length}</b></div><div class="org-kpi"><small>Published</small><b>${posts.filter(x=>x.status==='PUBLISHED').length}</b></div><div class="org-kpi"><small>Open interactions</small><b>${esc(iaa.open_interactions??0)}</b></div><div class="org-kpi"><small>Growth decision</small><b>${esc(gr.decision||'HOLD')}</b></div></div>
+    <div class="org-account-card"><div class="platform-head"><h3 style="margin:0">Account Health</h3><span class="${statusClass}">${esc(c.account_name||platform)}</span></div><p>Publishing health: <b>${esc(pa.health_status||'—')}</b> • Overdue: <b>${esc(pa.summary?.overdue??0)}</b> • Retrying: <b>${esc(pa.summary?.retrying??0)}</b> • Exhausted: <b>${esc(pa.summary?.retry_exhausted??0)}</b></p><p>Comments monitoring: <b>${iaa.comments_supported?'AVAILABLE':'NOT AVAILABLE'}</b> • Response authority: <b>${esc(iaa.response_authority||'BLOCKED')}</b></p><div class="org-actions"><button class="secondary" onclick="loadPlatformCenter('${platform}')">↻ Refresh</button><button onclick="orgSyncComments('${platform}')">↻ Sync Live Comments</button><button onclick="orgDraftReplies('${platform}')">✍️ Draft Suggested Replies</button><button onclick="orgSwitch('content')">Open Content & Growth</button></div></div>
+    <div class="org-section-title"><h3>Recent Posts & Schedule</h3></div><div class="org-post-list">${posts.slice(0,12).map(p=>`<div class="org-post-row"><b>#${esc(p.post_number??'—')} • ${esc(p.matched_product||'Unmapped')}</b> <span class="opp-tag">${esc(p.status)}</span><div>${esc(p.hook||'')}</div><div class="meta">${p.scheduled_at?'Scheduled: '+esc(new Date(p.scheduled_at).toLocaleString()):p.published_at?'Published: '+esc(new Date(p.published_at).toLocaleString()):'Not scheduled'} • ${p.media_url?'Media attached':'No media attached'}${p.publish_error?' • Error: '+esc(p.publish_error):''}</div></div>`).join('')||'<div class="org-empty">No posts found.</div>'}</div>
+    <div class="org-section-title"><h3>Customer Interactions</h3><span>${ix.length} synced</span></div><div class="org-post-list">${ix.slice(0,10).map(x=>`<div class="org-post-row"><b>${esc(x.priority||'NORMAL')} • ${esc(x.intent||'UNCLASSIFIED')}</b><p>${esc(x.message_text||'')}</p><div class="meta">${esc(x.sender_name||'Unknown')} • ${x.observed_at?esc(new Date(x.observed_at).toLocaleString()):'—'}${x.requires_human?' • HUMAN ATTENTION':''}</div></div>`).join('')||'<div class="org-empty">No comments or synced customer interactions yet.</div>'}</div>
+    <div class="org-section-title"><h3>Suggested Replies</h3><small>Draft only — never sent automatically</small></div><div id="${centerId}" class="org-post-list"><div class="org-empty">Click “Draft Suggested Replies” when an interaction appears.</div></div>`;
+    orgPlatformCache[platform]={posts,c,pa,gr,iaa,ix};
+  }catch(e){host.innerHTML=`<div class="org-empty">Could not load ${esc(platform)} command center: ${esc(e?.message||String(e))}</div>`;}
+}
+
 function switchMainTab(tab){
   const agent=tab==="agent",social=tab==="social-ops",growth=tab==="growth",whatsapp=tab==="whatsapp";
   $("agentMainPanel").classList.toggle("active",agent);
@@ -3747,7 +3921,7 @@ async function loadSocialAccountOperations(){
 
 async function loadSocialConnections(){const fb=$("facebookStatus"),ig=$("instagramStatus");const {data,error}=await sb.from("social_connections").select("platform,account_name,connection_status,last_error").in("platform",["facebook","instagram"]);if(error){fb.textContent=ig.textContent="Connection status unavailable";return;}const rows=data||[];for(const [platform,el] of [["facebook",fb],["instagram",ig]]){const r=rows.find(x=>x.platform===platform);if(r?.connection_status==="connected"){el.textContent="🟢 Connected"+(r.account_name?" — "+r.account_name:"");el.className="connected";}else if(r?.connection_status==="error"){el.textContent="🔴 Reconnect required"+(r.last_error?" — "+r.last_error:"");el.className="not-connected";}else{el.textContent="Not connected";el.className="not-connected";}}}
 async function subscribeRealtime(){if(realtimeChannel)await sb.removeChannel(realtimeChannel);realtimeChannel=sb.channel("premier-platform-tabs-live").on("postgres_changes",{event:"*",schema:"public",table:"content_posts"},()=>renderPosts()).on("postgres_changes",{event:"*",schema:"public",table:"social_connections"},()=>loadSocialConnections()).subscribe(status=>{$("realtimeStatus").textContent=status==="SUBSCRIBED"?"● Live updates connected":status==="CHANNEL_ERROR"?"Live connection error — retrying…":"Live status: "+status;});}
-async function enterApp(){if(appStarting)return;appStarting=true;try{$("authCard").style.display="none";$("app").style.display="block";$("toolbar").style.display="block";await renderPosts();await loadSocialConnections();await loadAgentControl();await loadIntelligenceBrief();await subscribeRealtime();}finally{appStarting=false;}}
+async function enterApp(){if(appStarting)return;appStarting=true;try{$("authCard").style.display="none";$("app").style.display="block";$("toolbar").style.display="block";organizeDashboardLayout();await renderPosts();await loadSocialConnections();await loadAgentControl();await loadIntelligenceBrief();await subscribeRealtime();orgSwitch("dashboard");}finally{appStarting=false;}}
 async function leaveApp(){if(realtimeChannel){await sb.removeChannel(realtimeChannel);realtimeChannel=null;}$("app").style.display="none";$("toolbar").style.display="none";$("authCard").style.display="block";}
 async function logout(){await sb.auth.signOut();await leaveApp();$("authMsg").textContent="Signed out.";}
 $("signinBtn").onclick=async()=>{const email=$("email").value.trim(),password=$("password").value;if(!email||!password){$("authMsg").textContent="Please enter your email and password.";return;}$("signinBtn").disabled=true;$("authMsg").textContent="Signing in…";const {error}=await sb.auth.signInWithPassword({email,password});$("signinBtn").disabled=false;$("authMsg").textContent=error?error.message:"Signed in.";};
