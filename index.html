@@ -3007,8 +3007,11 @@ async function loadAccountGovernance(){
 let growthCycleRows=[];
 
 function gpScore(p){
-  const relevance=Number(p.relevance_score||p.intelligence_score||p.score||0);
-  let score=relevance;
+  let score=0;
+  // Score only from fields that exist in the current content_posts schema.
+  if(p.matched_product)score+=20;
+  if(p.hook)score+=15;
+  if(p.caption)score+=15;
   if(p.campaign_id)score+=5;
   if(p.matched_product)score+=3;
   if(p.media_url)score+=2;
@@ -3032,7 +3035,7 @@ async function buildGrowthCycle(){
   const banner=$("growthPlanBanner"),grid=$("growthPlanGrid");
   try{
     const {data,error}=await sb.from("content_posts")
-      .select("id,post_number,primary_platform,status,hook,caption,matched_product,relevance_score,intelligence_score,campaign_id,media_url,media_type,created_at")
+      .select("id,post_number,primary_platform,status,hook,caption,matched_product,campaign_id,media_url,media_type,created_at")
       .in("status",["PENDING_APPROVAL","EDIT_REQUESTED","APPROVED","READY_TO_PUBLISH"])
       .is("deleted_at",null)
       .order("created_at",{ascending:false})
