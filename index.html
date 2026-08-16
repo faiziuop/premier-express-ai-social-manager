@@ -713,6 +713,7 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
           <button class="secondary" id="scheduleOpsBtn" onclick="loadSchedulingOperations()">↻ Refresh Scheduling</button>
         </div>
         <div id="scheduleOpsBanner" class="campaign-flow">Scheduling Operations has not been loaded yet.</div>
+        <div class="campaign-flow"><b>Governed scheduling:</b> Schedule creation and cancellation now pass through the Governed Execution Broker. At due time, the scheduled runner invokes the already broker-enforced publishing path automatically.</div>
         <div class="lead-summary">
           <div class="lead-stat"><small>Scheduled</small><b id="soScheduled">0</b></div>
           <div class="lead-stat"><small>Upcoming</small><b id="soUpcoming">0</b></div>
@@ -1249,7 +1250,7 @@ async function loadExecutionCoverage(){
       {name:"Draft Generation",key:"draft_generation",authority:get("draft generation","AGENT_ASSISTED"),broker:false,mutation:"INTERNAL"},
       {name:"Final Content Approval",key:"final_approval",authority:get("final content","HUMAN_REQUIRED"),broker:false,mutation:"STATE_CHANGE"},
       {name:"Publishing",key:"publishing",authority:get("publishing","HUMAN_REQUIRED"),broker:true,mutation:"PUBLIC_EXTERNAL"},
-      {name:"Scheduling",key:"scheduling",authority:get("scheduling","HUMAN_REQUIRED"),broker:false,mutation:"PUBLIC_FUTURE"},
+      {name:"Scheduling",key:"scheduling",authority:get("scheduling","HUMAN_REQUIRED"),broker:true,mutation:"PUBLIC_FUTURE"},
       {name:"Lead Attribution",key:"lead_attribution",authority:get("lead attribution","HUMAN_REQUIRED"),broker:false,mutation:"COMMERCIAL_TRUTH"},
       {name:"Booking & Revenue Updates",key:"booking_revenue",authority:get("booking","HUMAN_REQUIRED"),broker:false,mutation:"COMMERCIAL_TRUTH"},
       {name:"Shadow Learning",key:"shadow_learning",authority:get("shadow learning","ADVISORY_ONLY"),broker:false,mutation:"OBSERVATIONAL"},
@@ -1270,7 +1271,7 @@ async function loadExecutionCoverage(){
     $("covSafe").textContent=safe;
     $("covUnsafe").textContent=unsafe;
 
-    const next=["Publishing","Scheduling","Final Content Approval","Lead Attribution","Booking & Revenue Updates"];
+    const next=["Final Content Approval","Lead Attribution","Booking & Revenue Updates"];
     banner.innerHTML=`<b>${unsafe?"⛔ EXECUTION GAP":"🟢 CONTROLLED EXPANSION READY"}:</b> ${enforced}/${caps.length} capabilities currently have confirmed broker enforcement. Non-broker external/commercial capabilities remain human-gated or blocked, so no unsafe autonomy gap is exposed.<br><b>Next broker expansion:</b> ${next.join(" → ")}.`;
 
     grid.innerHTML=caps.map((c,i)=>{
@@ -2194,26 +2195,31 @@ function formatDubaiTime(iso){
   }catch{return iso;}
 }
 
+async function callSchedulingBroker(operation,id,scheduledAt=null){
+  const {data:{session}}=await sb.auth.getSession();
+  if(!session)throw Error("Your session expired. Please sign in again.");
+  const payload={operation,post_id:id};if(scheduledAt)payload.scheduled_at=scheduledAt;
+  const r=await fetch(SUPABASE_URL+"/functions/v1/governed-execution-broker",{
+    method:"POST",
+    headers:{apikey:SUPABASE_KEY,Authorization:"Bearer "+session.access_token,"Content-Type":"application/json"},
+    body:JSON.stringify({capability:"scheduling",human_execute:true,payload})
+  });
+  const text=await r.text();let j={};try{j=JSON.parse(text)}catch{}
+  if(!r.ok||!j.success)throw Error(j.error||text||("Governed scheduling failed with HTTP "+r.status));
+  if(j.governance_decision!=="ALLOW_HUMAN_GOVERNED")throw Error("Scheduling broker did not grant the human-governed execution permit.");
+  return j;
+}
+
 async function schedulePost(id){
-  const input=$("schedule-"+id);
-  const value=input?.value;
+  const input=$("schedule-"+id),value=input?.value;
   if(!value){alert("Choose the Dubai date and time first.");return;}
   const scheduled=new Date(value+":00+04:00");
   if(Number.isNaN(scheduled.getTime())){alert("Invalid schedule date/time.");return;}
   if(scheduled.getTime()<=Date.now()+60000){alert("Please choose a time at least 1 minute in the future.");return;}
   publishingIds.add(id);await renderPosts();
   try{
-    const {error}=await sb.from("content_posts").update({
-      status:"SCHEDULED",
-      scheduled_at:scheduled.toISOString(),
-      scheduled_timezone:"Asia/Dubai",
-      approved_at:new Date().toISOString(),
-      publish_error:null,
-      updated_at:new Date().toISOString()
-    }).eq("id",id);
-    if(error)throw Error(error.message);
-    await sb.from("approval_events").insert({post_id:id,action:"APPROVE",notes:"Scheduled for "+scheduled.toISOString()+" (Asia/Dubai)"});
-    alert("✅ Post scheduled for "+formatDubaiTime(scheduled.toISOString())+".");
+    await callSchedulingBroker("schedule",id,scheduled.toISOString());
+    alert("✅ Post scheduled through the Governed Execution Broker for "+formatDubaiTime(scheduled.toISOString())+".");
   }catch(e){alert("Scheduling failed: "+(e?.message||String(e)));}
   finally{publishingIds.delete(id);await renderPosts();}
 }
@@ -2221,14 +2227,8 @@ async function schedulePost(id){
 async function cancelSchedule(id){
   publishingIds.add(id);await renderPosts();
   try{
-    const {error}=await sb.from("content_posts").update({
-      status:"APPROVED",
-      scheduled_at:null,
-      publish_error:null,
-      updated_at:new Date().toISOString()
-    }).eq("id",id);
-    if(error)throw Error(error.message);
-    alert("Post returned to the Approval Queue.");
+    await callSchedulingBroker("cancel",id);
+    alert("✅ Schedule cancelled through the Governed Execution Broker. Post returned to the Approval Queue.");
   }catch(e){alert("Could not cancel schedule: "+(e?.message||String(e)));}
   finally{publishingIds.delete(id);await renderPosts();}
 }
