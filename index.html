@@ -824,17 +824,20 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
       <div class="card campaign-card">
         <div class="platform-head">
           <div>
-            <h2 style="margin:0">🚀 Publishing Operations</h2>
-            <p style="margin:6px 0 0">Account-level publish readiness, failure monitoring, retry eligibility, Meta-ID capture and rollback readiness. Read-only during maintenance; no publish or retry is executed here.</p>
+            <h2 style="margin:0">🚀 Publishing Health & Recovery Intelligence</h2>
+            <p style="margin:6px 0 0">Live read-only health for scheduled publishing: overdue detection, retry-cycle visibility, exhausted failures, Meta connection problems, verified scheduled successes and Meta-ID capture.</p>
           </div>
           <button class="secondary" id="publishingOpsBtn" onclick="loadPublishingOperations()">↻ Refresh Publishing</button>
         </div>
         <div id="publishingOpsBanner" class="campaign-flow">Publishing Operations has not been loaded yet.</div>
         <div class="lead-summary">
-          <div class="lead-stat"><small>Ready to publish</small><b id="poReady">0</b></div>
+          <div class="lead-stat"><small>System health</small><b id="poSystemHealth">—</b></div>
+          <div class="lead-stat"><small>Scheduled</small><b id="poScheduled">0</b></div>
+          <div class="lead-stat"><small>Overdue</small><b id="poOverdue">0</b></div>
+          <div class="lead-stat"><small>Retrying</small><b id="poRetrying">0</b></div>
+          <div class="lead-stat"><small>Exhausted</small><b id="poExhausted">0</b></div>
+          <div class="lead-stat"><small>Scheduled success</small><b id="poScheduledSuccess">0</b></div>
           <div class="lead-stat"><small>Published</small><b id="poPublished">0</b></div>
-          <div class="lead-stat"><small>Failed</small><b id="poFailed">0</b></div>
-          <div class="lead-stat"><small>Retry eligible</small><b id="poRetry">0</b></div>
           <div class="lead-stat"><small>Missing Meta IDs</small><b id="poMissingMeta">0</b></div>
         </div>
         <div id="publishingGovernance" class="campaign-flow"></div>
@@ -897,8 +900,12 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
             <option value="instagram">Instagram</option>
           </select>
           <select id="poView" onchange="renderPublishingOperations()" style="padding:10px;border:1px solid #ccd1d9;border-radius:8px">
-            <option value="summary">Account summary</option>
-            <option value="retry">Retry candidates</option>
+            <option value="summary">Account health summary</option>
+            <option value="overdue">Overdue scheduled</option>
+            <option value="retrying">Active retry cycle</option>
+            <option value="exhausted">Retry exhausted</option>
+            <option value="retry">All retry candidates</option>
+            <option value="scheduled-success">Scheduled successes</option>
             <option value="published">Recent published</option>
           </select>
         </div>
@@ -3421,8 +3428,15 @@ async function loadPublishingOperations(){
     const text=await r.text();let j={};try{j=JSON.parse(text)}catch{}
     if(!r.ok||!j.success)throw Error(j.error||text||("Publishing Operations failed with HTTP "+r.status));
     socialPublishingOperationsData=j;const s=j.summary||{},g=j.governance||{};
-    $("poReady").textContent=s.ready_to_publish??0;$("poPublished").textContent=s.published??0;$("poFailed").textContent=s.failed??0;$("poRetry").textContent=s.retry_eligible??0;$("poMissingMeta").textContent=s.missing_meta_id??0;
-    $("publishingOpsBanner").innerHTML=`<b>Authority: ${esc(j.authority||"READ_ONLY_PUBLISHING_OPERATIONS")}</b> — ${esc(j.guardrail||"")}`;
+    $("poSystemHealth").textContent=j.system_health||"—";
+    $("poScheduled").textContent=s.scheduled??0;
+    $("poOverdue").textContent=s.overdue??0;
+    $("poRetrying").textContent=s.retrying??0;
+    $("poExhausted").textContent=s.retry_exhausted??0;
+    $("poScheduledSuccess").textContent=s.successful_scheduled??0;
+    $("poPublished").textContent=s.published??0;
+    $("poMissingMeta").textContent=s.missing_meta_id??0;
+    $("publishingOpsBanner").innerHTML=`<b>System health: ${esc(j.system_health||"—")}</b> • <b>Authority: ${esc(j.authority||"READ_ONLY_PUBLISHING_HEALTH")}</b><br>${esc(j.guardrail||"")}${j.checked_at?`<br><b>Checked:</b> ${esc(new Date(j.checked_at).toLocaleString())}`:""}`;
     $("publishingGovernance").innerHTML=`<b>Governance:</b> authority ${esc(g.authority_mode||"—")} • human approval ${g.requires_human_approval?"YES":"NO"} • kill switch ${g.kill_switch?"ON":"OFF"} • emergency stop ${g.global_emergency_stop?"ON":"OFF"} • max attempts ${esc(g.max_publish_attempts??"—")} • max posts/hour ${esc(g.max_posts_per_hour??"—")}`;
     renderPublishingOperations();
   }catch(e){$("publishingOpsBanner").textContent="Publishing Operations failed: "+(e?.message||String(e));}
@@ -3433,22 +3447,65 @@ function renderPublishingOperations(){
   const platform=$("poPlatform")?.value||"facebook",view=$("poView")?.value||"summary";
   const a=(socialPublishingOperationsData.accounts||[]).find(x=>x.platform===platform);
   if(!a){$("publishingAccountGrid").innerHTML='<div class="campaign-item">No publishing account found.</div>';return;}
+
+  const rowCard=(x,label)=>`<div class="campaign-item">
+    <div class="platform-head"><h3 style="margin:0">Post ${esc(x.post_number??"—")} • ${esc(x.product||"Unmapped")}</h3><span class="opp-tag">${esc(label||x.status||"—")}</span></div>
+    <p>${esc(x.hook||"")}</p>
+    ${x.scheduled_at?`<p><b>Scheduled:</b> ${esc(new Date(x.scheduled_at).toLocaleString())}</p>`:""}
+    ${x.published_at?`<p><b>Published:</b> ${esc(new Date(x.published_at).toLocaleString())}</p>`:""}
+    <p><b>Attempts:</b> ${esc(x.attempts??0)}${x.remaining_attempts!==undefined?` • <b>Remaining:</b> ${esc(x.remaining_attempts)}`:""}${x.last_attempt?` • <b>Last attempt:</b> ${esc(new Date(x.last_attempt).toLocaleString())}`:""}</p>
+    ${x.external_post_id?`<p><b>Meta ID:</b> ${esc(x.external_post_id)}</p>`:""}
+    ${x.publish_error?`<div class="campaign-flow"><b>Publish error:</b> ${esc(x.publish_error)}</div>`:""}
+  </div>`;
+
+  if(view==="overdue"){
+    const rows=a.overdue_posts||[];
+    $("publishingAccountGrid").innerHTML=rows.length?rows.map(x=>rowCard(x,"OVERDUE")).join(""):'<div class="campaign-item"><b>✅ No scheduled post is overdue beyond the 2-minute health threshold.</b></div>';
+    return;
+  }
+  if(view==="retrying"){
+    const rows=a.retrying_posts||[];
+    $("publishingAccountGrid").innerHTML=rows.length?rows.map(x=>rowCard(x,"RETRYING")).join(""):'<div class="campaign-item"><b>No post is currently in an automatic retry cycle.</b></div>';
+    return;
+  }
+  if(view==="exhausted"){
+    const rows=a.exhausted_posts||[];
+    $("publishingAccountGrid").innerHTML=rows.length?rows.map(x=>rowCard(x,"RETRY EXHAUSTED")).join(""):'<div class="campaign-item"><b>✅ No post has exhausted the governed publish-attempt limit.</b></div>';
+    return;
+  }
   if(view==="retry"){
     const rows=a.retry_candidates||[];
-    $("publishingAccountGrid").innerHTML=rows.length?rows.map(x=>`<div class="campaign-item"><div class="platform-head"><h3 style="margin:0">Post ${esc(x.post_number??"—")} • ${esc(x.product||"Unmapped")}</h3><span class="opp-tag">${esc(x.remaining_attempts)} attempt(s) left</span></div><p>${esc(x.hook||"")}</p><p><b>Attempts:</b> ${esc(x.attempts)} • <b>Last attempt:</b> ${x.last_attempt?esc(new Date(x.last_attempt).toLocaleString()):"—"}</p><div class="campaign-flow"><b>Error:</b> ${esc(x.publish_error||"Unknown publish error")}</div><div class="campaign-score">Read-only: retry is not executed from this panel.</div></div>`).join(""):'<div class="campaign-item"><b>No retry-eligible publish failures.</b></div>';
+    $("publishingAccountGrid").innerHTML=rows.length?rows.map(x=>rowCard(x,`${x.remaining_attempts} ATTEMPT(S) LEFT`)).join(""):'<div class="campaign-item"><b>No retry-eligible publish failures.</b></div>';
+    return;
+  }
+  if(view==="scheduled-success"){
+    const rows=a.recent_scheduled_success||[];
+    $("publishingAccountGrid").innerHTML=rows.length?rows.map(x=>`<div class="campaign-item">
+      <div class="platform-head"><h3 style="margin:0">Post ${esc(x.post_number??"—")} • ${esc(x.product||"Unmapped")}</h3><span class="opp-tag">SCHEDULED SUCCESS</span></div>
+      <p><b>Scheduled:</b> ${x.scheduled_at?esc(new Date(x.scheduled_at).toLocaleString()):"—"}<br><b>Published:</b> ${x.published_at?esc(new Date(x.published_at).toLocaleString()):"—"}</p>
+      <p><b>Meta ID:</b> ${esc(x.external_post_id||"—")}${x.tracking_code?`<br><b>WhatsApp ref:</b> ${esc(x.tracking_code)}`:""}</p>
+    </div>`).join(""):'<div class="campaign-item"><b>No verified scheduled publication yet for this account.</b></div>';
     return;
   }
   if(view==="published"){
     const rows=a.recent_published||[];
-    $("publishingAccountGrid").innerHTML=rows.length?rows.map(x=>`<div class="campaign-item"><div class="platform-head"><h3 style="margin:0">Post ${esc(x.post_number??"—")} • ${esc(x.product||"Unmapped")}</h3><span class="opp-tag">${x.meta_id_saved?"META ID SAVED":"META ID MISSING"}</span></div><p><b>Published:</b> ${x.published_at?esc(new Date(x.published_at).toLocaleString()):"—"}</p>${x.tracking_code?`<p><b>WhatsApp ref:</b> ${esc(x.tracking_code)}</p>`:""}</div>`).join(""):'<div class="campaign-item"><b>No published posts on this account.</b></div>';
+    $("publishingAccountGrid").innerHTML=rows.length?rows.map(x=>`<div class="campaign-item">
+      <div class="platform-head"><h3 style="margin:0">Post ${esc(x.post_number??"—")} • ${esc(x.product||"Unmapped")}</h3><span class="opp-tag">${x.meta_id_saved?"META ID SAVED":"META ID MISSING"}</span></div>
+      <p><b>Published:</b> ${x.published_at?esc(new Date(x.published_at).toLocaleString()):"—"}${x.scheduled_execution?" • <b>Scheduled execution:</b> YES":""}</p>
+      ${x.external_post_id?`<p><b>Meta ID:</b> ${esc(x.external_post_id)}</p>`:""}
+      ${x.tracking_code?`<p><b>WhatsApp ref:</b> ${esc(x.tracking_code)}</p>`:""}
+    </div>`).join(""):'<div class="campaign-item"><b>No published posts on this account.</b></div>';
     return;
   }
+
   const s=a.summary||{},issues=a.issues||[],rb=a.rollback||{};
   $("publishingAccountGrid").innerHTML=`<div class="campaign-item">
     <div class="platform-head"><h3 style="margin:0">${platform==="facebook"?"🔵 Facebook":"📸 Instagram"}</h3><span class="opp-tag">${esc(a.health_status||"—")}</span></div>
-    <p><b>Connection:</b> ${esc(a.connection_status||"—")} • <b>Ready to publish:</b> ${esc(s.ready_to_publish??0)} • <b>Scheduled:</b> ${esc(s.scheduled??0)}</p>
-    <p><b>Published:</b> ${esc(s.published??0)} • <b>With Meta ID:</b> ${esc(s.published_with_meta_id??0)} • <b>Failed:</b> ${esc(s.failed??0)}</p>
-    <p><b>Retry eligible:</b> ${esc(s.retry_eligible??0)} • <b>Retry exhausted:</b> ${esc(s.retry_exhausted??0)} • <b>Approved with media:</b> ${esc(s.approved_with_media??0)} • <b>Approved text-only:</b> ${esc(s.approved_text_only??0)}</p>
+    <p><b>Connection:</b> ${esc(a.connection_status||"—")}${a.connection_error?` • <b>Connection error:</b> ${esc(a.connection_error)}`:""}</p>
+    <p><b>Scheduled:</b> ${esc(s.scheduled??0)} • <b>Overdue:</b> ${esc(s.overdue??0)} • <b>Retrying:</b> ${esc(s.retrying??0)} • <b>Exhausted:</b> ${esc(s.retry_exhausted??0)}</p>
+    <p><b>Scheduled successes:</b> ${esc(s.successful_scheduled??0)} • <b>Published:</b> ${esc(s.published??0)} • <b>With Meta ID:</b> ${esc(s.published_with_meta_id??0)}</p>
+    <p><b>Ready to publish:</b> ${esc(s.ready_to_publish??0)} • <b>Retry eligible:</b> ${esc(s.retry_eligible??0)} • <b>Failed/history:</b> ${esc(s.failed??0)}</p>
+    <div class="campaign-flow"><b>Recovery policy:</b> automatic scheduled retry remains controlled by the Governed Execution Broker and its max-attempt limit. This panel never triggers a retry itself.</div>
     <div class="campaign-flow"><b>Rollback:</b> ${esc(rb.status||"NOT_IMPLEMENTED")} — ${esc(rb.reason||"")}</div>
     ${issues.length?`<div class="campaign-flow"><b>Attention:</b><ol>${issues.map(x=>`<li>${esc(x)}</li>`).join("")}</ol></div>`:"<div class='campaign-flow'><b>Health:</b> no publishing issue detected by the current monitor.</div>"}
   </div>`;
