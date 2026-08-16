@@ -644,21 +644,32 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
 <div class="card campaign-card">
         <div class="platform-head">
           <div>
-            <h2 style="margin:0">🎯 Growth Operations — 7-Day Growth Cycle</h2>
-            <p style="margin:6px 0 0">Uses the existing draft inventory to build a balanced short-term publishing plan focused on reach, enquiry potential and product diversity. It does not generate extra drafts while supply is already high.</p>
+            <h2 style="margin:0">🎯 Growth Operations — Daily Growth Plan</h2>
+            <p style="margin:6px 0 0">Builds the next day's publishing plan from existing inventory. Choose 1–5 posts per platform; the recommended starting level is 3 Facebook + 3 Instagram posts daily, with weekly performance review before increasing volume.</p>
           </div>
-          <button class="secondary" id="growthPlanBtn" onclick="buildGrowthCycle()">↻ Build 7-Day Growth Plan</button>
+          <button class="secondary" id="growthPlanBtn" onclick="buildGrowthCycle()">↻ Build Daily Growth Plan</button>
         </div>
-        <div id="growthPlanBanner" class="campaign-flow">Growth plan has not been built yet.</div>
+        <div class="campaign-flow">
+          <b>Daily volume:</b>
+          <label style="margin-left:10px">Facebook
+            <select id="gpFbTarget"><option>1</option><option>2</option><option selected>3</option><option>4</option><option>5</option></select>
+          </label>
+          <label style="margin-left:10px">Instagram
+            <select id="gpIgTarget"><option>1</option><option>2</option><option selected>3</option><option>4</option><option>5</option></select>
+          </label>
+          <small style="display:block;margin-top:6px">Start at 3 + 3 daily. Increase toward 5 + 5 only if the weekly report shows healthy reach/engagement and content quality remains strong.</small>
+        </div>
+        <div id="growthPlanBanner" class="campaign-flow">Daily growth plan has not been built yet.</div>
         <div class="lead-summary">
-          <div class="lead-stat"><small>Planned posts</small><b id="gpCount">0</b></div>
+          <div class="lead-stat"><small>Tomorrow's posts</small><b id="gpCount">0</b></div>
           <div class="lead-stat"><small>Facebook</small><b id="gpFb">0</b></div>
           <div class="lead-stat"><small>Instagram</small><b id="gpIg">0</b></div>
           <div class="lead-stat"><small>Products covered</small><b id="gpProducts">0</b></div>
           <div class="lead-stat"><small>Human approval</small><b>YES</b></div>
         </div>
-        <div class="campaign-flow"><b>Operating rule:</b> Use existing inventory first. Prefer high-intelligence drafts, rotate products/audiences, avoid back-to-back duplication and keep every live action inside the working approval → scheduling → publishing path.</div>
+        <div class="campaign-flow"><b>Operating rule:</b> Use existing inventory first. Rotate products/audiences, require media for Instagram, prefer media for Facebook, and keep every live action inside the working approval → scheduling → publishing path. Review performance weekly.</div>
         <div id="growthPlanGrid" class="campaign-grid"></div>
+        <div class="campaign-flow"><b>Weekly learning rule:</b> Every 7 days compare reach, engagement, interactions, attributed leads and bookings by platform, product and publishing time. The next week's daily volume should be increased, held or reduced from evidence—not from a fixed posting quota.</div>
       </div>
 
 
@@ -2293,7 +2304,11 @@ async function uploadMedia(id,platform){
 
     alert("✅ Media uploaded. Review it, then publish when ready.");
   }catch(e){alert(e?.message||String(e));}
-  finally{publishingIds.delete(id);await renderPosts();}
+  finally{
+    publishingIds.delete(id);
+    await renderPosts();
+    if($("growthMainPanel")?.classList.contains("active"))await buildGrowthCycle();
+  }
 }
 
 async function callInstagramPublisher(id){
@@ -3030,7 +3045,7 @@ function gpDubaiDate(daysAhead,hour,minute=0){
 }
 
 async function buildGrowthCycle(){
-  const btn=$("growthPlanBtn"),old=btn?.textContent||"↻ Build 7-Day Growth Plan";
+  const btn=$("growthPlanBtn"),old=btn?.textContent||"↻ Build Daily Growth Plan";
   if(btn){btn.disabled=true;btn.textContent="Planning…";}
   const banner=$("growthPlanBanner"),grid=$("growthPlanGrid");
   try{
@@ -3044,16 +3059,21 @@ async function buildGrowthCycle(){
 
     const rows=(data||[]).filter(p=>["facebook","instagram"].includes(String(p.primary_platform||"").toLowerCase()));
     const chosen=[],usedProducts=new Map(),usedHooks=new Set();
-    const platformTarget={facebook:5,instagram:5};
+    const fbTarget=Math.max(1,Math.min(5,Number($("gpFbTarget")?.value||3)));
+    const igTarget=Math.max(1,Math.min(5,Number($("gpIgTarget")?.value||3)));
+    const platformTarget={facebook:fbTarget,instagram:igTarget};
     const platformCount={facebook:0,instagram:0};
+    const totalTarget=fbTarget+igTarget;
 
-    // Prefer broad commercial coverage first: one product at a time before repeats.
+    // Prefer diverse products before allowing repeats.
     const sorted=[...rows].sort((a,b)=>gpScore(b)-gpScore(a));
-    for(const maxPerProduct of [1,2]){
+    for(const maxPerProduct of [1,2,3]){
       for(const p of sorted){
         if(chosen.some(x=>x.id===p.id))continue;
         const platform=String(p.primary_platform||"").toLowerCase();
         if(platformCount[platform]>=platformTarget[platform])continue;
+        // Instagram cannot be scheduled without media.
+        if(platform==="instagram"&&!p.media_url)continue;
         const product=String(p.matched_product||"Unmapped");
         const hook=String(p.hook||"").trim().toLowerCase();
         if(hook&&usedHooks.has(hook))continue;
@@ -3063,65 +3083,37 @@ async function buildGrowthCycle(){
         platformCount[platform]++;
         usedProducts.set(product,productUsed+1);
         if(hook)usedHooks.add(hook);
-        if(chosen.length>=10)break;
+        if(chosen.length>=totalTarget)break;
       }
-      if(chosen.length>=10)break;
+      if(chosen.length>=totalTarget)break;
     }
 
-    // Fill only if platform balance still leaves gaps.
-    if(chosen.length<10){
-      for(const p of sorted){
-        if(chosen.some(x=>x.id===p.id))continue;
-        const platform=String(p.primary_platform||"").toLowerCase();
-        if(platformCount[platform]>=platformTarget[platform])continue;
-        chosen.push(p);platformCount[platform]++;
-        if(chosen.length>=10)break;
-      }
-    }
-
-    // Spread posts across the week. Same product is never assigned twice within 48 hours.
-    const slots=[
-      ["facebook",1,11,30],["instagram",1,19,30],
-      ["facebook",2,18,30],
-      ["instagram",3,12,30],
-      ["facebook",4,12,0],["instagram",4,20,0],
-      ["facebook",5,19,0],
-      ["instagram",6,13,0],
-      ["facebook",7,13,0],["instagram",7,20,0]
-    ];
-
-    const remaining=[...chosen];
-    growthCycleRows=[];
-    for(const [platform,day,hour,minute] of slots){
-      const candidates=remaining.filter(p=>String(p.primary_platform).toLowerCase()===platform);
-      if(!candidates.length)continue;
-      const slotAt=gpDubaiDate(day,hour,minute);
-      let pick=candidates.find(p=>{
-        const product=String(p.matched_product||"Unmapped");
-        return !growthCycleRows.some(x=>
-          String(x.matched_product||"Unmapped")===product &&
-          Math.abs(new Date(slotAt)-new Date(x.planned_at)) < 48*60*60*1000
-        );
-      }) || candidates[0];
-      growthCycleRows.push({...pick,planned_at:slotAt});
-      remaining.splice(remaining.findIndex(x=>x.id===pick.id),1);
-    }
-    growthCycleRows.sort((a,b)=>new Date(a.planned_at)-new Date(b.planned_at));
+    // Tomorrow Dubai-time slots. Volume is deliberately distributed rather than burst-posted.
+    const fbHours=[[9,30],[11,45],[14,30],[17,30],[20,30]];
+    const igHours=[[10,30],[13,0],[16,0],[19,0],[21,30]];
+    let fi=0,ii=0;
+    growthCycleRows=chosen.map(p=>{
+      const platform=String(p.primary_platform).toLowerCase();
+      const tm=platform==="facebook"?fbHours[fi++]:igHours[ii++];
+      return {...p,planned_at:gpDubaiDate(1,tm[0],tm[1])};
+    }).sort((a,b)=>new Date(a.planned_at)-new Date(b.planned_at));
 
     $("gpCount").textContent=growthCycleRows.length;
     $("gpFb").textContent=growthCycleRows.filter(x=>x.primary_platform==="facebook").length;
     $("gpIg").textContent=growthCycleRows.filter(x=>x.primary_platform==="instagram").length;
     $("gpProducts").textContent=new Set(growthCycleRows.map(x=>x.matched_product||"Unmapped")).size;
 
-    banner.innerHTML=`<b>🟢 GROWTH PLAN READY:</b> ${growthCycleRows.length} existing draft(s) selected for a diversified 7-day growth cycle. No new draft generation was triggered.`;
+    banner.innerHTML=`<b>🟢 DAILY GROWTH PLAN READY:</b> ${growthCycleRows.length} eligible draft(s) selected for tomorrow (${platformCount.facebook} Facebook + ${platformCount.instagram} Instagram). No extra drafts were generated.`;
 
     grid.innerHTML=growthCycleRows.length?growthCycleRows.map((p,i)=>`<div class="campaign-item">
       <div class="platform-head"><h3 style="margin:0">#${i+1} • ${p.primary_platform==="facebook"?"🔵":"📸"} ${esc(p.matched_product||"Unmapped")}</h3><span class="opp-tag">${esc(p.status)}</span></div>
       <p><b>Post:</b> ${esc(p.post_number??"—")} • <b>Planned Dubai time:</b> ${esc(new Date(p.planned_at).toLocaleString("en-GB",{timeZone:"Asia/Dubai"}))}</p>
       <div class="campaign-flow"><b>Hook:</b> ${esc(p.hook||p.caption||"")}</div>
-      <div class="opp-meta"><span class="opp-tag">Score ${esc(gpScore(p))}</span>${p.campaign_id?'<span class="opp-tag">CAMPAIGN</span>':""}${p.media_url?'<span class="opp-tag">MEDIA READY</span>':""}</div>
+      <div class="opp-meta"><span class="opp-tag">Score ${esc(gpScore(p))}</span>${p.campaign_id?'<span class="opp-tag">CAMPAIGN</span>':""}${p.media_url?'<span class="opp-tag">MEDIA READY</span>':'<span class="opp-tag">MEDIA MISSING</span>'}</div>
+      ${p.media_url?`<div class="media-preview"><img src="${esc(p.media_url)}" alt="Growth plan media preview"></div>`:``}
+      ${p.status!=="PUBLISHED"?uploadControl(p.id,!!p.media_url,p.primary_platform):""}
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
-        <button class="primary" onclick="growthApproveAndSchedule('${esc(p.id)}','${esc(p.planned_at)}')">Approve & Schedule</button>
+        ${p.primary_platform==="instagram"&&!p.media_url?'<button class="primary" disabled>Upload media first</button>':`<button class="primary" onclick="growthApproveAndSchedule('${esc(p.id)}','${esc(p.planned_at)}')">Approve & Schedule</button>`}
       </div>
     </div>`).join(""):'<div class="campaign-item"><b>No eligible drafts available for a growth cycle.</b></div>';
   }catch(e){
