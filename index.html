@@ -647,18 +647,18 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
             <h2 style="margin:0">🎯 Growth Operations — Daily Growth Plan</h2>
             <p style="margin:6px 0 0">Builds the next day's publishing plan from existing inventory. Choose 1–5 posts per platform; the recommended starting level is 3 Facebook + 3 Instagram posts daily, with weekly performance review before increasing volume.</p>
           </div>
-          <button class="secondary" id="growthPlanBtn" onclick="buildGrowthCycle()">↻ Build Daily Growth Plan</button>
+          <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="secondary" id="growthPlanBtn" onclick="buildGrowthCycle()">↻ Refresh Daily Plan</button><button class="muted" onclick="resetGrowthPlan()">⟳ Generate New Selection</button></div>
         </div>
         <div class="campaign-flow">
           <b>Daily volume</b>
           <div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:10px;align-items:end">
             <label style="min-width:160px"><span style="display:block;font-size:12px;font-weight:700;margin-bottom:5px">Facebook posts/day</span>
-              <select id="gpFbTarget" onchange="buildGrowthCycle()" style="width:100%;padding:9px;border:1px solid #ccd1d9;border-radius:8px;background:#fff">
+              <select id="gpFbTarget" onchange="resetGrowthPlan()" style="width:100%;padding:9px;border:1px solid #ccd1d9;border-radius:8px;background:#fff">
                 <option value="1">1 post</option><option value="2">2 posts</option><option value="3" selected>3 posts</option><option value="4">4 posts</option><option value="5">5 posts</option>
               </select>
             </label>
             <label style="min-width:160px"><span style="display:block;font-size:12px;font-weight:700;margin-bottom:5px">Instagram posts/day</span>
-              <select id="gpIgTarget" onchange="buildGrowthCycle()" style="width:100%;padding:9px;border:1px solid #ccd1d9;border-radius:8px;background:#fff">
+              <select id="gpIgTarget" onchange="resetGrowthPlan()" style="width:100%;padding:9px;border:1px solid #ccd1d9;border-radius:8px;background:#fff">
                 <option value="1">1 post</option><option value="2">2 posts</option><option value="3" selected>3 posts</option><option value="4">4 posts</option><option value="5">5 posts</option>
               </select>
             </label>
@@ -3059,91 +3059,147 @@ function gpBuildSlots(platform,target){
   return slots;
 }
 
-async function buildGrowthCycle(){
+let growthPlanKey="";
+let growthPlanSelectionIds=[];
+
+function gpTodayKey(){
+  const p=gpDubaiParts();
+  return `${p.year}-${String(p.month).padStart(2,"0")}-${String(p.day).padStart(2,"0")}`;
+}
+function gpPlanStorageKey(fbTarget,igTarget){return `growth-plan:${gpTodayKey()}:${fbTarget}x${igTarget}`;}
+function gpLoadStoredPlan(fbTarget,igTarget){
+  try{
+    const key=gpPlanStorageKey(fbTarget,igTarget);
+    const raw=localStorage.getItem(key),ids=raw?JSON.parse(raw):[];
+    if(Array.isArray(ids)){growthPlanKey=key;growthPlanSelectionIds=ids.filter(Boolean);return growthPlanSelectionIds;}
+  }catch{}
+  return [];
+}
+function gpSaveStoredPlan(fbTarget,igTarget,ids){
+  growthPlanKey=gpPlanStorageKey(fbTarget,igTarget);
+  growthPlanSelectionIds=[...ids];
+  try{localStorage.setItem(growthPlanKey,JSON.stringify(growthPlanSelectionIds));}catch{}
+}
+function resetGrowthPlan(){
+  if(growthPlanKey){try{localStorage.removeItem(growthPlanKey)}catch{}}
+  growthPlanSelectionIds=[];growthCycleRows=[];
+  buildGrowthCycle(true);
+}
+
+async function buildGrowthCycle(forceNew=false){
   const btn=$("growthPlanBtn"),old=btn?.textContent||"↻ Build Daily Growth Plan";
   if(btn){btn.disabled=true;btn.textContent="Planning…";}
   const banner=$("growthPlanBanner"),grid=$("growthPlanGrid");
   try{
+    const fbTarget=Math.max(1,Math.min(5,Number($("gpFbTarget")?.value||3)));
+    const igTarget=Math.max(1,Math.min(5,Number($("gpIgTarget")?.value||3)));
+    const totalTarget=fbTarget+igTarget;
+
     const {data,error}=await sb.from("content_posts")
       .select("*")
-      .in("status",["PENDING_APPROVAL","EDIT_REQUESTED","APPROVED","READY_TO_PUBLISH"])
+      .in("status",["PENDING_APPROVAL","EDIT_REQUESTED","APPROVED","READY_TO_PUBLISH","SCHEDULED"])
       .is("deleted_at",null)
       .order("created_at",{ascending:false})
       .limit(300);
     if(error)throw error;
 
-    const rows=(data||[]).filter(p=>["facebook","instagram"].includes(String(p.primary_platform||"").toLowerCase()));
-    const chosen=[],usedProducts=new Map(),usedHooks=new Set();
-    const fbTarget=Math.max(1,Math.min(5,Number($("gpFbTarget")?.value||3)));
-    const igTarget=Math.max(1,Math.min(5,Number($("gpIgTarget")?.value||3)));
-    const platformTarget={facebook:fbTarget,instagram:igTarget};
-    const platformCount={facebook:0,instagram:0};
-    const totalTarget=fbTarget+igTarget;
-    const sorted=[...rows].sort((a,b)=>gpScore(b)-gpScore(a));
+    const all=(data||[]).filter(p=>["facebook","instagram"].includes(String(p.primary_platform||"").toLowerCase()));
+    let selectedIds=forceNew?[]:gpLoadStoredPlan(fbTarget,igTarget);
 
-    for(const maxPerProduct of [1,2,3,5]){
-      for(const p of sorted){
-        if(chosen.some(x=>x.id===p.id))continue;
-        const platform=String(p.primary_platform||"").toLowerCase();
-        if(!["facebook","instagram"].includes(platform))continue;
-        if(platformCount[platform]>=platformTarget[platform])continue;
-        const product=String(p.matched_product||"Unmapped");
-        const hook=String(p.hook||"").trim().toLowerCase();
-        if(hook&&usedHooks.has(hook))continue;
-        if((usedProducts.get(product)||0)>=maxPerProduct)continue;
-        chosen.push(p);platformCount[platform]++;usedProducts.set(product,(usedProducts.get(product)||0)+1);if(hook)usedHooks.add(hook);
+    // Keep only IDs that still exist and have not been published/deleted.
+    selectedIds=selectedIds.filter(id=>all.some(p=>p.id===id));
+
+    if(!selectedIds.length || forceNew){
+      const eligible=all.filter(p=>p.status!=="SCHEDULED");
+      const chosen=[],usedProducts=new Map(),usedHooks=new Set();
+      const platformCount={facebook:0,instagram:0};
+      const sorted=[...eligible].sort((a,b)=>gpScore(b)-gpScore(a));
+
+      for(const maxPerProduct of [1,2,3,5]){
+        for(const p of sorted){
+          if(chosen.some(x=>x.id===p.id))continue;
+          const platform=String(p.primary_platform||"").toLowerCase();
+          const target=platform==="facebook"?fbTarget:igTarget;
+          if(platformCount[platform]>=target)continue;
+          const product=String(p.matched_product||"Unmapped");
+          const hook=String(p.hook||"").trim().toLowerCase();
+          if(hook&&usedHooks.has(hook))continue;
+          if((usedProducts.get(product)||0)>=maxPerProduct)continue;
+          chosen.push(p);platformCount[platform]++;
+          usedProducts.set(product,(usedProducts.get(product)||0)+1);
+          if(hook)usedHooks.add(hook);
+          if(platformCount.facebook>=fbTarget&&platformCount.instagram>=igTarget)break;
+        }
         if(platformCount.facebook>=fbTarget&&platformCount.instagram>=igTarget)break;
       }
-      if(platformCount.facebook>=fbTarget&&platformCount.instagram>=igTarget)break;
-    }
-    for(const p of sorted){
-      if(platformCount.facebook>=fbTarget&&platformCount.instagram>=igTarget)break;
-      if(chosen.some(x=>x.id===p.id))continue;
-      const platform=String(p.primary_platform||"").toLowerCase();
-      if(!["facebook","instagram"].includes(platform)||platformCount[platform]>=platformTarget[platform])continue;
-      chosen.push(p);platformCount[platform]++;
+      // Fill to exact requested counts whenever enough inventory exists.
+      for(const p of sorted){
+        if(chosen.length>=totalTarget)break;
+        if(chosen.some(x=>x.id===p.id))continue;
+        const platform=String(p.primary_platform||"").toLowerCase();
+        const target=platform==="facebook"?fbTarget:igTarget;
+        if(platformCount[platform]>=target)continue;
+        chosen.push(p);platformCount[platform]++;
+      }
+      selectedIds=chosen.map(x=>x.id);
+      gpSaveStoredPlan(fbTarget,igTarget,selectedIds);
+    } else {
+      gpSaveStoredPlan(fbTarget,igTarget,selectedIds);
     }
 
-    const fbSlots=gpBuildSlots("facebook",platformCount.facebook),igSlots=gpBuildSlots("instagram",platformCount.instagram);
+    const selected=selectedIds.map(id=>all.find(p=>p.id===id)).filter(Boolean);
+    const fbRows=selected.filter(x=>x.primary_platform==="facebook");
+    const igRows=selected.filter(x=>x.primary_platform==="instagram");
+    const fbSlots=gpBuildSlots("facebook",fbRows.length),igSlots=gpBuildSlots("instagram",igRows.length);
     let fi=0,ii=0;
-    growthCycleRows=chosen.map(p=>({...p,planned_at:String(p.primary_platform).toLowerCase()==="facebook"?fbSlots[fi++]:igSlots[ii++]}))
-      .filter(x=>x.planned_at).sort((a,b)=>new Date(a.planned_at)-new Date(b.planned_at));
+
+    // Preserve actual scheduled_at once scheduled; otherwise use plan slot.
+    growthCycleRows=selected.map(p=>{
+      const planned=p.status==="SCHEDULED"&&p.scheduled_at
+        ?p.scheduled_at
+        :(p.primary_platform==="facebook"?fbSlots[fi++]:igSlots[ii++]);
+      return {...p,planned_at:planned};
+    }).filter(x=>x.planned_at).sort((a,b)=>new Date(a.planned_at)-new Date(b.planned_at));
 
     $("gpCount").textContent=growthCycleRows.length;
     $("gpFb").textContent=growthCycleRows.filter(x=>x.primary_platform==="facebook").length;
     $("gpIg").textContent=growthCycleRows.filter(x=>x.primary_platform==="instagram").length;
     $("gpProducts").textContent=new Set(growthCycleRows.map(x=>x.matched_product||"Unmapped")).size;
 
-    const requested=fbTarget+igTarget,shortfall=requested-growthCycleRows.length; banner.innerHTML=`<b>${shortfall>0?"⚠":"🟢"} DAILY GROWTH PLAN ${shortfall>0?"PARTIAL":"READY"}:</b> ${growthCycleRows.length}/${requested} requested post(s) selected (${platformCount.facebook} Facebook + ${platformCount.instagram} Instagram). Scheduling begins with the next available Dubai-time slot today; overflow moves to tomorrow. ${shortfall>0?"Not enough eligible inventory exists for the requested volume.":""}`;
+    const requested=fbTarget+igTarget,shortfall=requested-growthCycleRows.length;
+    const scheduled=growthCycleRows.filter(x=>x.status==="SCHEDULED").length;
+    banner.innerHTML=`<b>${shortfall>0?"⚠":"🟢"} DAILY GROWTH PLAN ${shortfall>0?"PARTIAL":"LOCKED"}:</b> ${growthCycleRows.length}/${requested} selected • ${scheduled} scheduled. The exact selected posts stay locked while you upload media, edit and schedule them. Scheduling starts from the next available Dubai-time slot today; overflow moves to tomorrow. ${shortfall>0?"Not enough eligible inventory exists for the requested volume.":""}`;
 
-    grid.innerHTML=growthCycleRows.length?growthCycleRows.map((p,i)=>`<div class="campaign-item">
-      <div class="platform-head"><h3 style="margin:0">#${i+1} • ${p.primary_platform==="facebook"?"🔵":"📸"} ${esc(p.matched_product||"Unmapped")}</h3><span class="opp-tag">${esc(p.status)}</span></div>
-      <p><b>Post:</b> ${esc(p.post_number??"—")} • <b>Planned Dubai time:</b> ${esc(new Date(p.planned_at).toLocaleString("en-GB",{timeZone:"Asia/Dubai"}))}</p>
-      <div class="campaign-flow"><b>Hook:</b> ${esc(p.hook||"—")}</div>
-      <div class="campaign-flow"><b>Full post:</b><div style="white-space:pre-wrap;margin-top:6px">${esc(p.caption||"No caption")}</div></div>
-      ${(p.cta||p.call_to_action)?`<div class="campaign-flow"><b>CTA:</b> ${esc(p.cta||p.call_to_action)}</div>`:""}
-      ${(p.visual_direction||p.visual_prompt||p.image_prompt)?`<div class="campaign-flow"><b>Visual direction:</b> ${esc(p.visual_direction||p.visual_prompt||p.image_prompt)}</div>`:""}
-      <div class="opp-meta">
-        ${(p.audience||p.target_audience)?`<span class="opp-tag">${esc(p.audience||p.target_audience)}</span>`:""}
-        ${(p.market||p.target_market)?`<span class="opp-tag">${esc(p.market||p.target_market)}</span>`:""}
-        ${(p.traveller_stage||p.traveler_stage||p.stage)?`<span class="opp-tag">${esc(p.traveller_stage||p.traveler_stage||p.stage)}</span>`:""}
-        ${(p.content_pillar||p.pillar)?`<span class="opp-tag">${esc(p.content_pillar||p.pillar)}</span>`:""}
-        ${p.campaign_id?'<span class="opp-tag">CAMPAIGN</span>':""}
-        ${p.media_url?'<span class="opp-tag">MEDIA READY</span>':'<span class="opp-tag">MEDIA MISSING</span>'}
-      </div>
-      ${p.media_url?`<div class="media-box"><b>Current media</b><div class="media-preview">${["video","reel"].includes(String(p.media_type||"").toLowerCase())?`<video controls preload="metadata" src="${esc(p.media_url)}"></video>`:`<img src="${esc(p.media_url)}" alt="Growth plan media preview">`}</div></div>`:""}
-      ${growthUploadControl(p.id,!!p.media_url,p.primary_platform)}
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
-        <button class="muted" onclick="growthEditPost('${esc(p.id)}')">✎ Edit Post</button>
-        ${p.primary_platform==="instagram"&&!p.media_url?'<button class="primary" disabled>Upload media first</button>':`<button class="primary" onclick="growthApproveAndSchedule('${esc(p.id)}','${esc(p.planned_at)}')">Approve & Schedule</button>`}
-      </div>
-    </div>`).join(""):'<div class="campaign-item"><b>No eligible drafts available for the requested daily plan.</b></div>';
+    grid.innerHTML=growthCycleRows.length?growthCycleRows.map((p,i)=>{
+      const scheduled=p.status==="SCHEDULED";
+      const mediaReady=!!p.media_url;
+      return `<div class="campaign-item">
+        <div class="platform-head"><h3 style="margin:0">#${i+1} • ${p.primary_platform==="facebook"?"🔵":"📸"} ${esc(p.matched_product||"Unmapped")}</h3><span class="opp-tag">${esc(p.status)}</span></div>
+        <p><b>Post:</b> ${esc(p.post_number??"—")} • <b>${scheduled?"Scheduled":"Planned"} Dubai time:</b> ${esc(new Date(p.planned_at).toLocaleString("en-GB",{timeZone:"Asia/Dubai"}))}</p>
+        <div class="campaign-flow"><b>Hook:</b> ${esc(p.hook||"—")}</div>
+        <div class="campaign-flow"><b>Full post:</b><div style="white-space:pre-wrap;margin-top:6px">${esc(p.caption||"No caption")}</div></div>
+        ${(p.cta||p.call_to_action)?`<div class="campaign-flow"><b>CTA:</b> ${esc(p.cta||p.call_to_action)}</div>`:""}
+        ${(p.visual_direction||p.visual_prompt||p.image_prompt)?`<div class="campaign-flow"><b>Visual direction:</b> ${esc(p.visual_direction||p.visual_prompt||p.image_prompt)}</div>`:""}
+        <div class="opp-meta">
+          ${p.campaign_id?'<span class="opp-tag">CAMPAIGN</span>':""}
+          ${mediaReady?'<span class="opp-tag">MEDIA READY</span>':'<span class="opp-tag">MEDIA MISSING</span>'}
+          ${scheduled?'<span class="opp-tag">LOCKED SCHEDULE</span>':""}
+        </div>
+        ${mediaReady?`<div class="media-box"><b>Current media</b><div class="media-preview">${["video","reel"].includes(String(p.media_type||"").toLowerCase())?`<video controls preload="metadata" src="${esc(p.media_url)}"></video>`:`<img src="${esc(p.media_url)}" alt="Growth plan media preview">`}</div></div>`:""}
+        ${scheduled?"":growthUploadControl(p.id,mediaReady,p.primary_platform)}
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+          ${scheduled
+            ?`<button class="muted" onclick="growthCancelSchedule('${esc(p.id)}')">↩ Cancel Schedule</button>`
+            :`<button class="muted" onclick="growthEditPost('${esc(p.id)}')">✎ Edit Post</button>
+             ${p.primary_platform==="instagram"&&!mediaReady?'<button class="primary" disabled>Upload media first</button>':`<button class="primary" onclick="growthApproveAndSchedule('${esc(p.id)}','${esc(p.planned_at)}')">Approve & Schedule</button>`}`}
+        </div>
+      </div>`;
+    }).join(""):'<div class="campaign-item"><b>No eligible drafts available for the requested daily plan.</b></div>';
   }catch(e){
     banner.textContent="Could not build growth plan: "+(e?.message||String(e));
     grid.innerHTML="";
   }finally{if(btn){btn.disabled=false;btn.textContent=old;}}
 }
-
 function growthUploadControl(id,replace,platform){
   const safe=esc(id),fb=platform==="facebook",accept=fb?"image/jpeg,image/png,image/webp":"image/jpeg,image/png,image/webp,video/mp4";
   return `<div class="media-upload"><b>${replace?"Replace media":"Upload media"}</b><br><small>${fb?"JPG/PNG/WebP image.":"JPG/PNG/WebP image or MP4 video."}</small><input id="growthMediaFile-${safe}" type="file" accept="${accept}"><button class="muted" onclick="uploadGrowthMedia('${safe}','${platform}')">⬆ Upload</button></div>`;
@@ -3158,26 +3214,36 @@ async function uploadGrowthMedia(id,platform){
     const {data:urlData}=sb.storage.from("social-media").getPublicUrl(path),publicUrl=urlData?.publicUrl;if(!publicUrl)throw Error("Could not create a public media URL.");
     const mediaType=platform==="facebook"?"image":(file.type==="video/mp4"?"reel":"image");
     const {error:dbErr}=await sb.from("content_posts").update({media_url:publicUrl,media_type:mediaType,media_generation_status:"MANUAL_UPLOAD",media_generation_error:null,publish_error:null,updated_at:new Date().toISOString()}).eq("id",id);if(dbErr)throw Error(dbErr.message);
-    alert("✅ Media uploaded to the Growth Plan post.");await buildGrowthCycle();
+    alert("✅ Media uploaded to the locked Growth Plan post.");await buildGrowthCycle(false);
   }catch(e){alert(e?.message||String(e));}
 }
 async function growthEditPost(id){
   const row=growthCycleRows.find(x=>x.id===id);if(!row){alert("Could not resolve this post.");return;}
   const value=prompt("Edit the full post caption:",row.caption||"");if(value===null)return;if(!value.trim()){alert("Caption cannot be empty.");return;}
-  try{const nextStatus=["APPROVED","READY_TO_PUBLISH"].includes(String(row.status).toUpperCase())?row.status:"EDIT_REQUESTED";const {error}=await sb.from("content_posts").update({caption:value.trim(),status:nextStatus,updated_at:new Date().toISOString()}).eq("id",id);if(error)throw error;alert("✅ Post edited. Review it again before scheduling.");await buildGrowthCycle();}catch(e){alert("Could not edit post: "+(e?.message||String(e)));}
+  try{const nextStatus=["APPROVED","READY_TO_PUBLISH"].includes(String(row.status).toUpperCase())?row.status:"EDIT_REQUESTED";const {error}=await sb.from("content_posts").update({caption:value.trim(),status:nextStatus,updated_at:new Date().toISOString()}).eq("id",id);if(error)throw error;alert("✅ Post edited. Review it again before scheduling.");await buildGrowthCycle(false);}catch(e){alert("Could not edit post: "+(e?.message||String(e)));}
 }
 async function growthApproveAndSchedule(id,plannedAt){
   try{
     const row=growthCycleRows.find(x=>x.id===id);
     if(!row)throw Error("Growth-plan post could not be resolved.");
+    if(row.primary_platform==="instagram"&&!row.media_url)throw Error("Instagram media is required before scheduling.");
     if(!["APPROVED","READY_TO_PUBLISH"].includes(String(row.status||"").toUpperCase())){
-      await callApprovalBroker("approve",id,{notes:"Approved from 7-Day Growth Cycle"});
+      await callApprovalBroker("approve",id,{notes:"Approved from Daily Growth Plan"});
     }
     await callSchedulingBroker("schedule",id,plannedAt);
-    alert("✅ Post scheduled through the governed growth cycle.");
-    await buildGrowthCycle();
+    alert("✅ Post approved and scheduled. It remains locked in today's Growth Plan.");
+    await buildGrowthCycle(false);
     if(typeof renderPosts==="function")await renderPosts();
-  }catch(e){alert("Growth-cycle scheduling failed: "+(e?.message||String(e)));}
+  }catch(e){alert("Growth-plan scheduling failed: "+(e?.message||String(e)));}
+}
+
+async function growthCancelSchedule(id){
+  try{
+    await callSchedulingBroker("cancel",id);
+    alert("✅ Schedule cancelled. The same post remains in today's Growth Plan.");
+    await buildGrowthCycle(false);
+    if(typeof renderPosts==="function")await renderPosts();
+  }catch(e){alert("Could not cancel schedule: "+(e?.message||String(e)));}
 }
 
 async function runFacebookPublishingDiagnostic(){
@@ -3371,7 +3437,7 @@ function switchMainTab(tab){
   $("socialOpsTabBtn").classList.toggle("active",social);
   $("growthTabBtn").classList.toggle("active",growth);
   if(social&&!socialAccountOpsLoaded){loadSocialAccountOperations();loadContentOperations();loadSchedulingOperations();loadPublishingOperations();loadInteractionAwareness();loadProfileMaintenance();loadAnomalyRepair();loadMultiAccountOrchestration();loadAccountGovernance();}
-  if(growth&&growthCycleRows.length===0)buildGrowthCycle();
+  if(growth&&growthCycleRows.length===0)buildGrowthCycle(false);
 }
 
 async function loadSocialAccountOperations(){
