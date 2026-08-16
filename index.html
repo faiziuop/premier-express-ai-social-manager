@@ -3102,12 +3102,31 @@ function gpDubaiIso(daysAhead,hour,minute=0){
   base.setUTCDate(base.getUTCDate()+daysAhead);
   return `${base.getUTCFullYear()}-${String(base.getUTCMonth()+1).padStart(2,"0")}-${String(base.getUTCDate()).padStart(2,"0")}T${String(hour).padStart(2,"0")}:${String(minute).padStart(2,"0")}:00+04:00`;
 }
-function gpBuildSlots(platform,target){
+function gpSlotConflicts(iso,occupied=[]){
+  const t=new Date(iso).getTime();
+  if(Number.isNaN(t))return true;
+  return occupied.some(x=>{
+    const ot=new Date(x).getTime();
+    return !Number.isNaN(ot)&&Math.abs(ot-t)<=60000;
+  });
+}
+function gpBuildSlots(platform,target,occupied=[]){
   const now=gpDubaiParts(),nowMin=now.hour*60+now.minute;
   const template=platform==="facebook"?[[9,30],[11,45],[14,30],[17,30],[20,30]]:[[10,30],[13,0],[16,0],[19,0],[21,30]];
-  const slots=[];
-  for(const [h,m] of template){ if(h*60+m>=nowMin+20) slots.push(gpDubaiIso(0,h,m)); if(slots.length>=target)return slots; }
-  for(const [h,m] of template){ slots.push(gpDubaiIso(1,h,m)); if(slots.length>=target)return slots; }
+  const slots=[],taken=[...occupied];
+
+  // Search today first, then future days. Never propose a slot that is
+  // already occupied within the broker's protected +/- 60 second window.
+  for(let daysAhead=0;daysAhead<8&&slots.length<target;daysAhead++){
+    for(const [h,m] of template){
+      if(daysAhead===0&&h*60+m<nowMin+20)continue;
+      const iso=gpDubaiIso(daysAhead,h,m);
+      if(gpSlotConflicts(iso,taken))continue;
+      slots.push(iso);
+      taken.push(iso);
+      if(slots.length>=target)return slots;
+    }
+  }
   return slots;
 }
 
@@ -3156,6 +3175,19 @@ async function buildGrowthCycle(forceNew=false){
     if(error)throw error;
 
     const all=(data||[]).filter(p=>["facebook","instagram"].includes(String(p.primary_platform||"").toLowerCase()));
+
+    // Load every active schedule separately so the Growth Plan never proposes
+    // a time already reserved by another post on the same platform/account.
+    const {data:scheduledInventory,error:scheduledInventoryError}=await sb.from("content_posts")
+      .select("id,primary_platform,scheduled_at,status,deleted_at")
+      .eq("status","SCHEDULED")
+      .is("deleted_at",null)
+      .not("scheduled_at","is",null)
+      .gte("scheduled_at",new Date(Date.now()-2*60*1000).toISOString())
+      .order("scheduled_at",{ascending:true})
+      .limit(500);
+    if(scheduledInventoryError)throw scheduledInventoryError;
+
     let selectedIds=forceNew?[]:gpLoadStoredPlan(fbTarget,igTarget);
 
     // Keep only IDs that still exist and have not been published/deleted.
@@ -3202,10 +3234,23 @@ async function buildGrowthCycle(forceNew=false){
     const selected=selectedIds.map(id=>all.find(p=>p.id===id)).filter(Boolean);
     const fbRows=selected.filter(x=>x.primary_platform==="facebook");
     const igRows=selected.filter(x=>x.primary_platform==="instagram");
-    const fbSlots=gpBuildSlots("facebook",fbRows.length),igSlots=gpBuildSlots("instagram",igRows.length);
+
+    const occupiedFacebook=(scheduledInventory||[])
+      .filter(x=>String(x.primary_platform||"").toLowerCase()==="facebook"&&x.scheduled_at)
+      .map(x=>x.scheduled_at);
+    const occupiedInstagram=(scheduledInventory||[])
+      .filter(x=>String(x.primary_platform||"").toLowerCase()==="instagram"&&x.scheduled_at)
+      .map(x=>x.scheduled_at);
+
+    const fbUnscheduled=fbRows.filter(x=>x.status!=="SCHEDULED").length;
+    const igUnscheduled=igRows.filter(x=>x.status!=="SCHEDULED").length;
+    const fbSlots=gpBuildSlots("facebook",fbUnscheduled,occupiedFacebook);
+    const igSlots=gpBuildSlots("instagram",igUnscheduled,occupiedInstagram);
     let fi=0,ii=0;
 
-    // Preserve actual scheduled_at once scheduled; otherwise use plan slot.
+    // Preserve actual scheduled_at once scheduled. Only unscheduled rows consume
+    // newly generated free slots, preventing a locked plan from reusing a slot
+    // that one of its own posts has already reserved.
     growthCycleRows=selected.map(p=>{
       const planned=p.status==="SCHEDULED"&&p.scheduled_at
         ?p.scheduled_at
