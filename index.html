@@ -950,6 +950,12 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
           <div class="website-kpi"><small>Pages</small><b id="wpPages">0</b></div>
           <div class="website-kpi"><small>Posts</small><b id="wpPosts">0</b></div>
           <div class="website-kpi"><small>Products</small><b id="wpProducts">0</b></div>
+          <div class="website-kpi"><small>Product categories</small><b id="wpProductCats">0</b></div>
+          <div class="website-kpi"><small>Product tags</small><b id="wpProductTags">0</b></div>
+          <div class="website-kpi"><small>Blog categories</small><b id="wpCats">0</b></div>
+          <div class="website-kpi"><small>Blog tags</small><b id="wpTags">0</b></div>
+          <div class="website-kpi"><small>Media</small><b id="wpMedia">0</b></div>
+          <div class="website-kpi"><small>Custom objects</small><b id="wpCustom">0</b></div>
           <div class="website-kpi"><small>Total inventory</small><b id="wpTotal">0</b></div>
         </div>
         <div class="website-grid">
@@ -957,6 +963,7 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
             <h3>🔍 Website Intelligence</h3>
             <p>The agent inventories WordPress pages, blog posts and available product endpoints, then stores a structured SEO inventory for page-level analysis.</p>
             <div id="wpInventoryErrors" class="command-help">No crawl run yet.</div>
+            <div id="wpDiscoveryDetails" class="command-help" style="margin-top:10px"></div>
           </div>
           <div class="website-card">
             <h3>🧠 SEO Automation Roadmap</h3>
@@ -4226,12 +4233,21 @@ async function crawlWordPressSite(){
     $("wpPages").textContent=c.page||0;
     $("wpPosts").textContent=c.post||0;
     $("wpProducts").textContent=c.product||0;
+    $("wpProductCats").textContent=c.product_category||0;
+    $("wpProductTags").textContent=c.product_tag||0;
+    $("wpCats").textContent=c.category||0;
+    $("wpTags").textContent=c.post_tag||0;
+    $("wpMedia").textContent=c.media||0;
+    const customCount=Object.entries(c).filter(([k])=>k.startsWith("custom:")||k.startsWith("taxonomy:")).reduce((a,[,v])=>a+Number(v||0),0);
+    $("wpCustom").textContent=customCount;
     $("wpTotal").textContent=j.total_inventory||0;
-    $("wpConnectionStatus").innerHTML="<b>Status:</b> CONNECTED ✅ • <b>Last crawl:</b> just now • <b>Authority:</b> READ ONLY • <b>Website writes:</b> DISABLED";
+    $("wpConnectionStatus").innerHTML=`<b>Status:</b> CONNECTED ✅ • <b>Last crawl:</b> just now • <b>Pagination:</b> ${j.complete_pagination?"COMPLETE":"UNKNOWN"} • <b>Authority:</b> READ ONLY • <b>Website writes:</b> DISABLED`;
     $("wpInventoryErrors").innerHTML=(j.errors||[]).length
-      ? `<b>Partial crawl notes:</b><br>${(j.errors||[]).map(x=>`${esc(x.type)}: ${esc(x.error||("HTTP "+x.status))}`).join("<br>")}`
+      ? `<b>Endpoint notes:</b><br>${(j.errors||[]).map(x=>`${esc(x.type)}: ${esc(x.error||("HTTP "+x.status))}`).join("<br>")}`
       : "Website inventory completed without reported API errors.";
-    alert(`✅ Website crawl complete. Pages: ${c.page||0}, Posts: ${c.post||0}, Products: ${c.product||0}.`);
+    const d=j.discovered||{};
+    $("wpDiscoveryDetails").innerHTML=`<b>Discovered post types:</b> ${esc((d.post_types||[]).join(", ")||"—")}<br><b>Discovered taxonomies:</b> ${esc((d.taxonomies||[]).join(", ")||"—")}<br><b>Crawler:</b> ${esc(j.crawl_version||"full pagination")}`;
+    alert(`✅ Full website crawl complete. Products: ${c.product||0}, Product categories: ${c.product_category||0}, Pages: ${c.page||0}, Total inventory: ${j.total_inventory||0}.`);
   }catch(e){
     $("wpConnectionStatus").textContent="Website crawl error: "+(e?.message||String(e));
     alert(e?.message||String(e));
