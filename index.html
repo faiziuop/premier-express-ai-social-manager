@@ -946,6 +946,7 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
           </div>
         </div>
         <div id="wpConnectionStatus" class="website-status"><b>Status:</b> Not tested yet • <b>Authority:</b> READ ONLY • <b>Website writes:</b> DISABLED</div>
+        <div id="wpCrawlProgress" class="command-help" style="margin:8px 0">Crawler idle.</div>
         <div class="website-kpis">
           <div class="website-kpi"><small>Pages</small><b id="wpPages">0</b></div>
           <div class="website-kpi"><small>Posts</small><b id="wpPosts">0</b></div>
@@ -4195,13 +4196,13 @@ async function loadManagementIntel(){
 
 
 
-async function websiteSeoCall(action){
+async function websiteSeoCall(action,payload={}){
   const {data:{session}}=await sb.auth.getSession();
   if(!session)throw Error("Your session expired. Please sign in again.");
-  const r=await fetch(SUPABASE_URL+"/functions/v1/website-seo-intelligence-v1",{
+  const r=await fetch(SUPABASE_URL+"/functions/v1/website-seo-intelligence-v2",{
     method:"POST",
     headers:{apikey:SUPABASE_KEY,Authorization:"Bearer "+session.access_token,"Content-Type":"application/json"},
-    body:JSON.stringify({action})
+    body:JSON.stringify({action,...payload})
   });
   const raw=await r.text();let j={};try{j=JSON.parse(raw)}catch{}
   if(!r.ok||!j.success)throw Error(j.error||raw||("Website SEO request failed with HTTP "+r.status));
@@ -4225,31 +4226,72 @@ async function testWordPressConnection(showAlert=true){
   }
 }
 async function crawlWordPressSite(){
+  const baseKinds=[
+    ["page","Pages"],["post","Posts"],["product","Products"],
+    ["product_category","Product categories"],["product_tag","Product tags"],
+    ["category","Blog categories"],["post_tag","Blog tags"],["media","Media"]
+  ];
+  const counts={},errors=[],discovered={post_types:[],taxonomies:[]};
   try{
-    $("wpConnectionStatus").innerHTML="<b>Status:</b> Crawling website… • <b>Authority:</b> READ ONLY";
-    const j=await websiteSeoCall("crawl");
-    if(!j.connected)throw Error(j.error||"WordPress is not connected.");
-    const c=j.inventory_counts||{};
-    $("wpPages").textContent=c.page||0;
-    $("wpPosts").textContent=c.post||0;
-    $("wpProducts").textContent=c.product||0;
-    $("wpProductCats").textContent=c.product_category||0;
-    $("wpProductTags").textContent=c.product_tag||0;
-    $("wpCats").textContent=c.category||0;
-    $("wpTags").textContent=c.post_tag||0;
-    $("wpMedia").textContent=c.media||0;
-    const customCount=Object.entries(c).filter(([k])=>k.startsWith("custom:")||k.startsWith("taxonomy:")).reduce((a,[,v])=>a+Number(v||0),0);
+    $("wpConnectionStatus").innerHTML="<b>Status:</b> CRAWLING… • <b>Authority:</b> READ ONLY";
+    $("wpCrawlProgress").textContent="Discovering WordPress content types…";
+    const d=await websiteSeoCall("discover");
+    discovered.post_types=d.post_types||[];
+    discovered.taxonomies=d.taxonomies||[];
+
+    const knownPost=new Set(["post","page","attachment","product"]);
+    const knownTax=new Set(["category","post_tag","product_cat","product_tag","nav_menu"]);
+    const extraPosts=(d.post_types||[]).filter(x=>!knownPost.has(x)).map(x=>["custom:"+x,"Custom "+x]);
+    const extraTax=(d.taxonomies||[]).filter(x=>!knownTax.has(x)).map(x=>["taxonomy:"+x,"Taxonomy "+x]);
+    const kinds=[...baseKinds,...extraPosts,...extraTax];
+
+    let completedKinds=0;
+    for(const [kind,label] of kinds){
+      let page=1,totalForKind=0,totalPages=1;
+      while(page<=totalPages){
+        $("wpCrawlProgress").textContent=`Crawling ${label} — page ${page}${totalPages>1?` of ${totalPages}`:""} • ${completedKinds}/${kinds.length} sections complete`;
+        const r=await websiteSeoCall("crawl_batch",{kind,page});
+        if(r.error){
+          errors.push({type:kind,status:r.status||0,error:r.error});
+          break;
+        }
+        totalForKind=Number(r.total||totalForKind||0);
+        totalPages=Math.max(1,Number(r.total_pages||1));
+        if(r.done)break;
+        page=Number(r.next_page||page+1);
+      }
+      counts[kind]=totalForKind;
+      completedKinds++;
+    }
+
+    const {count,totalError}=await (async()=>{
+      try{
+        const {count,error}=await sb.from("website_inventory").select("id",{count:"exact",head:true});
+        return {count:count||0,totalError:error};
+      }catch(e){return {count:0,totalError:e}}
+    })();
+
+    $("wpPages").textContent=counts.page||0;
+    $("wpPosts").textContent=counts.post||0;
+    $("wpProducts").textContent=counts.product||0;
+    $("wpProductCats").textContent=counts.product_category||0;
+    $("wpProductTags").textContent=counts.product_tag||0;
+    $("wpCats").textContent=counts.category||0;
+    $("wpTags").textContent=counts.post_tag||0;
+    $("wpMedia").textContent=counts.media||0;
+    const customCount=Object.entries(counts).filter(([k])=>k.startsWith("custom:")||k.startsWith("taxonomy:")).reduce((a,[,v])=>a+Number(v||0),0);
     $("wpCustom").textContent=customCount;
-    $("wpTotal").textContent=j.total_inventory||0;
-    $("wpConnectionStatus").innerHTML=`<b>Status:</b> CONNECTED ✅ • <b>Last crawl:</b> just now • <b>Pagination:</b> ${j.complete_pagination?"COMPLETE":"UNKNOWN"} • <b>Authority:</b> READ ONLY • <b>Website writes:</b> DISABLED`;
-    $("wpInventoryErrors").innerHTML=(j.errors||[]).length
-      ? `<b>Endpoint notes:</b><br>${(j.errors||[]).map(x=>`${esc(x.type)}: ${esc(x.error||("HTTP "+x.status))}`).join("<br>")}`
+    $("wpTotal").textContent=count||Object.values(counts).reduce((a,v)=>a+Number(v||0),0);
+    $("wpConnectionStatus").innerHTML="<b>Status:</b> CONNECTED ✅ • <b>Last crawl:</b> just now • <b>Architecture:</b> BATCHED/RESUMABLE • <b>Authority:</b> READ ONLY • <b>Website writes:</b> DISABLED";
+    $("wpCrawlProgress").textContent=`Full crawl finished: ${kinds.length-errors.length}/${kinds.length} sections completed without endpoint errors.`;
+    $("wpInventoryErrors").innerHTML=errors.length
+      ? `<b>Endpoint notes:</b><br>${errors.map(x=>`${esc(x.type)}: ${esc(x.error||("HTTP "+x.status))}`).join("<br>")}`
       : "Website inventory completed without reported API errors.";
-    const d=j.discovered||{};
-    $("wpDiscoveryDetails").innerHTML=`<b>Discovered post types:</b> ${esc((d.post_types||[]).join(", ")||"—")}<br><b>Discovered taxonomies:</b> ${esc((d.taxonomies||[]).join(", ")||"—")}<br><b>Crawler:</b> ${esc(j.crawl_version||"full pagination")}`;
-    alert(`✅ Full website crawl complete. Products: ${c.product||0}, Product categories: ${c.product_category||0}, Pages: ${c.page||0}, Total inventory: ${j.total_inventory||0}.`);
+    $("wpDiscoveryDetails").innerHTML=`<b>Discovered post types:</b> ${esc((discovered.post_types||[]).join(", ")||"—")}<br><b>Discovered taxonomies:</b> ${esc((discovered.taxonomies||[]).join(", ")||"—")}<br><b>Crawler:</b> v2 batched pagination, 50 records/request`;
+    alert(`✅ Full batched crawl complete. Products: ${counts.product||0}, Product categories: ${counts.product_category||0}, Pages: ${counts.page||0}, Total inventory: ${$("wpTotal").textContent}.`);
   }catch(e){
     $("wpConnectionStatus").textContent="Website crawl error: "+(e?.message||String(e));
+    $("wpCrawlProgress").textContent="Crawl stopped. You can retry; completed batches remain saved.";
     alert(e?.message||String(e));
   }
 }
