@@ -38,6 +38,15 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
 .queue-rank-note{margin:8px 0;padding:8px 10px;border-radius:8px;background:#f8fafc;border:1px solid #e2e8f0;font-size:12px}
 @media(max-width:800px){#queueOrganizer .command-grid{grid-template-columns:1fr!important}}
 
+
+.media-gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px;margin:10px 0}
+.media-asset{border:1px solid #e5e7eb;border-radius:9px;padding:6px;background:#fff;position:relative}
+.media-asset img,.media-asset video{width:100%;height:120px;object-fit:cover;border-radius:7px;background:#111}
+.media-asset small{display:block;margin-top:5px;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.media-choice-actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:8px}
+.media-choice-actions button{padding:8px 10px}
+.media-source-badge{display:inline-block;font-size:10px;font-weight:800;border-radius:999px;padding:3px 6px;background:#eef2ff;color:#3730a3;margin-left:5px}
+
 </style>
 </head>
 <body>
@@ -2277,6 +2286,13 @@ async function renderPosts(){
     if(queueRankingLoadedFor!==activePlatform&&queueRankingMap.size===0)setTimeout(()=>refreshQueueRanking(true),0);
   }
 
+  const mediaAssetMap=new Map();
+  const rowIds=rows.map(x=>x.id).filter(Boolean);
+  if(rowIds.length){
+    const {data:assetRows}=await sb.from("media_assets").select("id,post_id,asset_type,asset_role,public_url,status,sequence_index,metadata,created_at").in("post_id",rowIds).eq("status","READY").order("sequence_index",{ascending:true});
+    for(const a of assetRows||[]){const k=String(a.post_id);if(!mediaAssetMap.has(k))mediaAssetMap.set(k,[]);mediaAssetMap.get(k).push(a);}
+  }
+
   $("posts").innerHTML=rows.map(p=>{
     const busy=publishingIds.has(p.id);
     let actions="";
@@ -2322,22 +2338,25 @@ async function renderPosts(){
       actions = `<button class="muted" ${busy?"disabled":""} onclick="restorePost('${esc(p.id)}')">↩ Restore</button>`;
     }
 
+    const assets=mediaAssetMap.get(String(p.id))||[];
+    const galleryAssets=assets.filter(a=>a.public_url);
+    const gallery=galleryAssets.length?`<div class="media-gallery">${galleryAssets.map((a,i)=>{const isVideo=String(a.asset_type||"").toLowerCase().includes("video")||String(a.asset_type||"").toLowerCase().includes("reel");const preview=isVideo?`<video controls preload="metadata" src="${esc(a.public_url)}"></video>`:`<img src="${esc(a.public_url)}" alt="Media asset ${i+1}">`;const src=a.metadata?.source==="manual_upload"?"MANUAL":"AI";return `<div class="media-asset">${preview}<small>${esc(a.asset_role||a.asset_type||`Asset ${i+1}`)} <span class="media-source-badge">${src}</span></small><a href="${esc(a.public_url)}" target="_blank" rel="noopener">Open</a></div>`}).join("")}</div>`:"";
     let media="";
     if(activePlatform==="instagram"){
       if(p.media_url){
         const preview=["video","reel"].includes(String(p.media_type||"").toLowerCase())
           ? `<video controls preload="metadata" src="${esc(p.media_url)}"></video>`
-          : `<img src="${esc(p.media_url)}" alt="Instagram media preview">`;
-        media=`<div class="media-box"><b>Uploaded media:</b> ${esc(p.media_type||"image")}<div class="media-preview">${preview}</div><div class="media-actions"><a href="${esc(p.media_url)}" target="_blank" rel="noopener">Open full media</a></div>${p.status!=="PUBLISHED"?uploadControl(p.id,true,"instagram"):""}</div>`;
+          : `<img src="${esc(p.media_url)}" alt="Instagram primary media preview">`;
+        media=`<div class="media-box"><b>Primary media:</b> ${esc(p.media_type||"image")}${p.media_generation_status==="MANUAL_UPLOAD"?'<span class="media-source-badge">MANUAL</span>':'<span class="media-source-badge">AI / SYSTEM</span>'}<div class="media-preview">${preview}</div>${gallery}<div class="media-actions"><a href="${esc(p.media_url)}" target="_blank" rel="noopener">Open primary media</a></div>${p.status!=="PUBLISHED"?uploadControl(p.id,true,"instagram"):""}</div>`;
       }else{
-        media=`<div class="media-box"><b>Media:</b> Optional for draft • Required to publish on Instagram.${p.status!=="PUBLISHED"?uploadControl(p.id,false,"instagram"):""}</div>`;
+        media=`<div class="media-box"><b>Media:</b> AI media is created automatically for new grounded drafts when a supported provider is available. Media is required before Instagram publishing.${gallery}${p.status!=="PUBLISHED"?uploadControl(p.id,false,"instagram"):""}</div>`;
       }
     } else if(activePlatform==="facebook"){
       if(p.media_url){
-        const preview=`<img src="${esc(p.media_url)}" alt="Facebook image preview">`;
-        media=`<div class="media-box"><b>Facebook image:</b> Optional<div class="media-preview">${preview}</div><div class="media-actions"><a href="${esc(p.media_url)}" target="_blank" rel="noopener">Open full image</a></div>${p.status!=="PUBLISHED"?uploadControl(p.id,true,"facebook"):""}</div>`;
+        const preview=`<img src="${esc(p.media_url)}" alt="Facebook primary image preview">`;
+        media=`<div class="media-box"><b>Primary media:</b> ${esc(p.media_type||"image")}${p.media_generation_status==="MANUAL_UPLOAD"?'<span class="media-source-badge">MANUAL</span>':'<span class="media-source-badge">AI / SYSTEM</span>'}<div class="media-preview">${preview}</div>${gallery}<div class="media-actions"><a href="${esc(p.media_url)}" target="_blank" rel="noopener">Open primary media</a></div>${p.status!=="PUBLISHED"?uploadControl(p.id,true,"facebook"):""}</div>`;
       }else{
-        media=`<div class="media-box"><b>Facebook image:</b> Optional. Publish as text/link only, or upload a picture before approval.${p.status!=="PUBLISHED"?uploadControl(p.id,false,"facebook"):""}</div>`;
+        media=`<div class="media-box"><b>Facebook media:</b> AI media is created automatically for new grounded drafts when a supported provider is available.${gallery}${p.status!=="PUBLISHED"?uploadControl(p.id,false,"facebook"):""}</div>`;
       }
       const waState=p.whatsapp_tracking_url
         ? `<a href="${esc(p.whatsapp_tracking_url)}" target="_blank" rel="noopener">Open tracked WhatsApp link</a>${p.whatsapp_tracking_code?` • Ref: ${esc(p.whatsapp_tracking_code)}`:""}`
@@ -2436,8 +2455,8 @@ function uploadControl(id,replace,platform){
   const safe=esc(id);
   const fb=platform==="facebook";
   const accept=fb?"image/jpeg,image/png,image/webp":"image/jpeg,image/png,image/webp,video/mp4";
-  const help=fb?"Picture only (JPG/PNG/WebP). Optional — Facebook can still publish without media.":"Image (JPG/PNG/WebP) or MP4 video. Media is optional until you publish.";
-  return `<div class="media-upload"><b>${replace?"Replace media":"Upload media"}</b><br><small>${help}</small><input id="mediaFile-${safe}" type="file" accept="${accept}"><button class="muted" onclick="uploadMedia('${safe}','${platform}')">⬆ Upload</button></div>`;
+  const help=fb?"JPG/PNG/WebP. Manual primary media always overrides AI primary media.":"JPG/PNG/WebP or MP4. Replace the AI primary media, or add another asset and keep the AI media.";
+  return `<div class="media-upload"><b>${replace?"Your media choices":"Upload media"}</b><br><small>${help}</small><input id="mediaFile-${safe}" type="file" accept="${accept}"><div class="media-choice-actions"><button class="muted" onclick="uploadMedia('${safe}','${platform}','replace')">${replace?'↻ Replace primary':'⬆ Upload primary'}</button>${replace?`<button class="muted" onclick="uploadMedia('${safe}','${platform}','add')">＋ Add another media</button>`:""}</div></div>`;
 }
 
 async function generatePlatform(){
@@ -2463,49 +2482,25 @@ async function generatePlatform(){
   finally{btn.disabled=false;btn.textContent=original;}
 }
 
-async function uploadMedia(id,platform){
+async function uploadMedia(id,platform,mode="replace"){
   const input=$("mediaFile-"+id);
   const file=input?.files?.[0];
   if(!file){alert(platform==="facebook"?"Please choose a picture first.":"Please choose an image or MP4 video first.");return;}
-
-  const allowed=platform==="facebook"
-    ? ["image/jpeg","image/png","image/webp"]
-    : ["image/jpeg","image/png","image/webp","video/mp4"];
-  if(!allowed.includes(file.type)){
-    alert(platform==="facebook"?"Facebook optional media currently accepts JPG, PNG, or WebP pictures only.":"Please upload JPG, PNG, WebP, or MP4 only.");
-    return;
-  }
-  if(file.size>100*1024*1024){alert("Please keep the file under 100 MB for this test stage.");return;}
-
+  const allowed=platform==="facebook"?["image/jpeg","image/png","image/webp"]:["image/jpeg","image/png","image/webp","video/mp4"];
+  if(!allowed.includes(file.type)){alert(platform==="facebook"?"Facebook accepts JPG, PNG, or WebP pictures.":"Please upload JPG, PNG, WebP, or MP4 only.");return;}
+  if(file.size>100*1024*1024){alert("Please keep the file under 100 MB.");return;}
   publishingIds.add(id);await renderPosts();
   try{
-    const ext=(file.name.split(".").pop()|| (file.type==="video/mp4"?"mp4":"jpg")).toLowerCase().replace(/[^a-z0-9]/g,"");
-    const path=`manual/${id}/${Date.now()}.${ext}`;
-    const {error:upErr}=await sb.storage.from("social-media").upload(path,file,{contentType:file.type,upsert:false});
-    if(upErr)throw Error("Upload failed: "+upErr.message);
-
-    const {data:urlData}=sb.storage.from("social-media").getPublicUrl(path);
-    const publicUrl=urlData?.publicUrl;
-    if(!publicUrl)throw Error("Could not create a public media URL.");
-
-    const mediaType=platform==="facebook"?"image":(file.type==="video/mp4"?"reel":"image");
-    const {error:dbErr}=await sb.from("content_posts").update({
-      media_url:publicUrl,
-      media_type:mediaType,
-      media_generation_status:"MANUAL_UPLOAD",
-      media_generation_error:null,
-      publish_error:null,
-      updated_at:new Date().toISOString()
-    }).eq("id",id);
-    if(dbErr)throw Error("Media uploaded but post update failed: "+dbErr.message);
-
-    alert("✅ Media uploaded. Review it, then publish when ready.");
+    const ext=(file.name.split(".").pop()||(file.type==="video/mp4"?"mp4":"jpg")).toLowerCase().replace(/[^a-z0-9]/g,"");
+    const path=`manual/${id}/${Date.now()}-${mode}.${ext}`;
+    const {error:upErr}=await sb.storage.from("social-media").upload(path,file,{contentType:file.type,upsert:false});if(upErr)throw Error("Upload failed: "+upErr.message);
+    const {data:urlData}=sb.storage.from("social-media").getPublicUrl(path),publicUrl=urlData?.publicUrl;if(!publicUrl)throw Error("Could not create a public media URL.");
+    const {data:{session}}=await sb.auth.getSession();if(!session)throw Error("Your session expired. Please sign in again.");
+    const r=await fetch(SUPABASE_URL+"/functions/v1/manual-media-register",{method:"POST",headers:{apikey:SUPABASE_KEY,Authorization:"Bearer "+session.access_token,"Content-Type":"application/json"},body:JSON.stringify({post_id:id,public_url:publicUrl,storage_path:path,asset_type:file.type==="video/mp4"?"video":"image",mode})});
+    const raw=await r.text();let j={};try{j=JSON.parse(raw)}catch{}if(!r.ok||!j.success)throw Error(j.error||raw||"Could not register media");
+    alert(mode==="add"?"✅ Extra media added. Your current primary media was kept.":"✅ Primary media replaced. The agent will not overwrite your manual choice.");
   }catch(e){alert(e?.message||String(e));}
-  finally{
-    publishingIds.delete(id);
-    await renderPosts();
-    if($("growthMainPanel")?.classList.contains("active"))await buildGrowthCycle();
-  }
+  finally{publishingIds.delete(id);await renderPosts();if($("growthMainPanel")?.classList.contains("active"))await buildGrowthCycle();}
 }
 
 async function callInstagramPublisher(id){
@@ -3523,21 +3518,23 @@ async function buildGrowthCycle(forceNew=false){
 }
 function growthUploadControl(id,replace,platform){
   const safe=esc(id),fb=platform==="facebook",accept=fb?"image/jpeg,image/png,image/webp":"image/jpeg,image/png,image/webp,video/mp4";
-  return `<div class="media-upload"><b>${replace?"Replace media":"Upload media"}</b><br><small>${fb?"JPG/PNG/WebP image.":"JPG/PNG/WebP image or MP4 video."}</small><input id="growthMediaFile-${safe}" type="file" accept="${accept}"><button class="muted" onclick="uploadGrowthMedia('${safe}','${platform}')">⬆ Upload</button></div>`;
+  return `<div class="media-upload"><b>${replace?"Media choices":"Upload media"}</b><br><small>${fb?"JPG/PNG/WebP image.":"JPG/PNG/WebP image or MP4 video."}</small><input id="growthMediaFile-${safe}" type="file" accept="${accept}"><div class="media-choice-actions"><button class="muted" onclick="uploadGrowthMedia('${safe}','${platform}','replace')">${replace?'↻ Replace primary':'⬆ Upload primary'}</button>${replace?`<button class="muted" onclick="uploadGrowthMedia('${safe}','${platform}','add')">＋ Add another</button>`:""}</div></div>`;
 }
-async function uploadGrowthMedia(id,platform){
-  const input=$("growthMediaFile-"+id),file=input?.files?.[0]; if(!file){alert(platform==="facebook"?"Please choose a picture first.":"Please choose an image or MP4 video first.");return;}
-  const allowed=platform==="facebook"?["image/jpeg","image/png","image/webp"]:["image/jpeg","image/png","image/webp","video/mp4"]; if(!allowed.includes(file.type)){alert("Unsupported media type.");return;}
+async function uploadGrowthMedia(id,platform,mode="replace"){
+  const input=$("growthMediaFile-"+id),file=input?.files?.[0];if(!file){alert(platform==="facebook"?"Please choose a picture first.":"Please choose an image or MP4 video first.");return;}
+  const allowed=platform==="facebook"?["image/jpeg","image/png","image/webp"]:["image/jpeg","image/png","image/webp","video/mp4"];if(!allowed.includes(file.type)){alert("Unsupported media type.");return;}
   if(file.size>100*1024*1024){alert("Please keep the file under 100 MB.");return;}
   try{
-    const ext=(file.name.split(".").pop()||(file.type==="video/mp4"?"mp4":"jpg")).toLowerCase().replace(/[^a-z0-9]/g,""),path=`manual/${id}/${Date.now()}.${ext}`;
-    const {error:upErr}=await sb.storage.from("social-media").upload(path,file,{contentType:file.type,upsert:false}); if(upErr)throw Error("Upload failed: "+upErr.message);
+    const ext=(file.name.split(".").pop()||(file.type==="video/mp4"?"mp4":"jpg")).toLowerCase().replace(/[^a-z0-9]/g,""),path=`manual/${id}/${Date.now()}-${mode}.${ext}`;
+    const {error:upErr}=await sb.storage.from("social-media").upload(path,file,{contentType:file.type,upsert:false});if(upErr)throw Error("Upload failed: "+upErr.message);
     const {data:urlData}=sb.storage.from("social-media").getPublicUrl(path),publicUrl=urlData?.publicUrl;if(!publicUrl)throw Error("Could not create a public media URL.");
-    const mediaType=platform==="facebook"?"image":(file.type==="video/mp4"?"reel":"image");
-    const {error:dbErr}=await sb.from("content_posts").update({media_url:publicUrl,media_type:mediaType,media_generation_status:"MANUAL_UPLOAD",media_generation_error:null,publish_error:null,updated_at:new Date().toISOString()}).eq("id",id);if(dbErr)throw Error(dbErr.message);
-    alert("✅ Media uploaded to the locked Growth Plan post.");await buildGrowthCycle(false);
+    const {data:{session}}=await sb.auth.getSession();if(!session)throw Error("Your session expired. Please sign in again.");
+    const r=await fetch(SUPABASE_URL+"/functions/v1/manual-media-register",{method:"POST",headers:{apikey:SUPABASE_KEY,Authorization:"Bearer "+session.access_token,"Content-Type":"application/json"},body:JSON.stringify({post_id:id,public_url:publicUrl,storage_path:path,asset_type:file.type==="video/mp4"?"video":"image",mode})});
+    const raw=await r.text();let j={};try{j=JSON.parse(raw)}catch{}if(!r.ok||!j.success)throw Error(j.error||raw||"Could not register media");
+    alert(mode==="add"?"✅ Extra media added and primary media kept.":"✅ Primary media replaced on the locked Growth Plan post.");await buildGrowthCycle(false);if(typeof renderPosts==="function")await renderPosts();
   }catch(e){alert(e?.message||String(e));}
 }
+
 async function growthEditPost(id){
   const row=growthCycleRows.find(x=>x.id===id);if(!row){alert("Could not resolve this post.");return;}
   const value=prompt("Edit the full post caption:",row.caption||"");if(value===null)return;if(!value.trim()){alert("Caption cannot be empty.");return;}
