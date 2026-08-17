@@ -105,6 +105,15 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
 @media(max-width:900px){.linkedin-columns{grid-template-columns:1fr}}
 
 .gbp-hub{border-left:4px solid #4285f4}.gbp-status{background:#f8fbff;border:1px solid #bfdbfe;border-radius:10px;padding:12px;margin:10px 0}.gbp-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}.gbp-card{border:1px solid #dbeafe;border-radius:10px;padding:12px;background:#fff}.gbp-topic{font-size:11px;font-weight:800;border-radius:999px;padding:4px 7px;background:#e8f0fe;color:#174ea6}@media(max-width:900px){.gbp-grid{grid-template-columns:1fr}}
+
+.website-hub{border-left:4px solid #16a34a}
+.website-status{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:12px;margin:10px 0}
+.website-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.website-card{border:1px solid #dcfce7;border-radius:10px;padding:12px;background:#fff}
+.website-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:12px 0}
+.website-kpi{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:10px}
+.website-kpi small{display:block;color:#64748b}.website-kpi b{display:block;color:#15803d;font-size:18px;margin-top:4px}
+@media(max-width:900px){.website-grid{grid-template-columns:1fr}.website-kpis{grid-template-columns:1fr 1fr}}
 </style>
 </head>
 <body>
@@ -131,6 +140,7 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
       <button class="main-nav-tab" id="financeTabBtn" onclick="switchMainTab('finance')">💼 Business & Finance</button>
       <button class="main-nav-tab" id="linkedinTabBtn" onclick="switchMainTab('linkedin')">🔗 LinkedIn</button>
       <button class="main-nav-tab" id="gbpTabBtn" onclick="switchMainTab('gbp')">📍 Google Business</button>
+      <button class="main-nav-tab" id="websiteTabBtn" onclick="switchMainTab('website')">🌐 Website & SEO</button>
       <button class="main-nav-tab" id="whatsappTabBtn" onclick="switchMainTab('whatsapp')">💬 WhatsApp Operations</button>
     </div>
 
@@ -920,6 +930,45 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
       </div>
 
 
+    </div>
+
+
+    <div id="websiteMainPanel" class="main-tab-panel">
+      <div class="card website-hub">
+        <div class="platform-head">
+          <div>
+            <h2 style="margin:0">🌐 Website & SEO Intelligence</h2>
+            <p style="margin:6px 0 0">Dedicated workspace for WordPress connection, site inventory, SEO audits, Search Console intelligence, and later governed website optimization.</p>
+          </div>
+          <div class="interaction-actions">
+            <button class="muted" onclick="testWordPressConnection()">🔌 Test WordPress Connection</button>
+            <button class="primary" onclick="crawlWordPressSite()">↻ Crawl Website</button>
+          </div>
+        </div>
+        <div id="wpConnectionStatus" class="website-status"><b>Status:</b> Not tested yet • <b>Authority:</b> READ ONLY • <b>Website writes:</b> DISABLED</div>
+        <div class="website-kpis">
+          <div class="website-kpi"><small>Pages</small><b id="wpPages">0</b></div>
+          <div class="website-kpi"><small>Posts</small><b id="wpPosts">0</b></div>
+          <div class="website-kpi"><small>Products</small><b id="wpProducts">0</b></div>
+          <div class="website-kpi"><small>Total inventory</small><b id="wpTotal">0</b></div>
+        </div>
+        <div class="website-grid">
+          <div class="website-card">
+            <h3>🔍 Website Intelligence</h3>
+            <p>The agent inventories WordPress pages, blog posts and available product endpoints, then stores a structured SEO inventory for page-level analysis.</p>
+            <div id="wpInventoryErrors" class="command-help">No crawl run yet.</div>
+          </div>
+          <div class="website-card">
+            <h3>🧠 SEO Automation Roadmap</h3>
+            <p><b>1.</b> WordPress connection + inventory<br>
+            <b>2.</b> Titles/meta/H1/content/internal-link/schema audit<br>
+            <b>3.</b> Google Search Console query, impression and click intelligence<br>
+            <b>4.</b> Keyword/content-gap and internal-link planning<br>
+            <b>5.</b> Approval-based WordPress edits<br>
+            <b>6.</b> Evidence-based autonomous optimization</p>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div id="whatsappMainPanel" class="main-tab-panel">
@@ -4138,6 +4187,57 @@ async function loadManagementIntel(){
 
 
 
+
+async function websiteSeoCall(action){
+  const {data:{session}}=await sb.auth.getSession();
+  if(!session)throw Error("Your session expired. Please sign in again.");
+  const r=await fetch(SUPABASE_URL+"/functions/v1/website-seo-intelligence-v1",{
+    method:"POST",
+    headers:{apikey:SUPABASE_KEY,Authorization:"Bearer "+session.access_token,"Content-Type":"application/json"},
+    body:JSON.stringify({action})
+  });
+  const raw=await r.text();let j={};try{j=JSON.parse(raw)}catch{}
+  if(!r.ok||!j.success)throw Error(j.error||raw||("Website SEO request failed with HTTP "+r.status));
+  return j;
+}
+async function testWordPressConnection(showAlert=true){
+  try{
+    const j=await websiteSeoCall("status");
+    if(j.connected){
+      $("wpConnectionStatus").innerHTML=`<b>Status:</b> CONNECTED ✅ • <b>WordPress user:</b> ${esc(j.wordpress_user?.name||j.wordpress_user?.slug||"Authenticated")} • <b>Authority:</b> READ ONLY • <b>Website writes:</b> DISABLED`;
+      if(showAlert)alert("✅ WordPress connection successful. Read-only access is working.");
+    }else{
+      $("wpConnectionStatus").innerHTML=`<b>Status:</b> NOT CONNECTED ❌ • ${esc(j.error||"Authentication failed")} • <b>Website writes:</b> DISABLED`;
+      if(showAlert)alert("WordPress connection failed: "+(j.error||"Unknown error"));
+    }
+    return j;
+  }catch(e){
+    $("wpConnectionStatus").textContent="WordPress connection error: "+(e?.message||String(e));
+    if(showAlert)alert(e?.message||String(e));
+    return null;
+  }
+}
+async function crawlWordPressSite(){
+  try{
+    $("wpConnectionStatus").innerHTML="<b>Status:</b> Crawling website… • <b>Authority:</b> READ ONLY";
+    const j=await websiteSeoCall("crawl");
+    if(!j.connected)throw Error(j.error||"WordPress is not connected.");
+    const c=j.inventory_counts||{};
+    $("wpPages").textContent=c.page||0;
+    $("wpPosts").textContent=c.post||0;
+    $("wpProducts").textContent=c.product||0;
+    $("wpTotal").textContent=j.total_inventory||0;
+    $("wpConnectionStatus").innerHTML="<b>Status:</b> CONNECTED ✅ • <b>Last crawl:</b> just now • <b>Authority:</b> READ ONLY • <b>Website writes:</b> DISABLED";
+    $("wpInventoryErrors").innerHTML=(j.errors||[]).length
+      ? `<b>Partial crawl notes:</b><br>${(j.errors||[]).map(x=>`${esc(x.type)}: ${esc(x.error||("HTTP "+x.status))}`).join("<br>")}`
+      : "Website inventory completed without reported API errors.";
+    alert(`✅ Website crawl complete. Pages: ${c.page||0}, Posts: ${c.post||0}, Products: ${c.product||0}.`);
+  }catch(e){
+    $("wpConnectionStatus").textContent="Website crawl error: "+(e?.message||String(e));
+    alert(e?.message||String(e));
+  }
+}
+
 let linkedinOAuthStatus=null;
 async function checkLinkedInConnection(){
   try{
@@ -4292,7 +4392,7 @@ async function convertInteractionLead(id){
 
 
 function switchMainTab(tab){
-  const agent=tab==="agent",social=tab==="social-ops",growth=tab==="growth",interactions=tab==="interactions",finance=tab==="finance",linkedin=tab==="linkedin",gbp=tab==="gbp",whatsapp=tab==="whatsapp";
+  const agent=tab==="agent",social=tab==="social-ops",growth=tab==="growth",interactions=tab==="interactions",finance=tab==="finance",linkedin=tab==="linkedin",gbp=tab==="gbp",website=tab==="website",whatsapp=tab==="whatsapp";
   $("agentMainPanel").classList.toggle("active",agent);
   $("socialOpsPanel").classList.toggle("active",social);
   $("growthMainPanel").classList.toggle("active",growth);
@@ -4300,6 +4400,7 @@ function switchMainTab(tab){
   $("financeMainPanel").classList.toggle("active",finance);
   $("linkedinMainPanel").classList.toggle("active",linkedin);
   $("gbpMainPanel").classList.toggle("active",gbp);
+  $("websiteMainPanel").classList.toggle("active",website);
   $("whatsappMainPanel").classList.toggle("active",whatsapp);
   $("mainAgentTabBtn").classList.toggle("active",agent);
   $("socialOpsTabBtn").classList.toggle("active",social);
@@ -4308,6 +4409,7 @@ function switchMainTab(tab){
   $("financeTabBtn").classList.toggle("active",finance);
   $("linkedinTabBtn").classList.toggle("active",linkedin);
   $("gbpTabBtn").classList.toggle("active",gbp);
+  $("websiteTabBtn").classList.toggle("active",website);
   $("whatsappTabBtn").classList.toggle("active",whatsapp);
   if(social&&!socialAccountOpsLoaded){loadSocialAccountOperations();loadContentOperations();loadSchedulingOperations();loadPublishingOperations();loadInteractionAwareness();loadProfileMaintenance();loadAnomalyRepair();loadMultiAccountOrchestration();loadAccountGovernance();}
   if(growth&&growthCycleRows.length===0)buildGrowthCycle(false);
@@ -4317,6 +4419,7 @@ function switchMainTab(tab){
   if(finance){loadFinanceHub();loadManagementIntel();}
   if(linkedin){loadLinkedInDrafts();checkLinkedInConnection();}
   if(gbp)loadGbpDrafts();
+  if(website)testWordPressConnection(false);
 }
 
 async function loadSocialAccountOperations(){
