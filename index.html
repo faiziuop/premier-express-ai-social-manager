@@ -712,7 +712,7 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
           </div>
           <button class="primary" id="interactionRefreshBtn" onclick="loadInteractionInbox(true)">↻ Sync & Refresh</button>
         </div>
-        <div id="interactionBanner" class="campaign-flow"><b>Authority:</b> APPROVAL_ONLY_NOT_SENT — the agent may classify and draft, but it cannot send a reply automatically.</div>
+        <div id="interactionBanner" class="campaign-flow"><b>Authority:</b> APPROVAL_THEN_EXPLICIT_SEND — the agent may classify and draft, but it sends only after you approve and press Send.</div>
         <div class="interaction-summary">
           <div class="interaction-stat"><small>Total interactions</small><b id="ixTotal">0</b></div>
           <div class="interaction-stat"><small>Open</small><b id="ixOpen">0</b></div>
@@ -3884,7 +3884,7 @@ async function loadInteractionInbox(sync=false){
     $("ixComplaints").textContent=s.complaints??0;
     $("ixPending").textContent=s.pending_reply_approval??0;
     $("ixLeads").textContent=s.leads??0;
-    $("interactionBanner").innerHTML=`<b>Authority:</b> ${esc(j.reply_authority||"APPROVAL_ONLY_NOT_SENT")} — AI may classify and draft. Approved replies are still <b>not sent automatically</b>.`;
+    $("interactionBanner").innerHTML=`<b>Authority:</b> ${esc(j.reply_authority||"APPROVAL_ONLY_NOT_SENT")} — AI may classify and draft. A reply is sent only after your explicit approval and separate Send action.`;
     renderInteractionInbox();
   }catch(e){
     $("interactionBanner").textContent="Interaction inbox error: "+(e?.message||String(e));
@@ -3904,7 +3904,7 @@ function renderInteractionInbox(){
     const product=p.matched_product_name||p.matched_product||"—",when=x.observed_at?new Date(x.observed_at).toLocaleString():"—";
     const reply=d.suggested_reply||"";
     const approved=d.status==="APPROVED",ignored=d.status==="IGNORED",converted=!!x.converted_to_lead;
-    const replyBox=d?`<div class="reply-draft"><div><b>AI suggested reply</b> <span class="interaction-badge">${esc(d.status||"PENDING_APPROVAL")}</span></div><textarea id="reply-${esc(x.id)}">${esc(reply)}</textarea><small>${esc(d.reason||"")}</small><div class="interaction-actions"><button class="muted" onclick="saveInteractionReply('${esc(x.id)}')">💾 Save Edit</button><button class="primary" ${approved?"disabled":""} onclick="approveInteractionReply('${esc(x.id)}')">✅ ${approved?"Approved":"Approve Reply Draft"}</button><button class="muted" ${ignored?"disabled":""} onclick="ignoreInteraction('${esc(x.id)}')">Ignore</button><button class="muted" ${converted?"disabled":""} onclick="convertInteractionLead('${esc(x.id)}')">${converted?"✓ Lead Created":"＋ Convert to Lead"}</button></div><div class="command-help">Approval does not send the reply yet. Final Meta reply execution will be added as a separate governed step.</div></div>`:"<div class='reply-draft'><b>No reply draft yet.</b> Refresh the inbox to run interaction intelligence.</div>";
+    const replyBox=d?`<div class="reply-draft"><div><b>AI suggested reply</b> <span class="interaction-badge">${esc(d.status||"PENDING_APPROVAL")}</span></div><textarea id="reply-${esc(x.id)}">${esc(reply)}</textarea><small>${esc(d.reason||"")}</small><div class="interaction-actions"><button class="muted" onclick="saveInteractionReply('${esc(x.id)}')">💾 Save Edit</button><button class="primary" ${approved||d.send_status==="SENT"?"disabled":""} onclick="approveInteractionReply('${esc(x.id)}')">✅ ${approved||d.send_status==="SENT"?"Approved":"Approve Reply Draft"}</button>${approved&&d.send_status!=="SENT"?`<button class="primary" onclick="sendApprovedInteractionReply('${esc(x.id)}')">📤 Send Approved Reply</button>`:""}${d.send_status==="SENT"?`<button class="muted" disabled>✓ Reply Sent</button>`:""}<button class="muted" ${ignored||d.send_status==="SENT"?"disabled":""} onclick="ignoreInteraction('${esc(x.id)}')">Ignore</button><button class="muted" ${converted?"disabled":""} onclick="convertInteractionLead('${esc(x.id)}')">${converted?"✓ Lead Created":"＋ Convert to Lead"}</button></div><div class="command-help">${d.send_status==="SENT"?`Sent successfully${d.external_reply_id?` • Meta reply ID: ${esc(d.external_reply_id)}`:""}.`:d.send_status==="FAILED"?`Last send failed: ${esc(d.send_error||"Unknown Meta error")}. You may retry after fixing the issue.`:approved?"Approved and ready to send. Sending still requires the separate button above.":"Approve the draft first. Approval alone does not send anything."}</div></div>`:"<div class='reply-draft'><b>No reply draft yet.</b> Refresh the inbox to run interaction intelligence.</div>";
     return `<div class="interaction-card"><div class="interaction-head"><div><b>${esc(x.sender_name||"Social user")}</b> • ${esc(String(x.platform||"").toUpperCase())}<br><small>${esc(when)}${p.post_number?` • Post #${esc(p.post_number)}`:""}</small></div><div><span class="interaction-badge ${badgeClass}">${esc(priority)}</span> <span class="interaction-badge">${esc(x.intent||"GENERAL_QUESTION")}</span></div></div><div class="interaction-message">${esc(x.message_text||"")}</div><div class="command-help"><b>Related product:</b> ${esc(product)}${p.matched_product_url?` • <a href="${esc(p.matched_product_url)}" target="_blank" rel="noopener">Product page</a>`:""}${p.hook?`<br><b>Source post:</b> ${esc(p.hook)}`:""}</div>${replyBox}</div>`;
   }).join("")||`<div class="card"><b>No matching interactions.</b><p>${(interactionInboxData.summary?.interactions||0)===0?"There are no real synced comments yet. The system will populate this automatically when customers interact with your posts.":"Change the filters or search term."}</p></div>`;
 
@@ -3917,6 +3917,22 @@ async function saveInteractionReply(id){
 }
 async function approveInteractionReply(id){
   try{interactionInboxData=await interactionInboxCall("approve_reply",{interaction_id:id});renderInteractionInbox();alert("✅ Reply draft approved. It has NOT been sent yet.");}catch(e){alert(e?.message||String(e))}
+}
+async function sendApprovedInteractionReply(id){
+  if(!confirm("Send this approved reply to the customer on Facebook/Instagram now?"))return;
+  try{
+    const {data:{session}}=await sb.auth.getSession();
+    if(!session)throw Error("Your session expired. Please sign in again.");
+    const r=await fetch(SUPABASE_URL+"/functions/v1/governed-interaction-reply-executor-v1",{
+      method:"POST",
+      headers:{apikey:SUPABASE_KEY,Authorization:"Bearer "+session.access_token,"Content-Type":"application/json"},
+      body:JSON.stringify({interaction_id:id})
+    });
+    const raw=await r.text();let j={};try{j=JSON.parse(raw)}catch{}
+    if(!r.ok||!j.success)throw Error(j.error||raw||("Reply send failed with HTTP "+r.status));
+    alert("✅ Approved reply sent successfully.");
+    await loadInteractionInbox(false);
+  }catch(e){alert("Reply was not sent: "+(e?.message||String(e)));await loadInteractionInbox(false)}
 }
 async function ignoreInteraction(id){
   if(!confirm("Ignore and resolve this interaction in the agent inbox? This does not delete the comment from Facebook or Instagram."))return;
