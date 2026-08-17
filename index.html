@@ -130,6 +130,27 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
 .gsc-query{border-bottom:1px solid #e5e7eb;padding:8px 0;font-size:12px}
 @media(max-width:900px){.gsc-kpis{grid-template-columns:1fr 1fr}}
 
+
+/* Full-catalog SEO lifecycle */
+.catalog-seo-card{border-left:4px solid #7c3aed}
+.catalog-seo-summary{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin:12px 0}
+.catalog-seo-stat{border:1px solid #ddd6fe;background:#faf5ff;border-radius:10px;padding:10px}
+.catalog-seo-stat small{display:block;color:#64748b}
+.catalog-seo-stat b{display:block;color:#6d28d9;font-size:18px;margin-top:4px}
+.catalog-seo-toolbar{display:grid;grid-template-columns:1fr 180px 180px 160px;gap:8px;margin:12px 0}
+.catalog-seo-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+.catalog-product{border:1px solid #e5e7eb;border-radius:10px;padding:12px;background:#fff}
+.catalog-product h4{margin:0 0 6px;font-size:14px}
+.catalog-meta{display:flex;gap:6px;flex-wrap:wrap;margin:7px 0}
+.catalog-badge{display:inline-block;font-size:11px;font-weight:800;border-radius:999px;padding:4px 7px;background:#f3e8ff;color:#6b21a8;border:1px solid #e9d5ff}
+.catalog-badge.critical{background:#fef2f2;color:#991b1b;border-color:#fecaca}
+.catalog-badge.high{background:#fff7ed;color:#9a3412;border-color:#fed7aa}
+.catalog-badge.medium{background:#fffbeb;color:#92400e;border-color:#fde68a}
+.catalog-flow{font-size:12px;line-height:1.55;background:#f8fafc;border:1px solid #e5e7eb;border-radius:8px;padding:9px;margin-top:8px}
+.catalog-pager{display:flex;justify-content:space-between;gap:10px;align-items:center;margin-top:12px}
+@media(max-width:1000px){.catalog-seo-summary{grid-template-columns:repeat(3,1fr)}.catalog-seo-toolbar{grid-template-columns:1fr 1fr}}
+@media(max-width:700px){.catalog-seo-summary{grid-template-columns:1fr 1fr}.catalog-seo-toolbar,.catalog-seo-grid{grid-template-columns:1fr}}
+
 </style>
 </head>
 <body>
@@ -1020,6 +1041,68 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
             <div id="gscQueries"><div class="gsc-query">No Search Console data synced yet.</div></div>
             <div class="command-help">The agent uses Search Console data only for SEO intelligence. It cannot modify Search Console or your website from this connection.</div>
           </div>
+
+          <div class="website-card catalog-seo-card" style="grid-column:1/-1">
+            <div class="platform-head">
+              <div>
+                <h3 style="margin:0">🧭 Full Product SEO Lifecycle</h3>
+                <p style="margin:6px 0 0">Continuously classifies every product: zero visibility → discovery → ranking growth → page-one push → CTR optimization → measurement. WordPress writes remain disabled until approved.</p>
+              </div>
+              <div class="interaction-actions">
+                <button class="muted" onclick="loadFullCatalogSeo(true)">↻ Refresh Catalog SEO</button>
+                <a href="/seo-control.html" class="primary" style="display:inline-block;text-decoration:none;padding:10px 14px;border-radius:8px;font-weight:700">🌐 Open SEO Control Center</a>
+              </div>
+            </div>
+            <div id="catalogSeoStatus" class="campaign-flow">Catalog SEO lifecycle has not been loaded yet.</div>
+
+            <div class="catalog-seo-summary">
+              <div class="catalog-seo-stat"><small>Total products</small><b id="catTotal">0</b></div>
+              <div class="catalog-seo-stat"><small>Zero impressions</small><b id="catZero">0</b></div>
+              <div class="catalog-seo-stat"><small>Page-one / CTR</small><b id="catPageOne">0</b></div>
+              <div class="catalog-seo-stat"><small>Page-two push</small><b id="catPageTwo">0</b></div>
+              <div class="catalog-seo-stat"><small>Ranking growth</small><b id="catGrowth">0</b></div>
+              <div class="catalog-seo-stat"><small>Deep ranking</small><b id="catDeep">0</b></div>
+              <div class="catalog-seo-stat"><small>Needs attention</small><b id="catAttention">0</b></div>
+              <div class="catalog-seo-stat"><small>Pending proposals</small><b id="catPending">0</b></div>
+              <div class="catalog-seo-stat"><small>Approved / not applied</small><b id="catApproved">0</b></div>
+            </div>
+
+            <div class="catalog-seo-toolbar">
+              <input id="catSearch" placeholder="Search product or URL…" oninput="renderFullCatalogSeo()">
+              <select id="catVisibility" onchange="renderFullCatalogSeo()">
+                <option value="ALL">All visibility classes</option>
+                <option value="ZERO_IMPRESSIONS">Zero impressions</option>
+                <option value="PAGE_ONE_LOW_CTR">Page one — low CTR</option>
+                <option value="PAGE_TWO_PUSH">Page two push</option>
+                <option value="RANKING_GROWTH">Ranking growth</option>
+                <option value="DEEP_RANKING">Deep ranking</option>
+              </select>
+              <select id="catPriority" onchange="renderFullCatalogSeo()">
+                <option value="ALL">All priorities</option>
+                <option value="CRITICAL">Critical</option>
+                <option value="HIGH">High</option>
+                <option value="MEDIUM">Medium</option>
+                <option value="LOW">Low</option>
+              </select>
+              <select id="catSort" onchange="renderFullCatalogSeo()">
+                <option value="priority">Highest priority</option>
+                <option value="impressions">Most impressions</option>
+                <option value="position">Best position</option>
+                <option value="title">Product name</option>
+              </select>
+            </div>
+
+            <div id="catalogSeoGrid" class="catalog-seo-grid">
+              <div class="catalog-flow">No catalog SEO data loaded yet.</div>
+            </div>
+            <div class="catalog-pager">
+              <button class="muted" id="catPrev" onclick="moveCatalogSeoPage(-1)">← Previous</button>
+              <span id="catPageInfo" class="command-help"></span>
+              <button class="muted" id="catNext" onclick="moveCatalogSeoPage(1)">Next →</button>
+            </div>
+            <div id="catalogCompetitorNote" class="command-help" style="margin-top:10px"></div>
+          </div>
+
           <div class="website-card">
             <h3>🧠 SEO Automation Roadmap</h3>
             <p><b>1.</b> WordPress connection + inventory<br>
@@ -4605,6 +4688,118 @@ async function convertInteractionLead(id){
 }
 
 
+
+let fullCatalogSeoData=null;
+let fullCatalogSeoPage=1;
+const FULL_CATALOG_SEO_PAGE_SIZE=12;
+
+function catalogPriorityClass(priority){
+  const p=String(priority||"").toLowerCase();
+  return ["critical","high","medium"].includes(p)?p:"";
+}
+function safeNum(v,d=0){
+  const n=Number(v);
+  return Number.isFinite(n)?n:d;
+}
+function formatSeoPosition(v){
+  const n=Number(v);
+  return Number.isFinite(n)&&n>0?n.toFixed(1):"—";
+}
+function catalogLifecycleLabel(v){
+  return String(v||"").replaceAll("_"," ").replace(/\b\w/g,c=>c.toUpperCase());
+}
+async function loadFullCatalogSeo(showAlert=false){
+  try{
+    if($("catalogSeoStatus"))$("catalogSeoStatus").textContent="Refreshing all-product SEO lifecycle…";
+    const j=await websiteSeoCall("full_catalog_dashboard");
+    fullCatalogSeoData=j;
+    fullCatalogSeoPage=1;
+    const s=j.summary||{};
+    $("catTotal").textContent=s.total_products||0;
+    $("catZero").textContent=s.zero_impressions||0;
+    $("catPageOne").textContent=s.page_one||0;
+    $("catPageTwo").textContent=s.page_two_push||0;
+    $("catGrowth").textContent=s.ranking_growth||0;
+    $("catDeep").textContent=s.deep_ranking||0;
+    $("catAttention").textContent=s.needs_attention||0;
+    $("catPending").textContent=s.pending_proposals||0;
+    $("catApproved").textContent=s.approved_not_applied||0;
+    $("catalogSeoStatus").innerHTML=`<b>Lifecycle:</b> ACTIVE ✅ • <b>Products:</b> ${esc(s.total_products||0)} • <b>Refresh:</b> ${esc(j.schedule||"Daily")} • <b>Authority:</b> ${esc(j.authority||"CATALOG_SEO_INTELLIGENCE")} • <b>WordPress writes:</b> ${esc(j.wordpress_write_authority||"DISABLED")}`;
+    const primary=(j.competitors||[]).find(x=>x.is_primary);
+    $("catalogCompetitorNote").innerHTML=primary
+      ? `<b>Primary benchmark:</b> ${esc(primary.name||primary.domain||"Competitor")} (${esc(primary.domain||"")}). Product decisions should use search demand + competitor evidence, not keyword stuffing.`
+      : "Competitor benchmark will appear here when configured.";
+    renderFullCatalogSeo();
+    if(showAlert)alert(`✅ Full catalog SEO refreshed for ${s.total_products||0} products.`);
+  }catch(e){
+    if($("catalogSeoStatus"))$("catalogSeoStatus").textContent="Catalog SEO error: "+(e?.message||String(e));
+    if(showAlert)alert(e?.message||String(e));
+  }
+}
+function filteredFullCatalogSeo(){
+  if(!fullCatalogSeoData)return [];
+  const q=String($("catSearch")?.value||"").trim().toLowerCase();
+  const vis=$("catVisibility")?.value||"ALL";
+  const pri=$("catPriority")?.value||"ALL";
+  const sort=$("catSort")?.value||"priority";
+  let rows=[...(fullCatalogSeoData.products||[])];
+  if(q)rows=rows.filter(x=>[x.product_title,x.page,x.lifecycle_stage,x.next_action].join(" ").toLowerCase().includes(q));
+  if(vis!=="ALL")rows=rows.filter(x=>x.visibility_class===vis);
+  if(pri!=="ALL")rows=rows.filter(x=>String(x.priority||"").toUpperCase()===pri);
+  if(sort==="impressions")rows.sort((a,b)=>safeNum(b.impressions)-safeNum(a.impressions));
+  else if(sort==="position")rows.sort((a,b)=>{
+    const ap=safeNum(a.position,9999),bp=safeNum(b.position,9999);
+    return ap-bp;
+  });
+  else if(sort==="title")rows.sort((a,b)=>String(a.product_title||"").localeCompare(String(b.product_title||"")));
+  else rows.sort((a,b)=>safeNum(b.priority_score)-safeNum(a.priority_score));
+  return rows;
+}
+function renderFullCatalogSeo(){
+  if(!$("catalogSeoGrid"))return;
+  if(!fullCatalogSeoData){
+    $("catalogSeoGrid").innerHTML='<div class="catalog-flow">No catalog SEO data loaded yet.</div>';
+    return;
+  }
+  const all=filteredFullCatalogSeo();
+  const max=Math.max(1,Math.ceil(all.length/FULL_CATALOG_SEO_PAGE_SIZE));
+  fullCatalogSeoPage=Math.max(1,Math.min(fullCatalogSeoPage,max));
+  const start=(fullCatalogSeoPage-1)*FULL_CATALOG_SEO_PAGE_SIZE;
+  const rows=all.slice(start,start+FULL_CATALOG_SEO_PAGE_SIZE);
+  $("catalogSeoGrid").innerHTML=rows.map(x=>{
+    const p=String(x.priority||"MEDIUM").toUpperCase();
+    const imp=safeNum(x.impressions),clicks=safeNum(x.clicks),ctr=safeNum(x.ctr);
+    const ctrPct=(ctr*100).toFixed(2);
+    const technical=(x.technical_score===null||x.technical_score===undefined)?"—":Number(x.technical_score).toFixed(0);
+    const proposal=x.proposal_status?` • Proposal: ${esc(x.proposal_status)}`:"";
+    return `<div class="catalog-product">
+      <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start">
+        <div>
+          <h4>${esc(x.product_title||"Untitled product")}</h4>
+          <div class="catalog-meta">
+            <span class="catalog-badge ${catalogPriorityClass(p)}">${esc(p)}</span>
+            <span class="catalog-badge">${esc(catalogLifecycleLabel(x.visibility_class))}</span>
+            <span class="catalog-badge">${esc(catalogLifecycleLabel(x.lifecycle_stage))}</span>
+          </div>
+        </div>
+        <b style="color:#6d28d9">${safeNum(x.priority_score).toFixed(0)}</b>
+      </div>
+      <div class="command-help"><a href="${esc(x.page||"#")}" target="_blank" rel="noopener">${esc(x.page||"")}</a></div>
+      <div class="catalog-flow"><b>Search visibility:</b> ${imp.toLocaleString()} impressions • ${clicks.toLocaleString()} clicks • CTR ${ctrPct}% • Position ${formatSeoPosition(x.position)}<br>
+      <b>Technical score:</b> ${technical}${proposal}</div>
+      <div class="catalog-flow"><b>Next action:</b> ${esc(x.next_action||"Continue lifecycle analysis.")}</div>
+    </div>`;
+  }).join("")||'<div class="catalog-flow">No products match these filters.</div>';
+  $("catPageInfo").textContent=`Showing ${all.length?start+1:0}–${Math.min(start+FULL_CATALOG_SEO_PAGE_SIZE,all.length)} of ${all.length} • Page ${fullCatalogSeoPage}/${max}`;
+  $("catPrev").disabled=fullCatalogSeoPage<=1;
+  $("catNext").disabled=fullCatalogSeoPage>=max;
+}
+function moveCatalogSeoPage(delta){
+  const max=Math.max(1,Math.ceil(filteredFullCatalogSeo().length/FULL_CATALOG_SEO_PAGE_SIZE));
+  fullCatalogSeoPage=Math.max(1,Math.min(max,fullCatalogSeoPage+delta));
+  renderFullCatalogSeo();
+}
+
 function switchMainTab(tab){
   const agent=tab==="agent",social=tab==="social-ops",growth=tab==="growth",interactions=tab==="interactions",finance=tab==="finance",linkedin=tab==="linkedin",gbp=tab==="gbp",website=tab==="website",whatsapp=tab==="whatsapp";
   $("agentMainPanel").classList.toggle("active",agent);
@@ -4633,6 +4828,7 @@ function switchMainTab(tab){
   if(finance){loadFinanceHub();loadManagementIntel();}
   if(linkedin){loadLinkedInDrafts();checkLinkedInConnection();}
   if(gbp)loadGbpDrafts();
+  if(website&&!fullCatalogSeoData)loadFullCatalogSeo(false);
   if(website){testWordPressConnection(false);loadSeoAuditSummary();checkSearchConsole();}
 }
 
