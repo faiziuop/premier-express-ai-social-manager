@@ -96,6 +96,15 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
 
 .exec-hub{border-left:4px solid #7c3aed}.exec-period{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.exec-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.exec-risk{border:1px solid #fed7aa;background:#fff7ed;border-radius:9px;padding:10px;margin:7px 0}.exec-risk.high{border-color:#fecaca;background:#fef2f2}.exec-content{border:1px solid #ddd6fe;background:#faf5ff;border-radius:9px;padding:10px;margin:7px 0}.exec-note{font-size:12px;color:#64748b}@media(max-width:900px){.exec-grid{grid-template-columns:1fr}}
 
+
+.linkedin-hub{border-left:4px solid #0a66c2}
+.linkedin-status{background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:12px;margin:10px 0}
+.linkedin-columns{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.linkedin-card{border:1px solid #dbeafe;border-radius:10px;padding:12px;background:#fff;margin:8px 0}
+.linkedin-card h4{margin:0 0 6px}.linkedin-target{font-size:11px;font-weight:800;border-radius:999px;padding:4px 7px;background:#e0f2fe;color:#075985}
+@media(max-width:900px){.linkedin-columns{grid-template-columns:1fr}}
+
+.gbp-hub{border-left:4px solid #4285f4}.gbp-status{background:#f8fbff;border:1px solid #bfdbfe;border-radius:10px;padding:12px;margin:10px 0}.gbp-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}.gbp-card{border:1px solid #dbeafe;border-radius:10px;padding:12px;background:#fff}.gbp-topic{font-size:11px;font-weight:800;border-radius:999px;padding:4px 7px;background:#e8f0fe;color:#174ea6}@media(max-width:900px){.gbp-grid{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -120,6 +129,8 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
       <button class="main-nav-tab" id="growthTabBtn" onclick="switchMainTab('growth')">🎯 Growth Operations</button>
       <button class="main-nav-tab" id="interactionsTabBtn" onclick="switchMainTab('interactions')">💬 Interactions & Leads</button>
       <button class="main-nav-tab" id="financeTabBtn" onclick="switchMainTab('finance')">💼 Business & Finance</button>
+      <button class="main-nav-tab" id="linkedinTabBtn" onclick="switchMainTab('linkedin')">🔗 LinkedIn</button>
+      <button class="main-nav-tab" id="gbpTabBtn" onclick="switchMainTab('gbp')">📍 Google Business</button>
       <button class="main-nav-tab" id="whatsappTabBtn" onclick="switchMainTab('whatsapp')">💬 WhatsApp Operations</button>
     </div>
 
@@ -820,6 +831,32 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
         <div class="exec-grid"><div><h3>⚠ Management attention</h3><div id="execRisks"><div class="exec-risk">No risks calculated yet.</div></div></div><div><h3>🏆 Best content evidence</h3><div id="execContent"><div class="exec-content">No content evidence calculated yet.</div></div></div></div>
         <p id="execNote" class="exec-note">Financial intelligence uses recorded data only. The agent does not estimate missing payments, expenses or supplier costs.</p>
       </div>
+      </div>
+    </div>
+
+
+    <div id="linkedinMainPanel" class="main-tab-panel">
+      <div class="card linkedin-hub">
+        <div class="platform-head">
+          <div>
+            <h2 style="margin:0">🔗 LinkedIn Social Manager</h2>
+            <p style="margin:6px 0 0">Separate editorial tracks for the Premier Express company Page and professional profile. Publishing remains locked until LinkedIn approves Community Management API access.</p>
+          </div>
+          <button class="primary" onclick="generateLinkedInDrafts()">＋ Generate LinkedIn Drafts</button>
+        </div>
+        <div class="linkedin-status"><b>API status:</b> REVIEW PENDING • <b>Publishing:</b> DISABLED • <b>Drafting:</b> READY • <b>Approval:</b> MANUAL</div>
+        <div class="linkedin-columns">
+          <div><h3>🏢 Company Page drafts</h3><div id="linkedinPageDrafts"><div class="linkedin-card">No LinkedIn Page drafts yet.</div></div></div>
+          <div><h3>👤 Profile drafts</h3><div id="linkedinProfileDrafts"><div class="linkedin-card">No LinkedIn Profile drafts yet.</div></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="gbpMainPanel" class="main-tab-panel">
+      <div class="card gbp-hub">
+        <div class="platform-head"><div><h2 style="margin:0">📍 Google Business Profile Manager</h2><p style="margin:6px 0 0">Local-post drafting is ready. Publishing and performance sync remain locked until Google grants Business Profile API access and OAuth is connected.</p></div><button class="primary" onclick="generateGbpDrafts()">＋ Generate GBP Drafts</button></div>
+        <div class="gbp-status"><b>API access:</b> NOT CONNECTED • <b>Publishing:</b> DISABLED • <b>Drafting:</b> READY • <b>Approval:</b> MANUAL</div>
+        <div id="gbpDraftList" class="gbp-grid"><div class="gbp-card">No Google Business Profile drafts yet.</div></div>
       </div>
     </div>
 
@@ -4095,6 +4132,65 @@ async function loadManagementIntel(){
  try{const{data:{session}}=await sb.auth.getSession();if(!session)throw Error("Your session expired.");const days=Number($("execDays")?.value||30);const r=await fetch(SUPABASE_URL+"/functions/v1/management-intelligence-v1",{method:"POST",headers:{apikey:SUPABASE_KEY,Authorization:"Bearer "+session.access_token,"Content-Type":"application/json"},body:JSON.stringify({days})});const raw=await r.text();let j={};try{j=JSON.parse(raw)}catch{};if(!r.ok||!j.success)throw Error(j.error||raw);const s=j.summary||{};$("exSales").textContent=money(s.sales);$("exGross").textContent=money(s.gross_profit);$("exNet").textContent=money(s.net_contribution);$("exMargin").textContent=Number(s.margin_percent||0).toFixed(1)+"%";$("exLeads").textContent=s.leads||0;$("exBookings").textContent=s.bookings||0;$("exConversion").textContent=Number(s.lead_to_booking_rate||0).toFixed(1)+"%";$("exRepeat").textContent=s.repeat_customers||0;$("execRisks").innerHTML=(j.risks||[]).map(x=>`<div class="exec-risk ${x.severity==="HIGH"?"high":""}"><b>${esc(x.area||"Management")}</b> • ${esc(x.severity||"INFO")}<br>${esc(x.message||"")}</div>`).join("")||`<div class="exec-risk"><b>No current recorded-data risks.</b></div>`;$("execContent").innerHTML=(j.top_content||[]).map(x=>`<div class="exec-content"><b>${esc(x.platform?String(x.platform).toUpperCase():"")} ${x.post_number?`• Post #${esc(x.post_number)}`:""}</b><br>${esc(x.product||x.hook||"Content")}<div class="command-help">Reach ${x.reach||0} • Engagement ${x.engagements||0} • Clicks ${x.clicks||0} • Leads ${x.leads||0} • Bookings ${x.bookings||0} • Revenue ${money(x.revenue)}</div></div>`).join("")||`<div class="exec-content">No measured content in this period.</div>`;$("execNote").textContent=j.note||""}catch(e){$("execRisks").innerHTML=`<div class="exec-risk high"><b>Management intelligence error</b><br>${esc(e?.message||String(e))}</div>`}
 }
 
+
+let linkedinDraftRows=[];
+async function loadLinkedInDrafts(){
+  try{
+    const {data:rows,error}=await sb.from("content_posts").select("id,post_number,linkedin_target,hook,caption,cta,hashtags,matched_product_name,media_type,status,created_at").eq("primary_platform","linkedin").is("deleted_at",null).order("created_at",{ascending:false}).limit(50);
+    if(error)throw Error(error.message);
+    linkedinDraftRows=rows||[];renderLinkedInDrafts();
+  }catch(e){
+    $("linkedinPageDrafts").innerHTML=`<div class="linkedin-card">LinkedIn draft load error: ${esc(e?.message||String(e))}</div>`;
+    $("linkedinProfileDrafts").innerHTML=`<div class="linkedin-card">LinkedIn draft load error.</div>`;
+  }
+}
+function linkedinDraftCard(p){
+  return `<div class="linkedin-card"><div><span class="linkedin-target">${esc(p.linkedin_target||"LINKEDIN")}</span> <span class="interaction-badge">${esc(p.status||"PENDING_APPROVAL")}</span></div><h4>${esc(p.hook||"LinkedIn draft")}</h4><div class="command-help"><b>Product:</b> ${esc(p.matched_product_name||"—")} • <b>Media:</b> ${esc(p.media_type||"image")}</div><p>${esc(p.caption||"")}</p>${p.cta?`<p><b>CTA:</b> ${esc(p.cta)}</p>`:""}<div class="command-help">${esc((p.hashtags||[]).join(" "))}</div><div class="interaction-actions">${p.status==="PENDING_APPROVAL"?`<button class="primary" onclick="approveLinkedInDraft('${esc(p.id)}')">✅ Approve Draft</button>`:""}<button class="muted" onclick="editLinkedInDraft('${esc(p.id)}')">✎ Edit</button></div><div class="command-help">Publishing is locked while LinkedIn API access is under review.</div></div>`;
+}
+function renderLinkedInDrafts(){
+  const page=linkedinDraftRows.filter(x=>x.linkedin_target==="PAGE"),profile=linkedinDraftRows.filter(x=>x.linkedin_target==="PROFILE");
+  $("linkedinPageDrafts").innerHTML=page.map(linkedinDraftCard).join("")||`<div class="linkedin-card">No Company Page drafts yet.</div>`;
+  $("linkedinProfileDrafts").innerHTML=profile.map(linkedinDraftCard).join("")||`<div class="linkedin-card">No Profile drafts yet.</div>`;
+}
+async function generateLinkedInDrafts(){
+  try{
+    const {data:{session}}=await sb.auth.getSession();if(!session)throw Error("Your session expired.");
+    const r=await fetch(SUPABASE_URL+"/functions/v1/linkedin-content-agent-v1",{method:"POST",headers:{apikey:SUPABASE_KEY,Authorization:"Bearer "+session.access_token,"Content-Type":"application/json"},body:"{}"});
+    const raw=await r.text();let j={};try{j=JSON.parse(raw)}catch{}
+    if(!r.ok||!j.success)throw Error(j.error||raw);
+    await loadLinkedInDrafts();
+    alert(`✅ Created ${j.created||0} LinkedIn drafts: ${j.page_drafts||0} Page + ${j.profile_drafts||0} Profile. Publishing remains disabled.`);
+  }catch(e){alert(e?.message||String(e))}
+}
+async function approveLinkedInDraft(id){
+  try{
+    const {error}=await sb.from("content_posts").update({status:"APPROVED",approved_at:new Date().toISOString()}).eq("id",id).eq("primary_platform","linkedin");
+    if(error)throw Error(error.message);await loadLinkedInDrafts();
+  }catch(e){alert(e?.message||String(e))}
+}
+async function editLinkedInDraft(id){
+  const p=linkedinDraftRows.find(x=>String(x.id)===String(id));if(!p)return;
+  const caption=prompt("Edit LinkedIn caption:",p.caption||"");if(caption===null)return;
+  try{
+    const {error}=await sb.from("content_posts").update({caption:caption.trim(),status:"PENDING_APPROVAL",approved_at:null,approved_by:null}).eq("id",id);
+    if(error)throw Error(error.message);await loadLinkedInDrafts();
+  }catch(e){alert(e?.message||String(e))}
+}
+
+
+let gbpDraftRows=[];
+async function loadGbpDrafts(){
+  try{const {data:rows,error}=await sb.from("gbp_content_drafts").select("id,topic_type,summary,call_to_action_type,call_to_action_url,matched_product_name,status,created_at").order("created_at",{ascending:false}).limit(50);if(error)throw Error(error.message);gbpDraftRows=rows||[];renderGbpDrafts()}catch(e){$("gbpDraftList").innerHTML=`<div class="gbp-card">GBP draft load error: ${esc(e?.message||String(e))}</div>`}
+}
+function renderGbpDrafts(){
+  $("gbpDraftList").innerHTML=gbpDraftRows.map(p=>`<div class="gbp-card"><div><span class="gbp-topic">${esc(p.topic_type||"STANDARD")}</span> <span class="interaction-badge">${esc(p.status||"PENDING_APPROVAL")}</span></div><h4>${esc(p.matched_product_name||"Google Business post")}</h4><p>${esc(p.summary||"")}</p><div class="command-help"><b>CTA:</b> ${esc(p.call_to_action_type||"NONE")}${p.call_to_action_url?` • <a href="${esc(p.call_to_action_url)}" target="_blank" rel="noopener">Destination URL</a>`:""}</div><div class="interaction-actions">${p.status==="PENDING_APPROVAL"?`<button class="primary" onclick="approveGbpDraft('${esc(p.id)}')">✅ Approve Draft</button>`:""}<button class="muted" onclick="editGbpDraft('${esc(p.id)}')">✎ Edit</button></div><div class="command-help">Publishing is locked until Google Business Profile API access is approved and connected.</div></div>`).join("")||`<div class="gbp-card">No Google Business Profile drafts yet.</div>`;
+}
+async function generateGbpDrafts(){
+  try{const {data:{session}}=await sb.auth.getSession();if(!session)throw Error("Your session expired.");const r=await fetch(SUPABASE_URL+"/functions/v1/gbp-content-agent-v1",{method:"POST",headers:{apikey:SUPABASE_KEY,Authorization:"Bearer "+session.access_token,"Content-Type":"application/json"},body:"{}"});const raw=await r.text();let j={};try{j=JSON.parse(raw)}catch{};if(!r.ok||!j.success)throw Error(j.error||raw);await loadGbpDrafts();alert(`✅ Created ${j.created||0} Google Business Profile drafts. Publishing remains disabled.`)}catch(e){alert(e?.message||String(e))}
+}
+async function approveGbpDraft(id){try{const {error}=await sb.from("gbp_content_drafts").update({status:"APPROVED",approved_at:new Date().toISOString()}).eq("id",id);if(error)throw Error(error.message);await loadGbpDrafts()}catch(e){alert(e?.message||String(e))}}
+async function editGbpDraft(id){const p=gbpDraftRows.find(x=>String(x.id)===String(id));if(!p)return;const summary=prompt("Edit Google Business Profile post:",p.summary||"");if(summary===null)return;try{const {error}=await sb.from("gbp_content_drafts").update({summary:summary.trim(),status:"PENDING_APPROVAL",approved_at:null}).eq("id",id);if(error)throw Error(error.message);await loadGbpDrafts()}catch(e){alert(e?.message||String(e))}}
+
 let financeHubData={summary:{},bookings:[],suppliers:[],payments:[],expenses:[]};
 async function financeCall(action,payload={}){
   const{data:{session}}=await sb.auth.getSession();if(!session)throw Error("Your session expired.");
@@ -4148,18 +4244,22 @@ async function convertInteractionLead(id){
 
 
 function switchMainTab(tab){
-  const agent=tab==="agent",social=tab==="social-ops",growth=tab==="growth",interactions=tab==="interactions",finance=tab==="finance",whatsapp=tab==="whatsapp";
+  const agent=tab==="agent",social=tab==="social-ops",growth=tab==="growth",interactions=tab==="interactions",finance=tab==="finance",linkedin=tab==="linkedin",gbp=tab==="gbp",whatsapp=tab==="whatsapp";
   $("agentMainPanel").classList.toggle("active",agent);
   $("socialOpsPanel").classList.toggle("active",social);
   $("growthMainPanel").classList.toggle("active",growth);
   $("interactionsMainPanel").classList.toggle("active",interactions);
   $("financeMainPanel").classList.toggle("active",finance);
+  $("linkedinMainPanel").classList.toggle("active",linkedin);
+  $("gbpMainPanel").classList.toggle("active",gbp);
   $("whatsappMainPanel").classList.toggle("active",whatsapp);
   $("mainAgentTabBtn").classList.toggle("active",agent);
   $("socialOpsTabBtn").classList.toggle("active",social);
   $("growthTabBtn").classList.toggle("active",growth);
   $("interactionsTabBtn").classList.toggle("active",interactions);
   $("financeTabBtn").classList.toggle("active",finance);
+  $("linkedinTabBtn").classList.toggle("active",linkedin);
+  $("gbpTabBtn").classList.toggle("active",gbp);
   $("whatsappTabBtn").classList.toggle("active",whatsapp);
   if(social&&!socialAccountOpsLoaded){loadSocialAccountOperations();loadContentOperations();loadSchedulingOperations();loadPublishingOperations();loadInteractionAwareness();loadProfileMaintenance();loadAnomalyRepair();loadMultiAccountOrchestration();loadAccountGovernance();}
   if(growth&&growthCycleRows.length===0)buildGrowthCycle(false);
@@ -4167,6 +4267,8 @@ function switchMainTab(tab){
   if(growth&&!engagementIntelData)loadEngagementIntel();
   if(interactions){loadInteractionInbox(false);loadCustomerMemory();}
   if(finance){loadFinanceHub();loadManagementIntel();}
+  if(linkedin)loadLinkedInDrafts();
+  if(gbp)loadGbpDrafts();
 }
 
 async function loadSocialAccountOperations(){
