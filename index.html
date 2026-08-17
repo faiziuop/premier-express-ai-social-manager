@@ -83,6 +83,16 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
 
 .customer-memory-card{border-left:4px solid #0f766e}.customer-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}.customer-profile{border:1px solid #ccfbf1;background:#f0fdfa;border-radius:11px;padding:12px}.customer-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:10px 0}.customer-kpi{background:#fff;border:1px solid #99f6e4;border-radius:8px;padding:8px}.customer-kpi small{display:block;color:#64748b}.customer-kpi b{color:#0f766e}.history-row{border-top:1px solid #d1fae5;padding:7px 0;font-size:12px}@media(max-width:900px){.customer-grid{grid-template-columns:1fr}.customer-kpis{grid-template-columns:1fr 1fr}}
 
+
+.finance-hub{border-left:4px solid #0f766e}
+.finance-summary{display:grid;grid-template-columns:repeat(8,1fr);gap:8px;margin:12px 0}
+.finance-stat{border:1px solid #d1fae5;background:#ecfdf5;border-radius:10px;padding:10px}
+.finance-stat small{display:block;color:#64748b}.finance-stat b{display:block;color:#047857;font-size:18px;margin-top:3px}
+.finance-grid{display:grid;grid-template-columns:1.2fr .8fr;gap:12px}.finance-form{border:1px solid #d1d5db;border-radius:10px;padding:12px;background:#fff}.finance-form h3{margin-top:0}
+.finance-form input,.finance-form select,.finance-form textarea{width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:7px;margin:5px 0}
+.finance-table{overflow:auto}.finance-table table{width:100%;border-collapse:collapse;font-size:12px}.finance-table th,.finance-table td{padding:8px;border-bottom:1px solid #e5e7eb;text-align:left;white-space:nowrap}
+@media(max-width:1000px){.finance-summary{grid-template-columns:repeat(4,1fr)}.finance-grid{grid-template-columns:1fr}}@media(max-width:600px){.finance-summary{grid-template-columns:1fr 1fr}}
+
 </style>
 </head>
 <body>
@@ -106,6 +116,7 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
       <button class="main-nav-tab" id="socialOpsTabBtn" onclick="switchMainTab('social-ops')">🌐 Social Account Operations</button>
       <button class="main-nav-tab" id="growthTabBtn" onclick="switchMainTab('growth')">🎯 Growth Operations</button>
       <button class="main-nav-tab" id="interactionsTabBtn" onclick="switchMainTab('interactions')">💬 Interactions & Leads</button>
+      <button class="main-nav-tab" id="financeTabBtn" onclick="switchMainTab('finance')">💼 Business & Finance</button>
       <button class="main-nav-tab" id="whatsappTabBtn" onclick="switchMainTab('whatsapp')">💬 WhatsApp Operations</button>
     </div>
 
@@ -771,6 +782,34 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
         <div class="interaction-summary"><div class="interaction-stat"><small>Known profiles</small><b id="cmTotal">0</b></div><div class="interaction-stat"><small>Prospects</small><b id="cmProspects">0</b></div><div class="interaction-stat"><small>Customers</small><b id="cmCustomers">0</b></div><div class="interaction-stat"><small>Repeat customers</small><b id="cmRepeat">0</b></div><div class="interaction-stat"><small>Lifetime revenue</small><b id="cmValue">AED 0</b></div></div>
         <input id="cmSearch" placeholder="Search customer or preferred service" oninput="renderCustomerMemory()" style="width:100%;padding:10px;border:1px solid #ccd1d9;border-radius:8px;margin:8px 0 12px">
         <div id="customerMemoryList" class="customer-grid"><div class="customer-profile"><b>No customer profiles yet.</b></div></div>
+      </div>
+    </div>
+
+
+    <div id="financeMainPanel" class="main-tab-panel">
+      <div class="card finance-hub">
+        <div class="platform-head"><div><h2 style="margin:0">💼 Business Operations & Financial Intelligence</h2><p style="margin:6px 0 0">Structured booking, supplier, payment and expense records. Financial records change only through explicit actions.</p></div><button class="muted" onclick="loadFinanceHub()">↻ Refresh</button></div>
+        <div class="finance-summary">
+          <div class="finance-stat"><small>Bookings</small><b id="finBookings">0</b></div>
+          <div class="finance-stat"><small>Sales</small><b id="finSales">AED 0</b></div>
+          <div class="finance-stat"><small>Supplier cost</small><b id="finSupplier">AED 0</b></div>
+          <div class="finance-stat"><small>Gross profit</small><b id="finGross">AED 0</b></div>
+          <div class="finance-stat"><small>Expenses</small><b id="finExpenses">AED 0</b></div>
+          <div class="finance-stat"><small>Net contribution</small><b id="finNet">AED 0</b></div>
+          <div class="finance-stat"><small>Received</small><b id="finReceived">AED 0</b></div>
+          <div class="finance-stat"><small>Outstanding</small><b id="finOutstanding">AED 0</b></div>
+        </div>
+        <div class="finance-grid">
+          <div>
+            <div class="finance-table"><table><thead><tr><th>Ref</th><th>Service</th><th>Date</th><th>Sale</th><th>Cost</th><th>Profit</th><th>Margin</th><th>Payment</th></tr></thead><tbody id="financeBookingRows"><tr><td colspan="8">No bookings yet.</td></tr></tbody></table></div>
+          </div>
+          <div>
+            <div class="finance-form"><h3>Create supplier</h3><input id="finSupName" placeholder="Supplier name"><input id="finSupCategory" placeholder="Category e.g. Safari / Yacht / Transport"><input id="finSupPhone" placeholder="Phone"><button class="muted" onclick="createFinanceSupplier()">＋ Add Supplier</button></div>
+            <div class="finance-form"><h3>Create booking</h3><input id="finService" placeholder="Service name"><input id="finTravel" type="date"><input id="finGuests" type="number" min="1" placeholder="Guests"><input id="finSale" type="number" min="0" step="0.01" placeholder="Sale value AED"><select id="finSupplierSelect"><option value="">No supplier</option></select><input id="finSupplierCost" type="number" min="0" step="0.01" placeholder="Supplier cost"><input id="finAdditionalCost" type="number" min="0" step="0.01" placeholder="Additional cost"><button class="primary" onclick="createFinanceBooking()">＋ Create Booking</button></div>
+            <div class="finance-form"><h3>Record payment</h3><select id="finPaymentBooking"><option value="">Select booking</option></select><input id="finPaymentAmount" type="number" min="0.01" step="0.01" placeholder="Amount received"><input id="finPaymentMethod" placeholder="Method e.g. Card / Bank / Cash"><button class="muted" onclick="recordFinancePayment()">Record Payment</button></div>
+            <div class="finance-form"><h3>Record expense</h3><input id="finExpenseCategory" placeholder="Category"><input id="finExpenseDescription" placeholder="Description"><input id="finExpenseAmount" type="number" min="0.01" step="0.01" placeholder="Amount AED"><button class="muted" onclick="recordFinanceExpense()">Record Expense</button></div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -4040,6 +4079,28 @@ function renderCustomerMemory(){
  $("customerMemoryList").innerHTML=rows.map(c=>`<div class="customer-profile"><div><b>${esc(c.display_name||"Known social customer")}</b> <span class="interaction-badge">${esc(c.customer_status||"CONTACT")}</span></div><small>${esc(c.preferred_platform?String(c.preferred_platform).toUpperCase():"")} ${c.primary_contact?" • "+esc(c.primary_contact):""}</small><div class="customer-kpis"><div class="customer-kpi"><small>Enquiries</small><b>${c.total_enquiries||0}</b></div><div class="customer-kpi"><small>Bookings</small><b>${c.total_bookings||0}</b></div><div class="customer-kpi"><small>Value</small><b>AED ${Number(c.lifetime_value||0).toLocaleString()}</b></div><div class="customer-kpi"><small>Complaints</small><b>${c.complaint_count||0}</b></div></div><div class="command-help"><b>Preferred services:</b> ${esc((c.preferred_services||[]).join(", ")||"Not learned yet")}<br><b>Last seen:</b> ${c.last_seen_at?esc(new Date(c.last_seen_at).toLocaleString()):"—"}</div>${(c.leads||[]).slice(0,3).map(l=>`<div class="history-row"><b>${esc(l.lifecycle_status||"NEW")}</b> • ${esc(l.requested_service||"General enquiry")}${l.lifecycle_status==="BOOKED"?` • ${esc(l.currency||"AED")} ${Number(l.booking_value||0).toLocaleString()}`:""}</div>`).join("")}${(c.interactions||[]).slice(0,3).map(x=>`<div class="history-row">${esc(String(x.platform||"").toUpperCase())} • ${esc(x.intent||"GENERAL")} • ${esc(x.message_text||"")}</div>`).join("")}</div>`).join("")||`<div class="customer-profile"><b>No customer profiles yet.</b><p>Profiles will appear after genuine interactions or leads are recorded.</p></div>`;
 }
 
+
+let financeHubData={summary:{},bookings:[],suppliers:[],payments:[],expenses:[]};
+async function financeCall(action,payload={}){
+  const{data:{session}}=await sb.auth.getSession();if(!session)throw Error("Your session expired.");
+  const r=await fetch(SUPABASE_URL+"/functions/v1/business-operations-finance-v1",{method:"POST",headers:{apikey:SUPABASE_KEY,Authorization:"Bearer "+session.access_token,"Content-Type":"application/json"},body:JSON.stringify({action,...payload})});
+  const raw=await r.text();let j={};try{j=JSON.parse(raw)}catch{};if(!r.ok||!j.success)throw Error(j.error||raw);return j;
+}
+async function loadFinanceHub(){
+  try{financeHubData=await financeCall("list");renderFinanceHub()}catch(e){alert("Finance dashboard error: "+(e?.message||String(e)))}
+}
+function money(n){return "AED "+Number(n||0).toLocaleString(undefined,{maximumFractionDigits:2})}
+function renderFinanceHub(){
+  const s=financeHubData.summary||{};$("finBookings").textContent=s.bookings||0;$("finSales").textContent=money(s.sales);$("finSupplier").textContent=money(s.supplier_cost);$("finGross").textContent=money(s.gross_profit);$("finExpenses").textContent=money(s.operating_expenses);$("finNet").textContent=money(s.net_contribution);$("finReceived").textContent=money(s.payments_received);$("finOutstanding").textContent=money(s.outstanding);
+  $("financeBookingRows").innerHTML=(financeHubData.bookings||[]).map(b=>`<tr><td>${esc(b.booking_reference||"—")}</td><td>${esc(b.service_name||"—")}</td><td>${esc(b.travel_date||"—")}</td><td>${money(b.sale_value)}</td><td>${money(Number(b.supplier_cost||0)+Number(b.additional_cost||0))}</td><td>${money(b.gross_profit)}</td><td>${Number(b.margin_percent||0).toFixed(1)}%</td><td>${esc(b.payment_status||"UNPAID")}</td></tr>`).join("")||`<tr><td colspan="8">No bookings yet.</td></tr>`;
+  const sup=`<option value="">No supplier</option>`+(financeHubData.suppliers||[]).map(x=>`<option value="${esc(x.id)}">${esc(x.name)}</option>`).join("");$("finSupplierSelect").innerHTML=sup;
+  $("finPaymentBooking").innerHTML=`<option value="">Select booking</option>`+(financeHubData.bookings||[]).map(x=>`<option value="${esc(x.id)}">${esc(x.booking_reference||"Booking")} — ${esc(x.service_name||"")}</option>`).join("");
+}
+async function createFinanceSupplier(){try{const name=$("finSupName").value.trim();if(!name)return alert("Supplier name required.");financeHubData=await financeCall("create_supplier",{name,category:$("finSupCategory").value.trim(),phone:$("finSupPhone").value.trim()});renderFinanceHub();$("finSupName").value="";$("finSupCategory").value="";$("finSupPhone").value=""}catch(e){alert(e?.message||String(e))}}
+async function createFinanceBooking(){try{const service_name=$("finService").value.trim(),sale=Number($("finSale").value||0);if(!service_name)return alert("Service name required.");financeHubData=await financeCall("create_booking",{service_name,travel_date:$("finTravel").value||null,guest_count:$("finGuests").value||null,sale_value:sale,supplier_id:$("finSupplierSelect").value||null,supplier_cost:Number($("finSupplierCost").value||0),additional_cost:Number($("finAdditionalCost").value||0),currency:"AED"});await loadFinanceHub();alert("✅ Booking created.")}catch(e){alert(e?.message||String(e))}}
+async function recordFinancePayment(){try{const booking_id=$("finPaymentBooking").value,amount=Number($("finPaymentAmount").value||0);if(!booking_id||amount<=0)return alert("Select a booking and enter a positive amount.");await financeCall("record_payment",{booking_id,amount,currency:"AED",payment_method:$("finPaymentMethod").value.trim()});await loadFinanceHub();alert("✅ Payment recorded.")}catch(e){alert(e?.message||String(e))}}
+async function recordFinanceExpense(){try{const category=$("finExpenseCategory").value.trim(),description=$("finExpenseDescription").value.trim(),amount=Number($("finExpenseAmount").value||0);if(!category||!description||amount<=0)return alert("Category, description and positive amount required.");await financeCall("record_expense",{category,description,amount,currency:"AED"});await loadFinanceHub();alert("✅ Expense recorded.")}catch(e){alert(e?.message||String(e))}}
+
 async function saveInteractionReply(id){
   try{const txt=$("reply-"+id)?.value?.trim();if(!txt){alert("Reply cannot be empty.");return}interactionInboxData=await interactionInboxCall("edit_reply",{interaction_id:id,suggested_reply:txt});renderInteractionInbox();alert("✅ Reply draft saved. Nothing was sent.");}catch(e){alert(e?.message||String(e))}
 }
@@ -4072,22 +4133,25 @@ async function convertInteractionLead(id){
 
 
 function switchMainTab(tab){
-  const agent=tab==="agent",social=tab==="social-ops",growth=tab==="growth",interactions=tab==="interactions",whatsapp=tab==="whatsapp";
+  const agent=tab==="agent",social=tab==="social-ops",growth=tab==="growth",interactions=tab==="interactions",finance=tab==="finance",whatsapp=tab==="whatsapp";
   $("agentMainPanel").classList.toggle("active",agent);
   $("socialOpsPanel").classList.toggle("active",social);
   $("growthMainPanel").classList.toggle("active",growth);
   $("interactionsMainPanel").classList.toggle("active",interactions);
+  $("financeMainPanel").classList.toggle("active",finance);
   $("whatsappMainPanel").classList.toggle("active",whatsapp);
   $("mainAgentTabBtn").classList.toggle("active",agent);
   $("socialOpsTabBtn").classList.toggle("active",social);
   $("growthTabBtn").classList.toggle("active",growth);
   $("interactionsTabBtn").classList.toggle("active",interactions);
+  $("financeTabBtn").classList.toggle("active",finance);
   $("whatsappTabBtn").classList.toggle("active",whatsapp);
   if(social&&!socialAccountOpsLoaded){loadSocialAccountOperations();loadContentOperations();loadSchedulingOperations();loadPublishingOperations();loadInteractionAwareness();loadProfileMaintenance();loadAnomalyRepair();loadMultiAccountOrchestration();loadAccountGovernance();}
   if(growth&&growthCycleRows.length===0)buildGrowthCycle(false);
   if(growth&&!growthLearningData)loadGrowthLearning();
   if(growth&&!engagementIntelData)loadEngagementIntel();
   if(interactions){loadInteractionInbox(false);loadCustomerMemory();}
+  if(finance)loadFinanceHub();
 }
 
 async function loadSocialAccountOperations(){
