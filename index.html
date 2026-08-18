@@ -152,7 +152,7 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
 @media(max-width:700px){.catalog-seo-summary{grid-template-columns:1fr 1fr}.catalog-seo-toolbar,.catalog-seo-grid{grid-template-columns:1fr}}
 
 
-/* TEST UI: unified social account strip + platform agent launchers */
+/* TEST V3: unified social accounts + separate Facebook/Instagram main workspaces */
 .unified-social-card{border-left:4px solid #2563eb}
 .unified-social-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:12px}
 .unified-social-item{border:1px solid #dbeafe;background:#fff;border-radius:12px;padding:12px;min-width:0}
@@ -160,16 +160,10 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
 .unified-social-status{font-size:12px;line-height:1.45;min-height:36px;color:#64748b}
 .unified-social-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:9px}
 .unified-social-actions button,.unified-social-actions a{font-size:11px;padding:7px 9px;margin:0}
-.agent-platform-launchers{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;padding-top:12px;border-top:1px solid #e5e7eb}
-.agent-platform-launchers button{margin:0}
+.meta-shared-connect{margin-top:12px;padding:11px 12px;border:1px solid #dbeafe;background:#eff6ff;border-radius:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.platform-workspace-head{border-left:4px solid #2563eb}
 @media(max-width:950px){.unified-social-grid{grid-template-columns:1fr 1fr}}
 @media(max-width:560px){.unified-social-grid{grid-template-columns:1fr}}
-
-
-/* Platform-page navigation revision */
-.main-nav-tabs .main-nav-tab{min-height:40px}
-.meta-shared-connect .primary{white-space:normal;text-align:center}
-#platformWorkspaceHeading{margin-top:14px}
 
 </style>
 </head>
@@ -189,12 +183,11 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
   <div id="app" style="display:none">
     <div class="card notice"><b>Live mode:</b> database changes are synchronized automatically. <span id="realtimeStatus" class="live">Connecting to live updates…</span></div>
 
-    
     <div class="card unified-social-card" id="socialCard">
       <div class="platform-head">
         <div>
           <h2 style="margin:0">🌐 Social Accounts</h2>
-          <p style="margin:6px 0 0">Facebook, Instagram, LinkedIn and Google Business in one place. Open each platform's own agent workspace from here.</p>
+          <p style="margin:6px 0 0">Facebook, Instagram, LinkedIn and Google Business in one place. Open each platform's own workspace from here.</p>
         </div>
         <button class="muted" id="refreshSocialBtn" onclick="refreshUnifiedSocialAccounts()">↻ Check All Connections</button>
       </div>
@@ -204,7 +197,7 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
           <div class="platform-name">🔵 Facebook</div>
           <div id="facebookStatus" class="unified-social-status not-connected">Checking…</div>
           <div class="unified-social-actions">
-            <button class="muted" onclick="openPlatformMainPage('facebook')">🤖 Open Facebook Agent</button>
+            <button class="muted" onclick="switchMainTab('facebook')">🤖 Open Facebook Agent</button>
           </div>
         </div>
 
@@ -212,7 +205,7 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
           <div class="platform-name">📸 Instagram</div>
           <div id="instagramStatus" class="unified-social-status not-connected">Checking…</div>
           <div class="unified-social-actions">
-            <button class="muted" onclick="openPlatformMainPage('instagram')">🤖 Open Instagram Agent</button>
+            <button class="muted" onclick="switchMainTab('instagram')">🤖 Open Instagram Agent</button>
           </div>
         </div>
 
@@ -237,56 +230,31 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
         </div>
       </div>
 
-      <div class="meta-shared-connect" style="margin-top:12px;padding:11px 12px;border:1px solid #dbeafe;background:#eff6ff;border-radius:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-        <b style="margin-right:4px">🔵📸 Meta connection</b>
-        <span class="command-help" style="margin-right:auto">Facebook and Instagram use the same Meta authorization.</span>
+      <div class="meta-shared-connect">
+        <b>🔵📸 Meta connection</b>
+        <span class="command-help" style="margin-right:auto">One authorization controls both Facebook and Instagram.</span>
         <a id="metaConnect" class="primary" href="https://ivtwkyfiagouazopttlc.supabase.co/functions/v1/meta-oauth-callback-v2" style="display:inline-block;text-decoration:none">🔗 Connect / Reconnect Facebook + Instagram</a>
         <button class="muted" onclick="loadSocialConnections()">↻ Check Meta Status</button>
       </div>
     </div>
 
+
     <div class="main-nav-tabs">
-      <button class="main-nav-tab active" id="facebookTabBtn" onclick="switchMainTab('facebook')">🔵 Facebook</button>
-      <button class="main-nav-tab" id="instagramTabBtn" onclick="switchMainTab('instagram')">📸 Instagram</button>
-      <button class="main-nav-tab" id="linkedinTabBtn" onclick="switchMainTab('linkedin')">🔗 LinkedIn</button>
-      <button class="main-nav-tab" id="gbpTabBtn" onclick="switchMainTab('gbp')">📍 Google Business</button>
+      <button class="main-nav-tab active" id="mainAgentTabBtn" onclick="switchMainTab('agent')">🧠 Agent Intelligence & Content</button>
+      <button class="main-nav-tab" id="facebookMainTabBtn" onclick="switchMainTab('facebook')">🔵 Facebook</button>
+      <button class="main-nav-tab" id="instagramMainTabBtn" onclick="switchMainTab('instagram')">📸 Instagram</button>
+      <button class="main-nav-tab" id="socialOpsTabBtn" onclick="switchMainTab('social-ops')">🌐 Social Account Operations</button>
       <button class="main-nav-tab" id="growthTabBtn" onclick="switchMainTab('growth')">🎯 Growth Operations</button>
       <button class="main-nav-tab" id="interactionsTabBtn" onclick="switchMainTab('interactions')">💬 Interactions & Leads</button>
       <button class="main-nav-tab" id="financeTabBtn" onclick="switchMainTab('finance')">💼 Business & Finance</button>
+      <button class="main-nav-tab" id="linkedinTabBtn" onclick="switchMainTab('linkedin')">🔗 LinkedIn</button>
+      <button class="main-nav-tab" id="gbpTabBtn" onclick="switchMainTab('gbp')">📍 Google Business</button>
       <button class="main-nav-tab" id="websiteTabBtn" onclick="switchMainTab('website')">🌐 Website & SEO</button>
       <a href="/seo-control.html" style="display:inline-block;background:#087f5b;color:white;text-decoration:none;padding:10px 14px;border-radius:8px;font-weight:700;margin:6px 0;">🌐 SEO Control Center</a>
       <button class="main-nav-tab" id="whatsappTabBtn" onclick="switchMainTab('whatsapp')">💬 WhatsApp Operations</button>
     </div>
 
     <div id="agentMainPanel" class="main-tab-panel active">
-
-    <div class="card" id="platformWorkspaceHeading" style="border-left:4px solid #2563eb">
-      <div class="platform-head">
-        <div>
-          <h2 id="platformWorkspaceTitle" style="margin:0">🔵 Facebook Agent Workspace</h2>
-          <p id="platformWorkspaceSubtitle" style="margin:6px 0 0">Facebook autonomous intelligence, content generation, draft organization, approval, scheduling and publishing tools.</p>
-        </div>
-      </div>
-    </div>
-
-<div class="card agent-control" id="agentControl">
-      <div class="platform-head"><div><h2 style="margin:0">🤖 Autonomous Agent Control Center</h2><p style="margin:6px 0 0">Researches current tourism demand and prepares drafts for your approval. It never publishes autonomous drafts without your approval.</p></div><span id="agentStatus" class="pill">Loading…</span></div>
-      <div class="agent-grid">
-        <div class="agent-metric"><small>Last research run</small><b id="agentLastRun">—</b></div>
-        <div class="agent-metric"><small>Next scheduled check</small><b id="agentNextRun">—</b></div>
-        <div class="agent-metric"><small>Last opportunities</small><b id="agentOpportunities">—</b></div>
-        <div class="agent-metric"><small>Last drafts created</small><b id="agentDrafts">—</b></div>
-      </div>
-      <div class="agent-settings">
-        <div><label>Autonomous research</label><select id="agentEnabled"><option value="true">ON</option><option value="false">OFF</option></select></div>
-        <div><label>Total drafts per run (all enabled platforms)</label><input id="agentMaxDrafts" type="number" min="0" max="20" value="4"><small class="command-help">Example: 6 with Facebook + Instagram means 6 total drafts, usually balanced across both platforms.</small></div>
-        <div><label>Research interval</label><select id="agentInterval"><option value="1">Every 1 hour</option><option value="2">Every 2 hours</option><option value="3">Every 3 hours</option><option value="4">Every 4 hours</option><option value="6">Every 6 hours</option><option value="8">Every 8 hours</option><option value="12">Every 12 hours</option><option value="24">Every 24 hours</option></select></div>
-        <div><label>Platforms</label><select id="agentPlatforms"><option value="facebook,instagram">Facebook + Instagram</option><option value="facebook">Facebook only</option><option value="instagram">Instagram only</option></select></div>
-      </div>
-      <div class="agent-actions"><button class="primary" id="researchNowBtn" onclick="researchNow()">🔎 Research Now</button><button class="muted" onclick="saveAgentSettings()">💾 Save Agent Settings</button><button class="muted" onclick="loadAgentControl()">↻ Refresh Status</button></div>
-<p id="agentMessage" class="command-help"></p>
-    </div>
-
     <div class="card opp-card">
       <div class="platform-head">
         <div><h2 style="margin:0">🔭 Opportunity Research Engine</h2><p style="margin:6px 0 0">Scans current tourism signals, traveller problems and your real services, then identifies customer opportunities before content is generated.</p></div>
@@ -809,54 +777,8 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
       </div>
       <p id="intelUpdated" class="command-help"></p>
     </div>
-<div class="card">
-      <div class="platform-head">
-        <div><h2 id="platformTitle" style="margin:0">Facebook Content</h2><p id="platformSubtitle" style="margin:6px 0 0">Facebook-specific AI posts with independent approval and publishing.</p></div>
-      </div>
-      <div class="command-grid">
-        <div><label>How many posts?</label><input id="generateCount" type="number" min="1" max="20" value="1"></div>
-        <div><label>Product / service link (optional)</label><input id="productUrl" type="url" placeholder="https://www.dubaipremiertourism.com/..."></div>
-        <div><button class="primary" id="generatePlatformBtn">⚡ Generate Now</button></div>
-      </div>
-      <div class="command-help">No daily 5-post limit. Generate 1–20 posts per command and run the command again whenever you want. If you provide a Premier Express product link, the agent will read that page and create content specifically for it.</div>
-      <div id="instagramNotice" class="ig-note" style="display:none;margin-top:14px"><b>Instagram media:</b> Media is optional while preparing a draft. To publish on Instagram, upload an image or short video first. You can approve a text draft without media and publish it later after media is added.</div>
-    </div>
 
-    <div class="workflow-tabs">
-      <button class="workflow-tab active" id="queueTab" onclick="switchView('queue')">📝 Approval Queue</button>
-      <button class="workflow-tab" id="scheduledTab" onclick="switchView('scheduled')">📅 Scheduled</button>
-      <button class="workflow-tab" id="historyTab" onclick="switchView('history')">🕘 Publish History</button>
-      <button class="workflow-tab" id="deletedTab" onclick="switchView('deleted')">🗑 Deleted</button>
-    </div>
-
-
-    <div id="queueOrganizer" class="card" style="padding:14px;margin-bottom:12px">
-      <div class="platform-head">
-        <div>
-          <h3 style="margin:0">🧭 Draft Queue Organizer</h3>
-          <p style="margin:5px 0 0">Your existing draft cards stay below. Use these controls only to find the best drafts faster.</p>
-        </div>
-        <button class="muted" id="queueRankBtn" onclick="refreshQueueRanking()">↻ Refresh Ranking</button>
-      </div>
-      <div class="command-grid" style="grid-template-columns:1.3fr 1fr 1fr 1fr">
-        <div><label>Search drafts</label><input id="queueSearch" type="search" placeholder="Hook, product, audience…" oninput="queueOrganizerChanged()"></div>
-        <div><label>Product</label><select id="queueProduct" onchange="queueOrganizerChanged()"><option value="ALL">All products</option></select></div>
-        <div><label>Review priority</label><select id="queuePriority" onchange="queueOrganizerChanged()"><option value="ALL">All priorities</option><option value="HIGH">High first</option><option value="MEDIUM">Medium</option><option value="STANDARD">Standard</option><option value="DUPLICATE">High duplicate risk</option></select></div>
-        <div><label>Sort</label><select id="queueSort" onchange="queueOrganizerChanged()"><option value="PRIORITY">Best drafts first</option><option value="NEWEST">Newest first</option><option value="OLDEST">Oldest first</option><option value="PRODUCT">Product A–Z</option></select></div>
-      </div>
-      <div class="command-grid" style="grid-template-columns:1fr auto auto;align-items:end">
-        <div id="queueOrganizerSummary" class="command-help">Ranking loads automatically for the Approval Queue.</div>
-        <div><label>Cards per page</label><select id="queuePageSize" onchange="queueOrganizerChanged()"><option value="20">20</option><option value="30" selected>30</option><option value="50">50</option><option value="100">100</option></select></div>
-        <div style="display:flex;gap:7px"><button class="muted" id="queuePrevBtn" onclick="queuePageMove(-1)">← Previous</button><button class="muted" id="queueNextBtn" onclick="queuePageMove(1)">Next →</button></div>
-      </div>
-    </div>
-
-    <div class="stats">
-      <div class="card"><small>Total posts</small><div id="total" class="stat">0</div></div>
-      <div class="card"><small>Pending approval</small><div id="pending" class="stat">0</div></div>
-      <div class="card"><small>Published</small><div id="approved" class="stat">0</div></div>
-    </div>
-    <div id="posts"></div>
+    
     </div>
 
 
@@ -949,6 +871,86 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
       </div>
     </div>
 
+
+    
+    <div id="metaPlatformMainPanel" class="main-tab-panel">
+      <div class="card platform-workspace-head">
+        <div class="platform-head">
+          <div>
+            <h2 id="metaWorkspaceTitle" style="margin:0">🔵 Facebook Agent</h2>
+            <p id="metaWorkspaceSubtitle" style="margin:6px 0 0">Facebook-specific autonomous control, content, draft organization, approval, scheduling and publishing.</p>
+          </div>
+          <button class="muted" onclick="switchMainTab(activePlatform==='instagram'?'instagram':'facebook')">↻ Refresh Workspace</button>
+        </div>
+      </div>
+<div class="card agent-control" id="agentControl">
+      <div class="platform-head"><div><h2 style="margin:0">🤖 Autonomous Agent Control Center</h2><p style="margin:6px 0 0">Researches current tourism demand and prepares drafts for your approval. It never publishes autonomous drafts without your approval.</p></div><span id="agentStatus" class="pill">Loading…</span></div>
+      <div class="agent-grid">
+        <div class="agent-metric"><small>Last research run</small><b id="agentLastRun">—</b></div>
+        <div class="agent-metric"><small>Next scheduled check</small><b id="agentNextRun">—</b></div>
+        <div class="agent-metric"><small>Last opportunities</small><b id="agentOpportunities">—</b></div>
+        <div class="agent-metric"><small>Last drafts created</small><b id="agentDrafts">—</b></div>
+      </div>
+      <div class="agent-settings">
+        <div><label>Autonomous research</label><select id="agentEnabled"><option value="true">ON</option><option value="false">OFF</option></select></div>
+        <div><label>Total drafts per run (all enabled platforms)</label><input id="agentMaxDrafts" type="number" min="0" max="20" value="4"><small class="command-help">Example: 6 with Facebook + Instagram means 6 total drafts, usually balanced across both platforms.</small></div>
+        <div><label>Research interval</label><select id="agentInterval"><option value="1">Every 1 hour</option><option value="2">Every 2 hours</option><option value="3">Every 3 hours</option><option value="4">Every 4 hours</option><option value="6">Every 6 hours</option><option value="8">Every 8 hours</option><option value="12">Every 12 hours</option><option value="24">Every 24 hours</option></select></div>
+        <div><label>Platforms</label><select id="agentPlatforms"><option value="facebook,instagram">Facebook + Instagram</option><option value="facebook">Facebook only</option><option value="instagram">Instagram only</option></select></div>
+      </div>
+      <div class="agent-actions"><button class="primary" id="researchNowBtn" onclick="researchNow()">🔎 Research Now</button><button class="muted" onclick="saveAgentSettings()">💾 Save Agent Settings</button><button class="muted" onclick="loadAgentControl()">↻ Refresh Status</button></div>
+      <p id="agentMessage" class="command-help"></p>
+    </div>
+
+    
+<div class="card">
+      <div class="platform-head">
+        <div><h2 id="platformTitle" style="margin:0">Facebook Content</h2><p id="platformSubtitle" style="margin:6px 0 0">Facebook-specific AI posts with independent approval and publishing.</p></div>
+      </div>
+      <div class="command-grid">
+        <div><label>How many posts?</label><input id="generateCount" type="number" min="1" max="20" value="1"></div>
+        <div><label>Product / service link (optional)</label><input id="productUrl" type="url" placeholder="https://www.dubaipremiertourism.com/..."></div>
+        <div><button class="primary" id="generatePlatformBtn">⚡ Generate Now</button></div>
+      </div>
+      <div class="command-help">No daily 5-post limit. Generate 1–20 posts per command and run the command again whenever you want. If you provide a Premier Express product link, the agent will read that page and create content specifically for it.</div>
+      <div id="instagramNotice" class="ig-note" style="display:none;margin-top:14px"><b>Instagram media:</b> Media is optional while preparing a draft. To publish on Instagram, upload an image or short video first. You can approve a text draft without media and publish it later after media is added.</div>
+    </div>
+
+    <div class="workflow-tabs">
+      <button class="workflow-tab active" id="queueTab" onclick="switchView('queue')">📝 Approval Queue</button>
+      <button class="workflow-tab" id="scheduledTab" onclick="switchView('scheduled')">📅 Scheduled</button>
+      <button class="workflow-tab" id="historyTab" onclick="switchView('history')">🕘 Publish History</button>
+      <button class="workflow-tab" id="deletedTab" onclick="switchView('deleted')">🗑 Deleted</button>
+    </div>
+
+
+    <div id="queueOrganizer" class="card" style="padding:14px;margin-bottom:12px">
+      <div class="platform-head">
+        <div>
+          <h3 style="margin:0">🧭 Draft Queue Organizer</h3>
+          <p style="margin:5px 0 0">Your existing draft cards stay below. Use these controls only to find the best drafts faster.</p>
+        </div>
+        <button class="muted" id="queueRankBtn" onclick="refreshQueueRanking()">↻ Refresh Ranking</button>
+      </div>
+      <div class="command-grid" style="grid-template-columns:1.3fr 1fr 1fr 1fr">
+        <div><label>Search drafts</label><input id="queueSearch" type="search" placeholder="Hook, product, audience…" oninput="queueOrganizerChanged()"></div>
+        <div><label>Product</label><select id="queueProduct" onchange="queueOrganizerChanged()"><option value="ALL">All products</option></select></div>
+        <div><label>Review priority</label><select id="queuePriority" onchange="queueOrganizerChanged()"><option value="ALL">All priorities</option><option value="HIGH">High first</option><option value="MEDIUM">Medium</option><option value="STANDARD">Standard</option><option value="DUPLICATE">High duplicate risk</option></select></div>
+        <div><label>Sort</label><select id="queueSort" onchange="queueOrganizerChanged()"><option value="PRIORITY">Best drafts first</option><option value="NEWEST">Newest first</option><option value="OLDEST">Oldest first</option><option value="PRODUCT">Product A–Z</option></select></div>
+      </div>
+      <div class="command-grid" style="grid-template-columns:1fr auto auto;align-items:end">
+        <div id="queueOrganizerSummary" class="command-help">Ranking loads automatically for the Approval Queue.</div>
+        <div><label>Cards per page</label><select id="queuePageSize" onchange="queueOrganizerChanged()"><option value="20">20</option><option value="30" selected>30</option><option value="50">50</option><option value="100">100</option></select></div>
+        <div style="display:flex;gap:7px"><button class="muted" id="queuePrevBtn" onclick="queuePageMove(-1)">← Previous</button><button class="muted" id="queueNextBtn" onclick="queuePageMove(1)">Next →</button></div>
+      </div>
+    </div>
+
+    <div class="stats">
+      <div class="card"><small>Total posts</small><div id="total" class="stat">0</div></div>
+      <div class="card"><small>Pending approval</small><div id="pending" class="stat">0</div></div>
+      <div class="card"><small>Published</small><div id="approved" class="stat">0</div></div>
+    </div>
+    <div id="posts"></div>
+    </div>
 
     <div id="linkedinMainPanel" class="main-tab-panel">
       <div class="card linkedin-hub">
@@ -4864,18 +4866,6 @@ function moveCatalogSeoPage(delta){
 }
 
 
-function openPlatformMainPage(platform){
-  switchMainTab(platform==="instagram"?"instagram":"facebook");
-  setTimeout(()=>{
-    const el=document.getElementById("platformWorkspaceHeading");
-    if(el)el.scrollIntoView({behavior:"smooth",block:"start"});
-  },80);
-}
-
-function openPlatformAgent(platform){
-  openPlatformMainPage(platform);
-}
-
 async function refreshLinkedInTopStatus(){
   const top=$("linkedinTopStatus"),btn=$("linkedinTopConnectBtn");
   if(top)top.textContent="Checking approval / connection…";
@@ -4897,7 +4887,7 @@ async function refreshLinkedInTopStatus(){
     top.textContent="🟡 API approved • OAuth not connected";
     top.className="unified-social-status not-connected";
   }else{
-    top.textContent=`⏳ Company verified • Community API ${approved?"approved":"pending"} • Credentials ${configured?"ready":"missing"}`;
+    top.textContent=`⏳ Company verified • Community API pending • Credentials ${configured?"ready":"missing"}`;
     top.className="unified-social-status not-connected";
   }
   if(btn){
@@ -4906,7 +4896,6 @@ async function refreshLinkedInTopStatus(){
   }
   return j;
 }
-
 function refreshGoogleTopStatus(){
   const top=$("googleTopStatus"),btn=$("googleTopConnectBtn");
   if(top){
@@ -4918,11 +4907,9 @@ function refreshGoogleTopStatus(){
     btn.title="Connect will be enabled after Google Business Profile API access is approved.";
   }
 }
-
 function connectGoogleBusinessFromTop(){
-  alert("Google Business Profile API access is still pending. Connect / Reconnect will be enabled here automatically when the approved OAuth connection is added.");
+  alert("Google Business Profile API access is still pending. Connect / Reconnect will be enabled here after approval.");
 }
-
 async function refreshUnifiedSocialAccounts(){
   await loadSocialConnections();
   await refreshLinkedInTopStatus();
@@ -4930,9 +4917,11 @@ async function refreshUnifiedSocialAccounts(){
 }
 
 function switchMainTab(tab){
+  const agent=tab==="agent";
   const facebook=tab==="facebook";
   const instagram=tab==="instagram";
-  const platform=facebook||instagram;
+  const metaPlatform=facebook||instagram;
+  const socialOps=tab==="social-ops";
   const growth=tab==="growth";
   const interactions=tab==="interactions";
   const finance=tab==="finance";
@@ -4941,10 +4930,9 @@ function switchMainTab(tab){
   const website=tab==="website";
   const whatsapp=tab==="whatsapp";
 
-  // Facebook and Instagram now have their own main navigation buttons,
-  // while safely reusing the existing proven platform content engine.
-  $("agentMainPanel").classList.toggle("active",platform);
-  $("socialOpsPanel").classList.remove("active");
+  $("agentMainPanel").classList.toggle("active",agent);
+  $("metaPlatformMainPanel").classList.toggle("active",metaPlatform);
+  $("socialOpsPanel").classList.toggle("active",socialOps);
   $("growthMainPanel").classList.toggle("active",growth);
   $("interactionsMainPanel").classList.toggle("active",interactions);
   $("financeMainPanel").classList.toggle("active",finance);
@@ -4953,8 +4941,10 @@ function switchMainTab(tab){
   $("websiteMainPanel").classList.toggle("active",website);
   $("whatsappMainPanel").classList.toggle("active",whatsapp);
 
-  $("facebookTabBtn").classList.toggle("active",facebook);
-  $("instagramTabBtn").classList.toggle("active",instagram);
+  $("mainAgentTabBtn").classList.toggle("active",agent);
+  $("facebookMainTabBtn").classList.toggle("active",facebook);
+  $("instagramMainTabBtn").classList.toggle("active",instagram);
+  $("socialOpsTabBtn").classList.toggle("active",socialOps);
   $("growthTabBtn").classList.toggle("active",growth);
   $("interactionsTabBtn").classList.toggle("active",interactions);
   $("financeTabBtn").classList.toggle("active",finance);
@@ -4963,15 +4953,16 @@ function switchMainTab(tab){
   $("websiteTabBtn").classList.toggle("active",website);
   $("whatsappTabBtn").classList.toggle("active",whatsapp);
 
-  if(platform){
-    switchPlatform(facebook?"facebook":"instagram");
-    const title=$("platformWorkspaceTitle"),sub=$("platformWorkspaceSubtitle");
-    if(title)title.textContent=facebook?"🔵 Facebook Agent Workspace":"📸 Instagram Agent Workspace";
-    if(sub)sub.textContent=facebook
-      ?"Facebook autonomous intelligence, content generation, Draft Queue Organizer, approval, scheduling and publishing tools."
-      :"Instagram autonomous intelligence, content generation, Draft Queue Organizer, media workflow, approval, scheduling and publishing tools.";
+  if(metaPlatform){
+    switchPlatform(instagram?"instagram":"facebook");
+    const t=$("metaWorkspaceTitle"),s=$("metaWorkspaceSubtitle");
+    if(t)t.textContent=facebook?"🔵 Facebook Agent":"📸 Instagram Agent";
+    if(s)s.textContent=facebook
+      ?"Facebook-specific Autonomous Agent Control Center, Facebook Content, Draft Queue Organizer, approval, scheduling and publishing."
+      :"Instagram-specific Autonomous Agent Control Center, Instagram Content, Draft Queue Organizer, media workflow, approval, scheduling and publishing.";
   }
 
+  if(socialOps)loadSocialAccountOperations();
   if(growth&&growthCycleRows.length===0)buildGrowthCycle(false);
   if(growth&&!growthLearningData)loadGrowthLearning();
   if(growth&&!engagementIntelData)loadEngagementIntel();
