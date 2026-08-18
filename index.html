@@ -558,6 +558,7 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
       <div class="lead-toolbar">
         <input id="aqSearch" placeholder="Search product, audience, hook, campaign" oninput="renderApprovalQueueIntelligence()">
         <select id="aqFilter" onchange="renderApprovalQueueIntelligence()" style="padding:10px;border:1px solid #ccd1d9;border-radius:8px">
+          <option value="SHORTLIST" selected>Agent shortlist</option>
           <option value="ALL">All pending</option>
           <option value="HIGH">High priority</option>
           <option value="CAMPAIGN">Campaign-linked</option>
@@ -2166,7 +2167,7 @@ async function loadApprovalQueueIntelligence(){
     $("aqDuplicates").textContent=s.high_duplicate_risk??0;
     $("aqCampaigns").textContent=s.campaign_linked??0;
     const bp=s.by_platform||{};
-    $("approvalIntelBanner").innerHTML=`<b>Unified four-channel approval:</b> Facebook ${esc(bp.facebook??0)} • Instagram ${esc(bp.instagram??0)} • LinkedIn ${esc(bp.linkedin??0)} • Google Business ${esc(bp.google_business_profile??0)}.<br><b>Priority:</b> ${esc(s.high_priority??0)} top-tier, ${esc(s.medium_priority??0)} medium-tier and ${esc(s.high_duplicate_risk??0)} high duplicate-risk draft(s). The agent prepared and ranked them automatically; final approval remains yours.`;
+    $("approvalIntelBanner").innerHTML=`<b>Unified four-channel approval:</b> Facebook ${esc(bp.facebook??0)} • Instagram ${esc(bp.instagram??0)} • LinkedIn ${esc(bp.linkedin??0)} • Google Business ${esc(bp.google_business_profile??0)}.<br><b>Agent shortlist:</b> ${esc(s.shortlisted??0)} strongest low-duplication drafts across the four channels. The full ${esc(s.total??0)}-draft backlog remains available under “All pending”; final approval remains yours.`;
     renderApprovalQueueIntelligence();
   }catch(e){
     $("approvalIntelBanner").textContent="Approval queue analysis failed: "+(e?.message||String(e));
@@ -2186,6 +2187,7 @@ function renderApprovalQueueIntelligence(){
   let rows=[...(approvalQueueIntelData.rows||[])];
 
   if(platform!=="ALL")rows=rows.filter(x=>x.primary_platform===platform);
+  if(filter==="SHORTLIST")rows=rows.filter(x=>x.shortlisted===true);
   if(filter==="HIGH")rows=rows.filter(x=>x.review_tier==="HIGH");
   if(filter==="CAMPAIGN")rows=rows.filter(x=>x.campaign_id);
   if(filter==="DUPLICATE")rows=rows.filter(x=>x.duplicate_risk==="high");
@@ -2205,7 +2207,7 @@ function renderApprovalQueueIntelligence(){
     return `<div class="campaign-item">
       <div class="platform-head">
         <h3 style="margin:0">#${i+1} • Post ${esc(x.post_number??"—")} • ${esc(x.matched_product||"Unmapped")}</h3>
-        <span class="opp-tag">${esc(x.review_tier||"STANDARD")} • Score ${esc(score)}/100</span>
+        <span class="opp-tag">${x.shortlisted?"AGENT SHORTLIST • ":""}${esc(x.review_tier||"STANDARD")} • Score ${esc(score)}/100</span>
       </div>
       <div class="opp-meta">
         <span class="opp-tag">${esc(x.primary_platform||"")}</span>
