@@ -151,6 +151,20 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
 @media(max-width:1000px){.catalog-seo-summary{grid-template-columns:repeat(3,1fr)}.catalog-seo-toolbar{grid-template-columns:1fr 1fr}}
 @media(max-width:700px){.catalog-seo-summary{grid-template-columns:1fr 1fr}.catalog-seo-toolbar,.catalog-seo-grid{grid-template-columns:1fr}}
 
+
+/* TEST UI: unified social account strip + platform agent launchers */
+.unified-social-card{border-left:4px solid #2563eb}
+.unified-social-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:12px}
+.unified-social-item{border:1px solid #dbeafe;background:#fff;border-radius:12px;padding:12px;min-width:0}
+.unified-social-item .platform-name{display:flex;align-items:center;gap:7px;font-weight:800;margin-bottom:8px}
+.unified-social-status{font-size:12px;line-height:1.45;min-height:36px;color:#64748b}
+.unified-social-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:9px}
+.unified-social-actions button,.unified-social-actions a{font-size:11px;padding:7px 9px;margin:0}
+.agent-platform-launchers{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;padding-top:12px;border-top:1px solid #e5e7eb}
+.agent-platform-launchers button{margin:0}
+@media(max-width:950px){.unified-social-grid{grid-template-columns:1fr 1fr}}
+@media(max-width:560px){.unified-social-grid{grid-template-columns:1fr}}
+
 </style>
 </head>
 <body>
@@ -169,6 +183,59 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
   <div id="app" style="display:none">
     <div class="card notice"><b>Live mode:</b> database changes are synchronized automatically. <span id="realtimeStatus" class="live">Connecting to live updates…</span></div>
 
+    <div class="card unified-social-card" id="socialCard">
+      <div class="platform-head">
+        <div>
+          <h2 style="margin:0">🌐 Social Accounts</h2>
+          <p style="margin:6px 0 0">Facebook, Instagram, LinkedIn and Google in one place. Connection status and account actions are shown here before the rest of the dashboard.</p>
+        </div>
+        <button class="muted" id="refreshSocialBtn" onclick="refreshUnifiedSocialAccounts()">↻ Check All Connections</button>
+      </div>
+
+      <div class="unified-social-grid">
+        <div class="unified-social-item">
+          <div class="platform-name">🔵 Facebook</div>
+          <div id="facebookStatus" class="unified-social-status not-connected">Checking…</div>
+          <div class="unified-social-actions">
+            <a id="metaConnect" class="primary" href="https://ivtwkyfiagouazopttlc.supabase.co/functions/v1/meta-oauth-callback-v2" style="display:inline-block;text-decoration:none">🔗 Connect / Reconnect</a>
+            <button class="muted" onclick="loadSocialConnections()">↻ Status</button>
+            <button class="muted" onclick="openPlatformAgent('facebook')">🤖 Agent</button>
+          </div>
+        </div>
+
+        <div class="unified-social-item">
+          <div class="platform-name">📸 Instagram</div>
+          <div id="instagramStatus" class="unified-social-status not-connected">Checking…</div>
+          <div class="unified-social-actions">
+            <a class="primary" href="https://ivtwkyfiagouazopttlc.supabase.co/functions/v1/meta-oauth-callback-v2" style="display:inline-block;text-decoration:none">🔗 Connect / Reconnect</a>
+            <button class="muted" onclick="loadSocialConnections()">↻ Status</button>
+            <button class="muted" onclick="openPlatformAgent('instagram')">🤖 Agent</button>
+          </div>
+        </div>
+
+        <div class="unified-social-item">
+          <div class="platform-name">🔗 LinkedIn</div>
+          <div id="linkedinTopStatus" class="unified-social-status not-connected">Checking approval / connection…</div>
+          <div class="unified-social-actions">
+            <button class="primary" id="linkedinTopConnectBtn" onclick="connectLinkedIn()">🔗 Connect / Reconnect</button>
+            <button class="muted" onclick="refreshLinkedInTopStatus()">↻ Status</button>
+            <button class="muted" onclick="switchMainTab('linkedin')">🤖 Agent</button>
+          </div>
+        </div>
+
+        <div class="unified-social-item">
+          <div class="platform-name">📍 Google Business</div>
+          <div id="googleTopStatus" class="unified-social-status not-connected">API approval pending • Drafting ready</div>
+          <div class="unified-social-actions">
+            <button class="primary" id="googleTopConnectBtn" onclick="connectGoogleBusinessFromTop()" disabled>🔗 Connect / Reconnect</button>
+            <button class="muted" onclick="refreshGoogleTopStatus()">↻ Status</button>
+            <button class="muted" onclick="switchMainTab('gbp')">🤖 Agent</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+
     <div class="main-nav-tabs">
       <button class="main-nav-tab active" id="mainAgentTabBtn" onclick="switchMainTab('agent')">🧠 Agent Intelligence & Content</button>
       <button class="main-nav-tab" id="socialOpsTabBtn" onclick="switchMainTab('social-ops')">🌐 Social Account Operations</button>
@@ -178,9 +245,8 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
       <button class="main-nav-tab" id="linkedinTabBtn" onclick="switchMainTab('linkedin')">🔗 LinkedIn</button>
       <button class="main-nav-tab" id="gbpTabBtn" onclick="switchMainTab('gbp')">📍 Google Business</button>
       <button class="main-nav-tab" id="websiteTabBtn" onclick="switchMainTab('website')">🌐 Website & SEO</button>
-
       <a href="/seo-control.html"
-   style="display:inline-block;background:#e4e5e9;color:#182b49;text-decoration:none;
+   style="display:inline-block;background:#087f5b;color:white;text-decoration:none;
    padding:10px 14px;border-radius:8px;font-weight:700;margin:6px 0;">
   🌐 SEO Control Center
 </a>
@@ -188,19 +254,7 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
     </div>
 
     <div id="agentMainPanel" class="main-tab-panel active">
-    <div class="card" id="socialCard">
-      <h2>Social Accounts</h2>
-      <div class="social-grid">
-        <div class="social-item"><b>🔵 Facebook</b><span id="facebookStatus" class="not-connected">Not connected</span></div>
-        <div class="social-item"><b>📸 Instagram</b><span id="instagramStatus" class="not-connected">Not connected</span></div>
-      </div>
-      <div style="margin-top:14px">
-        <a id="metaConnect" class="primary" href="https://ivtwkyfiagouazopttlc.supabase.co/functions/v1/meta-oauth-callback-v2" style="display:inline-block;text-decoration:none">🔗 Connect / Reconnect Meta</a>
-        <button class="muted" id="refreshSocialBtn">↻ Check connection</button>
-      </div>
-    </div>
-
-    <div class="card agent-control" id="agentControl">
+<div class="card agent-control" id="agentControl">
       <div class="platform-head"><div><h2 style="margin:0">🤖 Autonomous Agent Control Center</h2><p style="margin:6px 0 0">Researches current tourism demand and prepares drafts for your approval. It never publishes autonomous drafts without your approval.</p></div><span id="agentStatus" class="pill">Loading…</span></div>
       <div class="agent-grid">
         <div class="agent-metric"><small>Last research run</small><b id="agentLastRun">—</b></div>
@@ -215,6 +269,15 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
         <div><label>Platforms</label><select id="agentPlatforms"><option value="facebook,instagram">Facebook + Instagram</option><option value="facebook">Facebook only</option><option value="instagram">Instagram only</option></select></div>
       </div>
       <div class="agent-actions"><button class="primary" id="researchNowBtn" onclick="researchNow()">🔎 Research Now</button><button class="muted" onclick="saveAgentSettings()">💾 Save Agent Settings</button><button class="muted" onclick="loadAgentControl()">↻ Refresh Status</button></div>
+
+      <div class="agent-platform-launchers">
+        <b style="width:100%;font-size:12px;color:#64748b">Platform Autonomous Agent Workspaces</b>
+        <button class="muted" onclick="openPlatformAgent('facebook')">🔵 Facebook Autonomous Agent</button>
+        <button class="muted" onclick="openPlatformAgent('instagram')">📸 Instagram Autonomous Agent</button>
+        <button class="muted" onclick="switchMainTab('linkedin')">🔗 LinkedIn Autonomous Agent</button>
+        <button class="muted" onclick="switchMainTab('gbp')">📍 Google Autonomous Agent</button>
+      </div>
+
       <p id="agentMessage" class="command-help"></p>
     </div>
 
@@ -4552,9 +4615,9 @@ async function checkLinkedInConnection(){
     const conn=j.connection;
     const configured=!!j.configured;
     const connected=conn?.connection_status==="connected";
-    $("linkedinConnectionStatus").innerHTML=`<b>API review:</b> PENDING • <b>Credentials:</b> ${configured?"READY":"MISSING"} • <b>OAuth:</b> ${connected?"CONNECTED":"NOT CONNECTED"} • <b>Publishing:</b> DISABLED`;
+    $("linkedinConnectionStatus").innerHTML=`<b>API review:</b> ${j.community_management_approved?"APPROVED":"PENDING"} • <b>Credentials:</b> ${configured?"READY":"MISSING"} • <b>OAuth:</b> ${connected?"CONNECTED":"NOT CONNECTED"} • <b>Publishing:</b> ${j.community_management_approved&&connected?"READY AFTER GOVERNANCE":"DISABLED"}`;
     const btn=$("linkedinConnectBtn");
-    if(btn){btn.disabled=true;btn.title="Enable after LinkedIn Community Management API approval is confirmed.";}
+    if(btn){btn.disabled=!j.community_management_approved;btn.title=j.community_management_approved?"Connect or reconnect LinkedIn":"Enable after LinkedIn Community Management API approval is confirmed.";}
     return j;
   }catch(e){
     $("linkedinConnectionStatus").textContent="LinkedIn readiness error: "+(e?.message||String(e));
@@ -4801,6 +4864,69 @@ function moveCatalogSeoPage(delta){
   renderFullCatalogSeo();
 }
 
+
+function openPlatformAgent(platform){
+  switchMainTab("social-ops");
+  setTimeout(()=>{
+    if(typeof switchPlatform==="function")switchPlatform(platform);
+    const el=document.getElementById("platformTitle");
+    if(el)el.scrollIntoView({behavior:"smooth",block:"start"});
+  },80);
+}
+
+async function refreshLinkedInTopStatus(){
+  const top=$("linkedinTopStatus"),btn=$("linkedinTopConnectBtn");
+  if(top)top.textContent="Checking approval / connection…";
+  const j=await checkLinkedInConnection();
+  if(!top)return j;
+  if(!j){
+    top.textContent="LinkedIn status unavailable";
+    top.className="unified-social-status not-connected";
+    if(btn)btn.disabled=true;
+    return null;
+  }
+  const connected=j.connection?.connection_status==="connected";
+  const approved=!!j.community_management_approved;
+  const configured=!!j.configured;
+  if(approved&&connected){
+    top.textContent="🟢 Connected • API approved";
+    top.className="unified-social-status connected";
+  }else if(approved){
+    top.textContent="🟡 API approved • OAuth not connected";
+    top.className="unified-social-status not-connected";
+  }else{
+    top.textContent=`⏳ Company verified • Community API ${approved?"approved":"pending"} • Credentials ${configured?"ready":"missing"}`;
+    top.className="unified-social-status not-connected";
+  }
+  if(btn){
+    btn.disabled=!approved;
+    btn.title=approved?"Connect or reconnect LinkedIn":"Available after Community Management API approval";
+  }
+  return j;
+}
+
+function refreshGoogleTopStatus(){
+  const top=$("googleTopStatus"),btn=$("googleTopConnectBtn");
+  if(top){
+    top.textContent="⏳ Business Profile API approval pending • Drafting ready • Publishing disabled";
+    top.className="unified-social-status not-connected";
+  }
+  if(btn){
+    btn.disabled=true;
+    btn.title="Connect will be enabled after Google Business Profile API access is approved.";
+  }
+}
+
+function connectGoogleBusinessFromTop(){
+  alert("Google Business Profile API access is still pending. Connect / Reconnect will be enabled here automatically when the approved OAuth connection is added.");
+}
+
+async function refreshUnifiedSocialAccounts(){
+  await loadSocialConnections();
+  await refreshLinkedInTopStatus();
+  refreshGoogleTopStatus();
+}
+
 function switchMainTab(tab){
   const agent=tab==="agent",social=tab==="social-ops",growth=tab==="growth",interactions=tab==="interactions",finance=tab==="finance",linkedin=tab==="linkedin",gbp=tab==="gbp",website=tab==="website",whatsapp=tab==="whatsapp";
   $("agentMainPanel").classList.toggle("active",agent);
@@ -4880,12 +5006,12 @@ async function loadSocialAccountOperations(){
 
 async function loadSocialConnections(){const fb=$("facebookStatus"),ig=$("instagramStatus");const {data,error}=await sb.from("social_connections").select("platform,account_name,connection_status,last_error").in("platform",["facebook","instagram"]);if(error){fb.textContent=ig.textContent="Connection status unavailable";return;}const rows=data||[];for(const [platform,el] of [["facebook",fb],["instagram",ig]]){const r=rows.find(x=>x.platform===platform);if(r?.connection_status==="connected"){el.textContent="🟢 Connected"+(r.account_name?" — "+r.account_name:"");el.className="connected";}else if(r?.connection_status==="error"){el.textContent="🔴 Reconnect required"+(r.last_error?" — "+r.last_error:"");el.className="not-connected";}else{el.textContent="Not connected";el.className="not-connected";}}}
 async function subscribeRealtime(){if(realtimeChannel)await sb.removeChannel(realtimeChannel);realtimeChannel=sb.channel("premier-platform-tabs-live").on("postgres_changes",{event:"*",schema:"public",table:"content_posts"},()=>renderPosts()).on("postgres_changes",{event:"*",schema:"public",table:"social_connections"},()=>loadSocialConnections()).subscribe(status=>{$("realtimeStatus").textContent=status==="SUBSCRIBED"?"● Live updates connected":status==="CHANNEL_ERROR"?"Live connection error — retrying…":"Live status: "+status;});}
-async function enterApp(){if(appStarting)return;appStarting=true;try{$("authCard").style.display="none";$("app").style.display="block";$("toolbar").style.display="block";await renderPosts();await loadSocialConnections();await loadAgentControl();await loadIntelligenceBrief();await subscribeRealtime();}finally{appStarting=false;}}
+async function enterApp(){if(appStarting)return;appStarting=true;try{$("authCard").style.display="none";$("app").style.display="block";$("toolbar").style.display="block";await renderPosts();await refreshUnifiedSocialAccounts();await loadAgentControl();await loadIntelligenceBrief();await subscribeRealtime();}finally{appStarting=false;}}
 async function leaveApp(){if(realtimeChannel){await sb.removeChannel(realtimeChannel);realtimeChannel=null;}$("app").style.display="none";$("toolbar").style.display="none";$("authCard").style.display="block";}
 async function logout(){await sb.auth.signOut();await leaveApp();$("authMsg").textContent="Signed out.";}
 $("signinBtn").onclick=async()=>{const email=$("email").value.trim(),password=$("password").value;if(!email||!password){$("authMsg").textContent="Please enter your email and password.";return;}$("signinBtn").disabled=true;$("authMsg").textContent="Signing in…";const {error}=await sb.auth.signInWithPassword({email,password});$("signinBtn").disabled=false;$("authMsg").textContent=error?error.message:"Signed in.";};
 $("signupBtn").onclick=async()=>{const email=$("email").value.trim(),password=$("password").value;if(!email||!password){$("authMsg").textContent="Please enter your email and password.";return;}const {data,error}=await sb.auth.signUp({email,password});$("authMsg").textContent=error?error.message:(data.session?"Account created and signed in.":"Account created. Check your email, then sign in.");};
-$("generatePlatformBtn").onclick=generatePlatform;$("logoutBtn").onclick=logout;$("refreshSocialBtn").onclick=loadSocialConnections;
+$("generatePlatformBtn").onclick=generatePlatform;$("logoutBtn").onclick=logout;
 sb.auth.onAuthStateChange((event,session)=>{if(session)enterApp();else leaveApp();});sb.auth.getSession().then(({data})=>{if(data.session)enterApp();});
 </script>
 </body>
