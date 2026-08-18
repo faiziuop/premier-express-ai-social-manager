@@ -32,6 +32,9 @@
 .synonym{font-size:11px;border:1px solid #dbeafe;background:#eff6ff;color:#1e3a8a;border-radius:999px;padding:3px 7px}
 .mapping-pending{font-size:12px;border:1px solid #fde68a;background:#fffbeb;color:#92400e;border-radius:8px;padding:8px;margin-top:8px}
 .mapping-proven{font-size:12px;border:1px solid #86efac;background:#f0fdf4;color:#166534;border-radius:8px;padding:8px;margin-top:8px}
+.comparison{font-size:12px;border:1px solid #bfdbfe;background:#eff6ff;color:#1e3a8a;border-radius:8px;padding:9px;margin-top:8px;line-height:1.5}
+.comparison.waiting{border-color:#fde68a;background:#fffbeb;color:#92400e}
+button:disabled{cursor:not-allowed;opacity:.55}
 @media(max-width:900px){.execution-grid{grid-template-columns:1fr 1fr}}
 @media(max-width:560px){.execution-grid,.keyphrase-grid{grid-template-columns:1fr}.keyphrase-group.primary{grid-column:auto}}
 
@@ -156,9 +159,17 @@ function keyphraseArchitecture(p){
   const status=String(firstValue(src.mapping_status,p.keyphrase_mapping_status,p.yoast_mapping_status,"PENDING_MAPPING")).toUpperCase();
   return{focus,related,status,hasData:!!focus.keyphrase||related.some(x=>x.keyphrase)}
 }
+function keyphraseReview(p){
+  const review=p?.evidence?.keyphrase_architecture||{};
+  const k=keyphraseArchitecture(p);
+  const complete=!!k.focus.keyphrase&&k.focus.synonyms.length>=4&&k.related.length===4&&k.related.every(x=>!!x.keyphrase&&x.synonyms.length>=4);
+  const reviewed=String(review.source||"")==="LIVE_YOAST_EVIDENCE_COMPARISON_V2"&&["KEEP","COMPLETE","REPLACE"].includes(String(review.decision||"").toUpperCase());
+  const proven=["PROVEN","VERIFIED","MAPPED"].includes(k.status);
+  return{review,k,complete,reviewed,proven,approvalReady:reviewed&&complete&&proven}
+}
 function synonymHtml(values){return values.length?`<div class="synonyms">${values.map(x=>`<span class="synonym">${esc(x)}</span>`).join("")}</div>`:'<div class="note" style="margin-top:6px">Synonyms awaiting researched proposal data.</div>'}
 function keyphraseHtml(p){
-  const k=keyphraseArchitecture(p),proven=["PROVEN","VERIFIED","MAPPED"].includes(k.status);
+  const reviewState=keyphraseReview(p),k=reviewState.k,proven=reviewState.proven,review=reviewState.review;
   return `<div class="keyphrase-panel">
     <div class="keyphrase-head"><b>🔑 Yoast Premium keyphrase architecture</b><span class="tag">${esc(proven?"MAPPING PROVEN":"READ-ONLY MAPPING")}</span></div>
     <div class="keyphrase-grid">
@@ -166,13 +177,15 @@ function keyphraseHtml(p){
       ${k.related.map(x=>`<div class="keyphrase-group"><small>Related Keyphrase ${x.index}</small><b>${esc(x.keyphrase||"Awaiting researched keyphrase")}</b>${synonymHtml(x.synonyms)}</div>`).join("")}
     </div>
     <div class="${proven?"mapping-proven":"mapping-pending"}">${proven?"Exact Yoast Premium storage mapping verified. These fields may enter the governed approval → before-state → dry-run → write → verification lifecycle.":"Read-only discovery is still required for Yoast Premium synonyms and related-keyphrase storage. No write is permitted for unproven fields."}</div>
+    ${reviewState.reviewed?`<div class="comparison"><b>Live Yoast decision: ${esc(String(review.decision).toUpperCase())}</b><br>${esc(review.reason||"Evidence comparison completed.")}<br><span class="note">Objective: improve relevant organic visibility • Ranking guarantee: none • Human approval required</span></div>`:`<div class="comparison waiting"><b>Approval locked:</b> awaiting the autonomous live-Yoast comparison. The worker will decide whether to KEEP, COMPLETE or REPLACE the existing architecture.</div>`}
+    ${reviewState.reviewed&&!reviewState.complete?`<div class="mapping-pending"><b>Approval locked:</b> the reviewed architecture is incomplete.</div>`:""}
   </div>`
 }
 function renderProposals(){
   const rows=seoData.proposals||[];
   $("proposalList").innerHTML=rows.length?rows.map(p=>{
     const pending=p.status==="PENDING_APPROVAL",approved=p.status==="APPROVED",phase=p.control_phase||p.status;
-    const ex=p.execution||{},me=p.measurement||{};
+    const ex=p.execution||{},me=p.measurement||{},reviewState=keyphraseReview(p);
     const canCapture=approved&&!ex.before_state_captured;
     const canDry=approved&&ex.before_state_captured&&!ex.dry_run_passed;
     return `<div class="item" style="margin-top:10px" id="proposal-${esc(p.id)}">
@@ -200,10 +213,12 @@ function renderProposals(){
       </div>
       <div class="flow"><b>Baseline:</b> ${esc(JSON.stringify(p.baseline||{}))}<br><b>Guardrails:</b> ${esc(JSON.stringify(p.guardrails||{}))}</div>
       <div class="actions">
-        ${pending?`<button class="primary" onclick="approveProposal('${esc(p.id)}')">✓ Approve Proposal</button><button class="danger" onclick="rejectProposal('${esc(p.id)}')">✕ Reject</button>`:""}
+        ${pending&&reviewState.approvalReady?`<button class="primary" onclick="approveProposal('${esc(p.id)}')">✓ Approve Reviewed Proposal</button>`:""}
+        ${pending&&!reviewState.approvalReady?`<button class="primary" disabled title="Live Yoast comparison and complete keyphrase architecture required">🔒 Awaiting Yoast Review</button>`:""}
+        ${pending?`<button class="danger" onclick="rejectProposal('${esc(p.id)}')">✕ Reject</button>`:""}
         ${canCapture?`<button class="primary" onclick="captureBeforeState('${esc(p.id)}')">1. Capture Live Before-State</button>`:""}
         ${canDry?`<button class="primary" onclick="runApprovedDryRun('${esc(p.id)}')">2. Run Safe Dry Test</button>`:""}
-        ${approved&&ex.dry_run_passed?`<button class="danger" onclick="executeApprovedSeo(\'${esc(p.id)}\')">3. Execute Approved SEO Change</button><span class="status warn">Live write: approved SEO title + meta description only</span>`:""}
+        ${approved&&ex.dry_run_passed?`<button class="danger" onclick="executeApprovedSeo(\'${esc(p.id)}\')">3. Execute Approved SEO Change</button><span class="status warn">Live write: only the six approved Yoast SEO fields</span>`:""}
         ${p.status==="MEASURING"?`<span class="status good">Search Console measurement active</span>`:""}
         <button class="muted" onclick="loadProposalDetail('${esc(p.id)}')">Execution Details</button>
       </div>
@@ -228,7 +243,7 @@ async function loadProposalDetail(id){
   }catch(e){box.textContent="Could not load execution detail: "+e.message}
 }
 async function captureBeforeState(id){
-  if(!confirm("Capture the current live Yoast SEO title/meta as the rollback-safe before-state? This does NOT change WordPress."))return;
+  if(!confirm("Capture the current live Yoast title, meta, focus keyphrase, focus synonyms, related keyphrases and related synonyms as the rollback-safe before-state? This does NOT change WordPress."))return;
   try{
     const j=await callWpGoverned("capture_seo_before_state",{proposal_id:id});
     await loadSeoControl();
@@ -247,7 +262,8 @@ async function runApprovedDryRun(id){
 async function executeApprovedSeo(id){
   const p=(seoData.proposals||[]).find(x=>x.id===id);
   if(!p)return alert("Proposal not found.");
-  const ok=confirm("FINAL LIVE WORDPRESS EXECUTION\n\nThis will change ONLY the approved Yoast SEO title and meta description.\n\nSEO title:\n"+(p.proposed_title||"")+"\n\nMeta description:\n"+(p.proposed_meta_description||"")+"\n\nThe agent will re-run the dry test, apply the approved fields, verify WordPress, and start Search Console measurement.\n\nProceed?");
+  const k=keyphraseArchitecture(p);
+  const ok=confirm("FINAL LIVE WORDPRESS EXECUTION\n\nThis will change ONLY the approved Yoast fields: SEO title, meta description, focus keyphrase, focus synonyms, four related keyphrases and their synonyms.\n\nSEO title:\n"+(p.proposed_title||"")+"\n\nMeta description:\n"+(p.proposed_meta_description||"")+"\n\nFocus keyphrase:\n"+(k.focus.keyphrase||"")+"\n\nThe agent will re-run the dry test, apply the approved fields, verify WordPress, and start Search Console measurement.\n\nProceed?");
   if(!ok)return;
   try{
     const dry=await callWpGoverned("dry_run_approved_seo",{proposal_id:id});
@@ -255,14 +271,14 @@ async function executeApprovedSeo(id){
     const result=await callWpGoverned("execute_approved_seo",{proposal_id:id,execution_token:dry.execution_token});
     if(!result?.success||!result?.verified)throw Error(result?.error||"WordPress write was not verified.");
     await loadSeoControl();
-    alert("✅ LIVE SEO UPDATE VERIFIED\n\nWordPress changed only the approved SEO title/meta description. Search Console measurement has started.");
+    alert("✅ LIVE SEO UPDATE VERIFIED\n\nWordPress changed only the six approved Yoast SEO fields. Search Console measurement has started.");
   }catch(e){
     await loadSeoControl();
     alert("Live SEO execution stopped/failed: "+(e?.message||String(e))+"\n\nCheck Execution Details before retrying. The rollback snapshot remains preserved.");
   }
 }
 
-async function approveProposal(id){if(!confirm("Approve this SEO proposal? This records your approval only. It will NOT change WordPress."))return;try{await callSeo("approve_seo_proposal",{proposal_id:id});await loadSeoControl();alert("✅ Proposal approved. Next step is before-state capture. WordPress was NOT changed.")}catch(e){alert("Approval failed: "+e.message)}}
+async function approveProposal(id){const p=(seoData.proposals||[]).find(x=>x.id===id);if(!p||!keyphraseReview(p).approvalReady)return alert("Approval is locked until the live Yoast comparison and complete keyphrase architecture are ready.");if(!confirm("Approve this reviewed SEO proposal? This records your approval only. It will NOT change WordPress."))return;try{await callSeo("approve_seo_proposal",{proposal_id:id});await loadSeoControl();alert("✅ Proposal approved. Next step is before-state capture. WordPress was NOT changed.")}catch(e){alert("Approval failed: "+e.message)}}
 async function rejectProposal(id){if(!confirm("Reject this SEO proposal?"))return;try{await callSeo("reject_seo_proposal",{proposal_id:id});await loadSeoControl();alert("Proposal rejected.")}catch(e){alert("Reject failed: "+e.message)}}
 function filtered(){const q=$("q").value.trim().toLowerCase(),pri=$("priority").value,typ=$("type").value,sort=$("sort").value;let rows=[...(seoData.opportunities||[])];if(pri!=="ALL")rows=rows.filter(x=>String(x.priority).toUpperCase()===pri);if(typ!=="ALL")rows=rows.filter(x=>x.opportunity_type===typ);if(q)rows=rows.filter(x=>[x.page,x.query,x.opportunity_type,JSON.stringify(x.reasons),JSON.stringify(x.recommended_actions)].join(" ").toLowerCase().includes(q));if(sort==="impressions")rows.sort((a,b)=>Number(b.impressions||0)-Number(a.impressions||0));else if(sort==="position")rows.sort((a,b)=>Number(a.position||999)-Number(b.position||999));else if(sort==="clicks")rows.sort((a,b)=>Number(b.clicks||0)-Number(a.clicks||0));else rows.sort((a,b)=>Number(b.opportunity_score||0)-Number(a.opportunity_score||0));return rows}
 function renderOpps(){const all=filtered(),max=Math.max(1,Math.ceil(all.length/pageSize));page=Math.min(page,max);const start=(page-1)*pageSize,rows=all.slice(start,start+pageSize);$("opportunityGrid").innerHTML=rows.map(x=>`<div class="item"><div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start"><div><b>${esc(x.query||"SEO opportunity")}</b><div class="tags"><span class="tag">${esc(String(x.priority||"LOW").toUpperCase())}</span><span class="tag">${esc(x.opportunity_type||"OPPORTUNITY")}</span></div></div><div class="score">${esc(Number(x.opportunity_score||0).toFixed(0))}</div></div><p class="note"><a href="${esc(x.page)}" target="_blank" rel="noopener">${esc(x.page)}</a></p><div class="flow"><b>Search evidence:</b> ${Number(x.impressions||0).toLocaleString()} impressions • ${Number(x.clicks||0).toLocaleString()} clicks • CTR ${(Number(x.ctr||0)*100).toFixed(2)}% • Position ${Number(x.position||0).toFixed(2)}<br><b>Technical score:</b> ${esc(x.technical_score??"—")}</div>${valList(x.reasons).length?`<div class="flow"><b>Why this matters:</b><ul>${valList(x.reasons).map(v=>`<li>${esc(typeof v==="string"?v:JSON.stringify(v))}</li>`).join("")}</ul></div>`:""}${valList(x.recommended_actions).length?`<div class="flow"><b>Recommended actions:</b><ol>${valList(x.recommended_actions).map(v=>`<li>${esc(typeof v==="string"?v:JSON.stringify(v))}</li>`).join("")}</ol></div>`:""}</div>`).join("")||'<div class="flow">No opportunities match these filters.</div>';$("pageInfo").textContent=`Showing ${all.length?start+1:0}–${Math.min(start+pageSize,all.length)} of ${all.length} • Page ${page}/${max}`;$("prev").disabled=page<=1;$("next").disabled=page>=max}
