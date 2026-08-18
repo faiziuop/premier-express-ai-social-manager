@@ -165,6 +165,20 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
 @media(max-width:950px){.unified-social-grid{grid-template-columns:1fr 1fr}}
 @media(max-width:560px){.unified-social-grid{grid-template-columns:1fr}}
 
+
+/* SEO autonomous worker operations */
+.seo-worker-card{grid-column:1/-1;border-left:4px solid #0f766e}
+.seo-worker-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap}
+.seo-worker-stats{display:grid;grid-template-columns:repeat(8,1fr);gap:8px;margin:12px 0}
+.seo-worker-stat{border:1px solid #ccfbf1;background:#f0fdfa;border-radius:10px;padding:10px;min-width:0}
+.seo-worker-stat small{display:block;color:#64748b;font-size:11px}
+.seo-worker-stat b{display:block;font-size:18px;color:#0f766e;margin-top:4px}
+.seo-worker-health{border:1px solid #d1fae5;background:#ecfdf5;border-radius:10px;padding:10px;line-height:1.55}
+.seo-worker-health.warn{border-color:#fde68a;background:#fffbeb}
+.seo-worker-health.bad{border-color:#fecaca;background:#fef2f2}
+@media(max-width:1100px){.seo-worker-stats{grid-template-columns:repeat(4,1fr)}}
+@media(max-width:650px){.seo-worker-stats{grid-template-columns:1fr 1fr}}
+
 </style>
 </head>
 <body>
@@ -243,15 +257,15 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
       <button class="main-nav-tab active" id="mainAgentTabBtn" onclick="switchMainTab('agent')">🧠 Agent Intelligence & Content</button>
       <button class="main-nav-tab" id="facebookMainTabBtn" onclick="switchMainTab('facebook')">🔵 Facebook</button>
       <button class="main-nav-tab" id="instagramMainTabBtn" onclick="switchMainTab('instagram')">📸 Instagram</button>
-      <button class="main-nav-tab" id="linkedinTabBtn" onclick="switchMainTab('linkedin')">🔗 LinkedIn</button>
-      <button class="main-nav-tab" id="gbpTabBtn" onclick="switchMainTab('gbp')">📍 Google Business</button>
-      <button class="main-nav-tab" id="whatsappTabBtn" onclick="switchMainTab('whatsapp')">💬 WhatsApp Operations</button>
-      <button class="main-nav-tab" id="growthTabBtn" onclick="switchMainTab('growth')">🎯 Growth Operations</button>
       <button class="main-nav-tab" id="socialOpsTabBtn" onclick="switchMainTab('social-ops')">🌐 Social Account Operations</button>
+      <button class="main-nav-tab" id="growthTabBtn" onclick="switchMainTab('growth')">🎯 Growth Operations</button>
       <button class="main-nav-tab" id="interactionsTabBtn" onclick="switchMainTab('interactions')">💬 Interactions & Leads</button>
       <button class="main-nav-tab" id="financeTabBtn" onclick="switchMainTab('finance')">💼 Business & Finance</button>
+      <button class="main-nav-tab" id="linkedinTabBtn" onclick="switchMainTab('linkedin')">🔗 LinkedIn</button>
+      <button class="main-nav-tab" id="gbpTabBtn" onclick="switchMainTab('gbp')">📍 Google Business</button>
       <button class="main-nav-tab" id="websiteTabBtn" onclick="switchMainTab('website')">🌐 Website & SEO</button>
-      <a href="/seo-control.html" style="display:inline-block;background:#e4e5e9;color:182b49;text-decoration:none;padding:10px 14px;border-radius:8px;font-weight:700;margin:6px 0;">🌐 SEO Control Center</a>
+      <a href="/seo-control.html" style="display:inline-block;background:#087f5b;color:white;text-decoration:none;padding:10px 14px;border-radius:8px;font-weight:700;margin:6px 0;">🌐 SEO Control Center</a>
+      <button class="main-nav-tab" id="whatsappTabBtn" onclick="switchMainTab('whatsapp')">💬 WhatsApp Operations</button>
     </div>
 
     <div id="agentMainPanel" class="main-tab-panel active">
@@ -1105,6 +1119,38 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
             </div>
             <div id="gscQueries"><div class="gsc-query">No Search Console data synced yet.</div></div>
             <div class="command-help">The agent uses Search Console data only for SEO intelligence. It cannot modify Search Console or your website from this connection.</div>
+          </div>
+
+
+          <div class="website-card seo-worker-card">
+            <div class="seo-worker-head">
+              <div>
+                <h3 style="margin:0">🤖 Autonomous Product SEO Worker</h3>
+                <p style="margin:6px 0 0">Live operations monitor for the catalog research worker. It processes products in controlled batches and creates approval-only SEO proposals.</p>
+              </div>
+              <div class="interaction-actions">
+                <button class="muted" onclick="loadSeoWorkerHealth(true)">↻ Refresh Worker Status</button>
+                <a href="/seo-control.html" class="primary" style="display:inline-block;text-decoration:none;padding:10px 14px;border-radius:8px;font-weight:700">Review SEO Proposals</a>
+              </div>
+            </div>
+
+            <div id="seoWorkerHealthLine" class="seo-worker-health">Checking autonomous SEO worker…</div>
+
+            <div class="seo-worker-stats">
+              <div class="seo-worker-stat"><small>Queued</small><b id="seoWQueued">—</b></div>
+              <div class="seo-worker-stat"><small>Researching</small><b id="seoWResearching">—</b></div>
+              <div class="seo-worker-stat"><small>Proposals created</small><b id="seoWCreated">—</b></div>
+              <div class="seo-worker-stat"><small>Created in 24h</small><b id="seoW24h">—</b></div>
+              <div class="seo-worker-stat"><small>Retrying</small><b id="seoWRetrying">—</b></div>
+              <div class="seo-worker-stat"><small>Failed</small><b id="seoWFailed">—</b></div>
+              <div class="seo-worker-stat"><small>Zero-impression processed</small><b id="seoWZero">—</b></div>
+              <div class="seo-worker-stat"><small>WordPress writes</small><b id="seoWWrites">OFF</b></div>
+            </div>
+
+            <div class="command-help">
+              <b>Workflow:</b> queue → claim/lock → research → diagnose → build keyword clusters → create proposal → human approval → later governed execution.
+              <br><b>Resource guardrail:</b> small batches only; failed work is retried rather than processing the whole catalog in one function run.
+            </div>
           </div>
 
           <div class="website-card catalog-seo-card" style="grid-column:1/-1">
@@ -4754,6 +4800,48 @@ async function convertInteractionLead(id){
 
 
 
+
+let seoWorkerHealthLoaded=false;
+
+function seoWorkerTime(v){
+  if(!v)return "—";
+  try{return new Date(v).toLocaleString()}catch{return String(v)}
+}
+async function loadSeoWorkerHealth(showAlert=false){
+  const line=$("seoWorkerHealthLine");
+  try{
+    if(line)line.textContent="Checking autonomous SEO worker…";
+    const {data,error}=await sb.rpc("get_product_seo_worker_health");
+    if(error)throw error;
+    const h=data||{};
+    if($("seoWQueued"))$("seoWQueued").textContent=Number(h.queued||0).toLocaleString();
+    if($("seoWResearching"))$("seoWResearching").textContent=Number(h.researching||0).toLocaleString();
+    if($("seoWCreated"))$("seoWCreated").textContent=Number(h.proposal_created||0).toLocaleString();
+    if($("seoW24h"))$("seoW24h").textContent=Number(h.proposals_24h||0).toLocaleString();
+    if($("seoWRetrying"))$("seoWRetrying").textContent=Number(h.retrying||0).toLocaleString();
+    if($("seoWFailed"))$("seoWFailed").textContent=Number(h.failed||0).toLocaleString();
+    if($("seoWZero"))$("seoWZero").textContent=Number(h.zero_impression_processed||0).toLocaleString();
+    if($("seoWWrites"))$("seoWWrites").textContent=h.wordpress_writes_enabled?"ON":"OFF";
+    const ok=h.active && String(h.last_run_status||"").toLowerCase()==="succeeded";
+    const hasFailures=Number(h.failed||0)>0;
+    const hasRetries=Number(h.retrying||0)>0;
+    if(line){
+      line.className="seo-worker-health"+(hasFailures?" bad":hasRetries?" warn":"");
+      line.innerHTML=`<b>Worker:</b> ${h.active?"ACTIVE ✅":"INACTIVE ⚠"} • <b>Last run:</b> ${esc(String(h.last_run_status||"unknown").toUpperCase())} • <b>Last executed:</b> ${esc(seoWorkerTime(h.last_run_start))} • <b>Schedule:</b> ${esc(h.schedule||"35 * * * *")} • <b>Latest queue activity:</b> ${esc(seoWorkerTime(h.latest_queue_activity))}`;
+    }
+    seoWorkerHealthLoaded=true;
+    if(showAlert)alert(`SEO worker ${h.active?"active":"inactive"} • ${h.queued||0} queued • ${h.proposal_created||0} proposals created`);
+    return h;
+  }catch(e){
+    if(line){
+      line.className="seo-worker-health bad";
+      line.textContent="Worker health unavailable: "+(e?.message||String(e));
+    }
+    if(showAlert)alert(e?.message||String(e));
+    return null;
+  }
+}
+
 let fullCatalogSeoData=null;
 let fullCatalogSeoPage=1;
 const FULL_CATALOG_SEO_PAGE_SIZE=12;
@@ -4795,6 +4883,7 @@ async function loadFullCatalogSeo(showAlert=false){
       ? `<b>Primary benchmark:</b> ${esc(primary.name||primary.domain||"Competitor")} (${esc(primary.domain||"")}). Product decisions should use search demand + competitor evidence, not keyword stuffing.`
       : "Competitor benchmark will appear here when configured.";
     renderFullCatalogSeo();
+    loadSeoWorkerHealth(false);
     if(showAlert)alert(`✅ Full catalog SEO refreshed for ${s.total_products||0} products.`);
   }catch(e){
     if($("catalogSeoStatus"))$("catalogSeoStatus").textContent="Catalog SEO error: "+(e?.message||String(e));
@@ -4971,6 +5060,7 @@ function switchMainTab(tab){
   if(linkedin){loadLinkedInDrafts();checkLinkedInConnection();}
   if(gbp)loadGbpDrafts();
   if(website&&!fullCatalogSeoData)loadFullCatalogSeo(false);
+  if(website&&!seoWorkerHealthLoaded)loadSeoWorkerHealth(false);
   if(website){testWordPressConnection(false);loadSeoAuditSummary();checkSearchConsole();}
 }
 
