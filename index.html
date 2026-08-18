@@ -165,6 +165,12 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
 @media(max-width:950px){.unified-social-grid{grid-template-columns:1fr 1fr}}
 @media(max-width:560px){.unified-social-grid{grid-template-columns:1fr}}
 
+
+/* Platform-page navigation revision */
+.main-nav-tabs .main-nav-tab{min-height:40px}
+.meta-shared-connect .primary{white-space:normal;text-align:center}
+#platformWorkspaceHeading{margin-top:14px}
+
 </style>
 </head>
 <body>
@@ -183,11 +189,12 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
   <div id="app" style="display:none">
     <div class="card notice"><b>Live mode:</b> database changes are synchronized automatically. <span id="realtimeStatus" class="live">Connecting to live updates…</span></div>
 
+    
     <div class="card unified-social-card" id="socialCard">
       <div class="platform-head">
         <div>
           <h2 style="margin:0">🌐 Social Accounts</h2>
-          <p style="margin:6px 0 0">Facebook, Instagram, LinkedIn and Google in one place. Connection status and account actions are shown here before the rest of the dashboard.</p>
+          <p style="margin:6px 0 0">Facebook, Instagram, LinkedIn and Google Business in one place. Open each platform's own agent workspace from here.</p>
         </div>
         <button class="muted" id="refreshSocialBtn" onclick="refreshUnifiedSocialAccounts()">↻ Check All Connections</button>
       </div>
@@ -197,9 +204,7 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
           <div class="platform-name">🔵 Facebook</div>
           <div id="facebookStatus" class="unified-social-status not-connected">Checking…</div>
           <div class="unified-social-actions">
-            <a id="metaConnect" class="primary" href="https://ivtwkyfiagouazopttlc.supabase.co/functions/v1/meta-oauth-callback-v2" style="display:inline-block;text-decoration:none">🔗 Connect / Reconnect</a>
-            <button class="muted" onclick="loadSocialConnections()">↻ Status</button>
-            <button class="muted" onclick="openPlatformAgent('facebook')">🤖 Agent</button>
+            <button class="muted" onclick="openPlatformMainPage('facebook')">🤖 Open Facebook Agent</button>
           </div>
         </div>
 
@@ -207,9 +212,7 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
           <div class="platform-name">📸 Instagram</div>
           <div id="instagramStatus" class="unified-social-status not-connected">Checking…</div>
           <div class="unified-social-actions">
-            <a class="primary" href="https://ivtwkyfiagouazopttlc.supabase.co/functions/v1/meta-oauth-callback-v2" style="display:inline-block;text-decoration:none">🔗 Connect / Reconnect</a>
-            <button class="muted" onclick="loadSocialConnections()">↻ Status</button>
-            <button class="muted" onclick="openPlatformAgent('instagram')">🤖 Agent</button>
+            <button class="muted" onclick="openPlatformMainPage('instagram')">🤖 Open Instagram Agent</button>
           </div>
         </div>
 
@@ -219,7 +222,7 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
           <div class="unified-social-actions">
             <button class="primary" id="linkedinTopConnectBtn" onclick="connectLinkedIn()">🔗 Connect / Reconnect</button>
             <button class="muted" onclick="refreshLinkedInTopStatus()">↻ Status</button>
-            <button class="muted" onclick="switchMainTab('linkedin')">🤖 Agent</button>
+            <button class="muted" onclick="switchMainTab('linkedin')">🤖 Open LinkedIn Agent</button>
           </div>
         </div>
 
@@ -229,31 +232,43 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
           <div class="unified-social-actions">
             <button class="primary" id="googleTopConnectBtn" onclick="connectGoogleBusinessFromTop()" disabled>🔗 Connect / Reconnect</button>
             <button class="muted" onclick="refreshGoogleTopStatus()">↻ Status</button>
-            <button class="muted" onclick="switchMainTab('gbp')">🤖 Agent</button>
+            <button class="muted" onclick="switchMainTab('gbp')">🤖 Open Google Agent</button>
           </div>
         </div>
       </div>
+
+      <div class="meta-shared-connect" style="margin-top:12px;padding:11px 12px;border:1px solid #dbeafe;background:#eff6ff;border-radius:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <b style="margin-right:4px">🔵📸 Meta connection</b>
+        <span class="command-help" style="margin-right:auto">Facebook and Instagram use the same Meta authorization.</span>
+        <a id="metaConnect" class="primary" href="https://ivtwkyfiagouazopttlc.supabase.co/functions/v1/meta-oauth-callback-v2" style="display:inline-block;text-decoration:none">🔗 Connect / Reconnect Facebook + Instagram</a>
+        <button class="muted" onclick="loadSocialConnections()">↻ Check Meta Status</button>
+      </div>
     </div>
 
-
     <div class="main-nav-tabs">
-      <button class="main-nav-tab active" id="mainAgentTabBtn" onclick="switchMainTab('agent')">🧠 Agent Intelligence & Content</button>
-      <button class="main-nav-tab" id="socialOpsTabBtn" onclick="switchMainTab('social-ops')">🌐 Social Account Operations</button>
+      <button class="main-nav-tab active" id="facebookTabBtn" onclick="switchMainTab('facebook')">🔵 Facebook</button>
+      <button class="main-nav-tab" id="instagramTabBtn" onclick="switchMainTab('instagram')">📸 Instagram</button>
+      <button class="main-nav-tab" id="linkedinTabBtn" onclick="switchMainTab('linkedin')">🔗 LinkedIn</button>
+      <button class="main-nav-tab" id="gbpTabBtn" onclick="switchMainTab('gbp')">📍 Google Business</button>
       <button class="main-nav-tab" id="growthTabBtn" onclick="switchMainTab('growth')">🎯 Growth Operations</button>
       <button class="main-nav-tab" id="interactionsTabBtn" onclick="switchMainTab('interactions')">💬 Interactions & Leads</button>
       <button class="main-nav-tab" id="financeTabBtn" onclick="switchMainTab('finance')">💼 Business & Finance</button>
-      <button class="main-nav-tab" id="linkedinTabBtn" onclick="switchMainTab('linkedin')">🔗 LinkedIn</button>
-      <button class="main-nav-tab" id="gbpTabBtn" onclick="switchMainTab('gbp')">📍 Google Business</button>
       <button class="main-nav-tab" id="websiteTabBtn" onclick="switchMainTab('website')">🌐 Website & SEO</button>
-      <a href="/seo-control.html"
-   style="display:inline-block;background:#087f5b;color:white;text-decoration:none;
-   padding:10px 14px;border-radius:8px;font-weight:700;margin:6px 0;">
-  🌐 SEO Control Center
-</a>
+      <a href="/seo-control.html" style="display:inline-block;background:#087f5b;color:white;text-decoration:none;padding:10px 14px;border-radius:8px;font-weight:700;margin:6px 0;">🌐 SEO Control Center</a>
       <button class="main-nav-tab" id="whatsappTabBtn" onclick="switchMainTab('whatsapp')">💬 WhatsApp Operations</button>
     </div>
 
     <div id="agentMainPanel" class="main-tab-panel active">
+
+    <div class="card" id="platformWorkspaceHeading" style="border-left:4px solid #2563eb">
+      <div class="platform-head">
+        <div>
+          <h2 id="platformWorkspaceTitle" style="margin:0">🔵 Facebook Agent Workspace</h2>
+          <p id="platformWorkspaceSubtitle" style="margin:6px 0 0">Facebook autonomous intelligence, content generation, draft organization, approval, scheduling and publishing tools.</p>
+        </div>
+      </div>
+    </div>
+
 <div class="card agent-control" id="agentControl">
       <div class="platform-head"><div><h2 style="margin:0">🤖 Autonomous Agent Control Center</h2><p style="margin:6px 0 0">Researches current tourism demand and prepares drafts for your approval. It never publishes autonomous drafts without your approval.</p></div><span id="agentStatus" class="pill">Loading…</span></div>
       <div class="agent-grid">
@@ -269,16 +284,7 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
         <div><label>Platforms</label><select id="agentPlatforms"><option value="facebook,instagram">Facebook + Instagram</option><option value="facebook">Facebook only</option><option value="instagram">Instagram only</option></select></div>
       </div>
       <div class="agent-actions"><button class="primary" id="researchNowBtn" onclick="researchNow()">🔎 Research Now</button><button class="muted" onclick="saveAgentSettings()">💾 Save Agent Settings</button><button class="muted" onclick="loadAgentControl()">↻ Refresh Status</button></div>
-
-      <div class="agent-platform-launchers">
-        <b style="width:100%;font-size:12px;color:#64748b">Platform Autonomous Agent Workspaces</b>
-        <button class="muted" onclick="openPlatformAgent('facebook')">🔵 Facebook Autonomous Agent</button>
-        <button class="muted" onclick="openPlatformAgent('instagram')">📸 Instagram Autonomous Agent</button>
-        <button class="muted" onclick="switchMainTab('linkedin')">🔗 LinkedIn Autonomous Agent</button>
-        <button class="muted" onclick="switchMainTab('gbp')">📍 Google Autonomous Agent</button>
-      </div>
-
-      <p id="agentMessage" class="command-help"></p>
+<p id="agentMessage" class="command-help"></p>
     </div>
 
     <div class="card opp-card">
@@ -803,14 +809,7 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
       </div>
       <p id="intelUpdated" class="command-help"></p>
     </div>
-
-    <div class="tabs">
-      <button class="tab active" id="tabFacebook" onclick="switchPlatform('facebook')">🔵 Facebook</button>
-      <button class="tab" id="tabInstagram" onclick="switchPlatform('instagram')">📸 Instagram</button>
-      <button class="tab" disabled title="LinkedIn will be added after Instagram publishing is stable">💼 LinkedIn — later</button>
-    </div>
-
-    <div class="card">
+<div class="card">
       <div class="platform-head">
         <div><h2 id="platformTitle" style="margin:0">Facebook Content</h2><p id="platformSubtitle" style="margin:6px 0 0">Facebook-specific AI posts with independent approval and publishing.</p></div>
       </div>
@@ -2614,8 +2613,8 @@ function switchPlatform(platform){
   activePlatform=platform;
   queueCurrentPage=1;
   queueRankingLoadedFor="";
-  $("tabFacebook").classList.toggle("active",platform==="facebook");
-  $("tabInstagram").classList.toggle("active",platform==="instagram");
+  if($("tabFacebook"))$("tabFacebook").classList.toggle("active",platform==="facebook");
+  if($("tabInstagram"))$("tabInstagram").classList.toggle("active",platform==="instagram");
   $("platformTitle").textContent=platform==="facebook"?"Facebook Content":"Instagram Content";
   $("platformSubtitle").textContent=platform==="facebook"?"Facebook-specific AI posts with independent approval and live publishing.":"Instagram-specific AI posts with independent approval, captions, hashtags and visual direction.";
   $("instagramNotice").style.display=platform==="instagram"?"block":"none";
@@ -4865,13 +4864,16 @@ function moveCatalogSeoPage(delta){
 }
 
 
-function openPlatformAgent(platform){
-  switchMainTab("social-ops");
+function openPlatformMainPage(platform){
+  switchMainTab(platform==="instagram"?"instagram":"facebook");
   setTimeout(()=>{
-    if(typeof switchPlatform==="function")switchPlatform(platform);
-    const el=document.getElementById("platformTitle");
+    const el=document.getElementById("platformWorkspaceHeading");
     if(el)el.scrollIntoView({behavior:"smooth",block:"start"});
   },80);
+}
+
+function openPlatformAgent(platform){
+  openPlatformMainPage(platform);
 }
 
 async function refreshLinkedInTopStatus(){
@@ -4928,9 +4930,21 @@ async function refreshUnifiedSocialAccounts(){
 }
 
 function switchMainTab(tab){
-  const agent=tab==="agent",social=tab==="social-ops",growth=tab==="growth",interactions=tab==="interactions",finance=tab==="finance",linkedin=tab==="linkedin",gbp=tab==="gbp",website=tab==="website",whatsapp=tab==="whatsapp";
-  $("agentMainPanel").classList.toggle("active",agent);
-  $("socialOpsPanel").classList.toggle("active",social);
+  const facebook=tab==="facebook";
+  const instagram=tab==="instagram";
+  const platform=facebook||instagram;
+  const growth=tab==="growth";
+  const interactions=tab==="interactions";
+  const finance=tab==="finance";
+  const linkedin=tab==="linkedin";
+  const gbp=tab==="gbp";
+  const website=tab==="website";
+  const whatsapp=tab==="whatsapp";
+
+  // Facebook and Instagram now have their own main navigation buttons,
+  // while safely reusing the existing proven platform content engine.
+  $("agentMainPanel").classList.toggle("active",platform);
+  $("socialOpsPanel").classList.remove("active");
   $("growthMainPanel").classList.toggle("active",growth);
   $("interactionsMainPanel").classList.toggle("active",interactions);
   $("financeMainPanel").classList.toggle("active",finance);
@@ -4938,8 +4952,9 @@ function switchMainTab(tab){
   $("gbpMainPanel").classList.toggle("active",gbp);
   $("websiteMainPanel").classList.toggle("active",website);
   $("whatsappMainPanel").classList.toggle("active",whatsapp);
-  $("mainAgentTabBtn").classList.toggle("active",agent);
-  $("socialOpsTabBtn").classList.toggle("active",social);
+
+  $("facebookTabBtn").classList.toggle("active",facebook);
+  $("instagramTabBtn").classList.toggle("active",instagram);
   $("growthTabBtn").classList.toggle("active",growth);
   $("interactionsTabBtn").classList.toggle("active",interactions);
   $("financeTabBtn").classList.toggle("active",finance);
@@ -4947,7 +4962,16 @@ function switchMainTab(tab){
   $("gbpTabBtn").classList.toggle("active",gbp);
   $("websiteTabBtn").classList.toggle("active",website);
   $("whatsappTabBtn").classList.toggle("active",whatsapp);
-  if(social&&!socialAccountOpsLoaded){loadSocialAccountOperations();loadContentOperations();loadSchedulingOperations();loadPublishingOperations();loadInteractionAwareness();loadProfileMaintenance();loadAnomalyRepair();loadMultiAccountOrchestration();loadAccountGovernance();}
+
+  if(platform){
+    switchPlatform(facebook?"facebook":"instagram");
+    const title=$("platformWorkspaceTitle"),sub=$("platformWorkspaceSubtitle");
+    if(title)title.textContent=facebook?"🔵 Facebook Agent Workspace":"📸 Instagram Agent Workspace";
+    if(sub)sub.textContent=facebook
+      ?"Facebook autonomous intelligence, content generation, Draft Queue Organizer, approval, scheduling and publishing tools."
+      :"Instagram autonomous intelligence, content generation, Draft Queue Organizer, media workflow, approval, scheduling and publishing tools.";
+  }
+
   if(growth&&growthCycleRows.length===0)buildGrowthCycle(false);
   if(growth&&!growthLearningData)loadGrowthLearning();
   if(growth&&!engagementIntelData)loadEngagementIntel();
