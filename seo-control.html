@@ -34,6 +34,10 @@
 .mapping-proven{font-size:12px;border:1px solid #86efac;background:#f0fdf4;color:#166534;border-radius:8px;padding:8px;margin-top:8px}
 .comparison{font-size:12px;border:1px solid #bfdbfe;background:#eff6ff;color:#1e3a8a;border-radius:8px;padding:9px;margin-top:8px;line-height:1.5}
 .comparison.waiting{border-color:#fde68a;background:#fffbeb;color:#92400e}
+.proposal-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0 4px}
+.proposal-tab{background:#e5e7eb;color:#334155;border:1px solid #cbd5e1}
+.proposal-tab.active{background:#6d28d9;color:#fff;border-color:#6d28d9}
+.live-check{font-size:11px;color:#64748b;margin-left:auto;align-self:center}
 button:disabled{cursor:not-allowed;opacity:.55}
 @media(max-width:900px){.execution-grid{grid-template-columns:1fr 1fr}}
 @media(max-width:560px){.execution-grid,.keyphrase-grid{grid-template-columns:1fr}.keyphrase-group.primary{grid-column:auto}}
@@ -69,13 +73,13 @@ button:disabled{cursor:not-allowed;opacity:.55}
       <div class="stat lifecycle-stat"><small>Completed</small><b id="sCompleted">0</b></div>
     </div>
 
-    <div class="card proposal"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap"><div><h2 style="margin:0">🧪 Controlled SEO Change Proposals</h2><p style="margin:6px 0 0">You approve the proposal, the agent captures live Yoast state and completes the safe dry run automatically, then only you authorize the final governed WordPress execution.</p></div></div><div id="proposalList"><div class="flow">Loading proposals…</div></div></div>
+    <div class="card proposal"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap"><div><h2 style="margin:0">🧪 Controlled SEO Change Proposals</h2><p style="margin:6px 0 0">You approve the proposal, the agent captures live Yoast state and completes the safe dry run automatically, then only you authorize the final governed WordPress execution.</p></div></div><div class="proposal-tabs"><button id="pendingProposalTab" class="proposal-tab active" onclick="setProposalTab('PENDING')">Pending <span id="pendingTabCount">0</span></button><button id="completedProposalTab" class="proposal-tab" onclick="setProposalTab('COMPLETED')">Completed <span id="completedTabCount">0</span></button><span id="proposalLiveCheck" class="live-check">Live status checking active</span></div><div id="proposalList"><div class="flow">Loading proposals…</div></div></div>
 
     <div class="card"><h2 style="margin-top:0">🔎 169 SEO Opportunities</h2><div class="toolbar"><input id="q" placeholder="Search page, query, reason…" oninput="renderOpps()"><select id="priority" onchange="renderOpps()"><option value="ALL">All priorities</option><option value="HIGH">High</option><option value="MEDIUM">Medium</option><option value="LOW">Low</option></select><select id="type" onchange="renderOpps()"><option value="ALL">All types</option></select><select id="sort" onchange="renderOpps()"><option value="score">Best score</option><option value="impressions">Most impressions</option><option value="position">Best position</option><option value="clicks">Most clicks</option></select></div><div id="opportunityGrid" class="grid"></div><div class="pagination"><button class="muted" id="prev" onclick="movePage(-1)">← Previous</button><span id="pageInfo" class="note"></span><button class="muted" id="next" onclick="movePage(1)">Next →</button></div></div>
   </div>
 </div>
 <script>
-const SUPABASE_URL="https://ivtwkyfiagouazopttlc.supabase.co";const SUPABASE_KEY="sb_publishable_w2Cn5cENECQqUUY3lAXH0w_GlSLz5iW";const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{auth:{autoRefreshToken:true,persistSession:true,detectSessionInUrl:true}});const $=id=>document.getElementById(id);const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]));let seoData={opportunities:[],proposals:[],summary:{},phases:{}},page=1,pageSize=20;const proposalDetails={};
+const SUPABASE_URL="https://ivtwkyfiagouazopttlc.supabase.co";const SUPABASE_KEY="sb_publishable_w2Cn5cENECQqUUY3lAXH0w_GlSLz5iW";const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{auth:{autoRefreshToken:true,persistSession:true,detectSessionInUrl:true}});const $=id=>document.getElementById(id);const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]));let seoData={opportunities:[],proposals:[],summary:{},phases:{}},page=1,pageSize=20,proposalTab="PENDING",seoLoading=false,seoRefreshTimer=null;const proposalDetails={};
 async function callSeo(action,payload={}){const {data:{session}}=await sb.auth.getSession();if(!session)throw Error("SIGN_IN_REQUIRED");const r=await fetch(SUPABASE_URL+"/functions/v1/website-seo-intelligence-v2",{method:"POST",headers:{apikey:SUPABASE_KEY,Authorization:"Bearer "+session.access_token,"Content-Type":"application/json"},body:JSON.stringify({action,...payload})});const raw=await r.text();let j={};try{j=JSON.parse(raw)}catch{}if(!r.ok||!j.success)throw Error(j.error||raw||("HTTP "+r.status));return j}
 
 async function callWpGoverned(action,payload={}){
@@ -128,6 +132,8 @@ function lifecycleHtml(p){
   return `<div class="lifecycle">${s}</div>`
 }
 async function loadSeoControl(){
+  if(seoLoading)return;
+  seoLoading=true;
   try{
     seoData=await callSeo("seo_control_center");
     $("authWarning").classList.add("hidden");$("dashboard").classList.remove("hidden");
@@ -137,11 +143,17 @@ async function loadSeoControl(){
     $("sMeasuring").textContent=s.measuring||0;$("sCompleted").textContent=s.completed||0;
     const phases=seoData.phases||{};
     $("authority").innerHTML=`<b>Authority:</b> ${esc(seoData.authority||"HUMAN_APPROVAL_REQUIRED")} • <b>WordPress write authority:</b> ${esc(seoData.wordpress_write_authority||"GOVERNED_EXTERNAL_SWITCH")} • <b>Lifecycle:</b> ${Object.entries(phases).map(([k,v])=>`${esc(phaseLabel(k))} ${esc(v)}`).join(" • ")||"No execution activity yet"}.`;
-    populateTypes();renderProposals();page=1;renderOpps()
+    populateTypes();renderProposals();renderOpps();
+    if($("proposalLiveCheck"))$("proposalLiveCheck").textContent="Live status checked "+new Date().toLocaleTimeString()
   }catch(e){
     if(String(e.message)==="SIGN_IN_REQUIRED"){$("authWarning").classList.remove("hidden");$("dashboard").classList.add("hidden")}
     else{$("authority").textContent="SEO control error: "+e.message}
-  }
+  }finally{seoLoading=false;scheduleSeoRefresh()}
+}
+function scheduleSeoRefresh(){
+  clearTimeout(seoRefreshTimer);
+  const preparing=(seoData.proposals||[]).some(p=>p.status==="APPROVED"&&!p.execution?.dry_run_passed);
+  seoRefreshTimer=setTimeout(loadSeoControl,preparing?4000:30000)
 }
 function populateTypes(){const s=$("type"),cur=s.value||"ALL",types=[...new Set((seoData.opportunities||[]).map(x=>x.opportunity_type).filter(Boolean))].sort();s.innerHTML='<option value="ALL">All types</option>'+types.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join("");if([...s.options].some(o=>o.value===cur))s.value=cur}
 function valList(v){if(Array.isArray(v))return v;if(v&&typeof v==="object")return Object.values(v);return v?[String(v)]:[]}
@@ -182,7 +194,14 @@ function keyphraseHtml(p){
   </div>`
 }
 function renderProposals(){
-  const rows=seoData.proposals||[];
+  const all=seoData.proposals||[],isPending=p=>p.status==="PENDING_APPROVAL"||p.status==="APPROVED";
+  const pending=all.filter(isPending).sort((a,b)=>{
+    const rank=p=>p.status==="APPROVED"&&p.execution?.dry_run_passed?0:p.status==="APPROVED"?1:keyphraseReview(p).approvalReady?2:3;
+    return rank(a)-rank(b)||(new Date(b.created_at||0)-new Date(a.created_at||0))
+  }),completed=all.filter(p=>!isPending(p)).sort((a,b)=>new Date(b.updated_at||b.created_at||0)-new Date(a.updated_at||a.created_at||0));
+  $("pendingTabCount").textContent=pending.length;$("completedTabCount").textContent=completed.length;
+  $("pendingProposalTab").classList.toggle("active",proposalTab==="PENDING");$("completedProposalTab").classList.toggle("active",proposalTab==="COMPLETED");
+  const rows=proposalTab==="PENDING"?pending:completed;
   $("proposalList").innerHTML=rows.length?rows.map(p=>{
     const pending=p.status==="PENDING_APPROVAL",approved=p.status==="APPROVED",phase=p.control_phase||p.status;
     const ex=p.execution||{},me=p.measurement||{},reviewState=keyphraseReview(p);
@@ -221,8 +240,9 @@ function renderProposals(){
       </div>
       <div id="detail-${esc(p.id)}" class="detail-box hidden"></div>
     </div>`
-  }).join(""):'<div class="flow">No SEO change proposals yet.</div>'
+  }).join(""):`<div class="flow">No ${proposalTab==="PENDING"?"pending":"completed"} SEO proposals.</div>`
 }
+function setProposalTab(tab){proposalTab=tab==="COMPLETED"?"COMPLETED":"PENDING";renderProposals()}
 async function loadProposalDetail(id){
   const box=$("detail-"+id);if(!box)return;
   if(!box.classList.contains("hidden")){box.classList.add("hidden");return}
