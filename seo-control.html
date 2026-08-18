@@ -141,7 +141,7 @@ function renderProposals(){
         ${pending?`<button class="primary" onclick="approveProposal('${esc(p.id)}')">✓ Approve Proposal</button><button class="danger" onclick="rejectProposal('${esc(p.id)}')">✕ Reject</button>`:""}
         ${canCapture?`<button class="primary" onclick="captureBeforeState('${esc(p.id)}')">1. Capture Live Before-State</button>`:""}
         ${canDry?`<button class="primary" onclick="runApprovedDryRun('${esc(p.id)}')">2. Run Safe Dry Test</button>`:""}
-        ${approved&&ex.dry_run_passed?`<span class="status warn">Dry run passed — live write still requires governed WordPress write switch</span>`:""}
+        ${approved&&ex.dry_run_passed?`<button class="danger" onclick="executeApprovedSeo(\'${esc(p.id)}\')">3. Execute Approved SEO Change</button><span class="status warn">Live write: approved SEO title + meta description only</span>`:""}
         ${p.status==="MEASURING"?`<span class="status good">Search Console measurement active</span>`:""}
         <button class="muted" onclick="loadProposalDetail('${esc(p.id)}')">Execution Details</button>
       </div>
@@ -180,6 +180,25 @@ async function runApprovedDryRun(id){
     alert("✅ Dry run passed. No WordPress change was made.")
   }catch(e){alert("Dry run failed: "+e.message)}
 }
+
+async function executeApprovedSeo(id){
+  const p=(seoData.proposals||[]).find(x=>x.id===id);
+  if(!p)return alert("Proposal not found.");
+  const ok=confirm("FINAL LIVE WORDPRESS EXECUTION\n\nThis will change ONLY the approved Yoast SEO title and meta description.\n\nSEO title:\n"+(p.proposed_title||"")+"\n\nMeta description:\n"+(p.proposed_meta_description||"")+"\n\nThe agent will re-run the dry test, apply the approved fields, verify WordPress, and start Search Console measurement.\n\nProceed?");
+  if(!ok)return;
+  try{
+    const dry=await callWpGoverned("dry_run_approved_seo",{proposal_id:id});
+    if(!dry?.success||!dry?.execution_token)throw Error("Final dry-run did not return a valid execution token.");
+    const result=await callWpGoverned("execute_approved_seo",{proposal_id:id,execution_token:dry.execution_token});
+    if(!result?.success||!result?.verified)throw Error(result?.error||"WordPress write was not verified.");
+    await loadSeoControl();
+    alert("✅ LIVE SEO UPDATE VERIFIED\n\nWordPress changed only the approved SEO title/meta description. Search Console measurement has started.");
+  }catch(e){
+    await loadSeoControl();
+    alert("Live SEO execution stopped/failed: "+(e?.message||String(e))+"\n\nCheck Execution Details before retrying. The rollback snapshot remains preserved.");
+  }
+}
+
 async function approveProposal(id){if(!confirm("Approve this SEO proposal? This records your approval only. It will NOT change WordPress."))return;try{await callSeo("approve_seo_proposal",{proposal_id:id});await loadSeoControl();alert("✅ Proposal approved. Next step is before-state capture. WordPress was NOT changed.")}catch(e){alert("Approval failed: "+e.message)}}
 async function rejectProposal(id){if(!confirm("Reject this SEO proposal?"))return;try{await callSeo("reject_seo_proposal",{proposal_id:id});await loadSeoControl();alert("Proposal rejected.")}catch(e){alert("Reject failed: "+e.message)}}
 function filtered(){const q=$("q").value.trim().toLowerCase(),pri=$("priority").value,typ=$("type").value,sort=$("sort").value;let rows=[...(seoData.opportunities||[])];if(pri!=="ALL")rows=rows.filter(x=>String(x.priority).toUpperCase()===pri);if(typ!=="ALL")rows=rows.filter(x=>x.opportunity_type===typ);if(q)rows=rows.filter(x=>[x.page,x.query,x.opportunity_type,JSON.stringify(x.reasons),JSON.stringify(x.recommended_actions)].join(" ").toLowerCase().includes(q));if(sort==="impressions")rows.sort((a,b)=>Number(b.impressions||0)-Number(a.impressions||0));else if(sort==="position")rows.sort((a,b)=>Number(a.position||999)-Number(b.position||999));else if(sort==="clicks")rows.sort((a,b)=>Number(b.clicks||0)-Number(a.clicks||0));else rows.sort((a,b)=>Number(b.opportunity_score||0)-Number(a.opportunity_score||0));return rows}
