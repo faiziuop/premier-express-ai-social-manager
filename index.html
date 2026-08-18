@@ -543,7 +543,7 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
       <div class="platform-head">
         <div>
           <h2 style="margin:0">✅ Approval Queue Intelligence</h2>
-          <p style="margin:6px 0 0">Ranks pending drafts so you can review the strongest customer-acquisition content first. It never approves, rejects, deletes or publishes on its own.</p>
+          <p style="margin:6px 0 0">Unified human-approval inbox for Facebook, Instagram, LinkedIn and Google Business Profile. All research, drafting, media planning and prioritization run automatically.</p>
         </div>
         <button class="primary" id="approvalIntelBtn" onclick="loadApprovalQueueIntelligence()">↻ Analyse Queue</button>
       </div>
@@ -568,6 +568,8 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
           <option value="ALL">All platforms</option>
           <option value="facebook">Facebook</option>
           <option value="instagram">Instagram</option>
+          <option value="linkedin">LinkedIn</option>
+          <option value="google_business_profile">Google Business Profile</option>
         </select>
       </div>
       <div id="approvalIntelGrid" class="campaign-grid"></div>
@@ -972,7 +974,7 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
             <h2 style="margin:0">🔗 LinkedIn Social Manager</h2>
             <p style="margin:6px 0 0">Separate editorial tracks for the Premier Express company Page and professional profile. Publishing remains locked until LinkedIn approves Community Management API access.</p>
           </div>
-          <button class="primary" onclick="generateLinkedInDrafts()">＋ Generate LinkedIn Drafts</button>
+          <button class="primary" onclick="generateLinkedInDrafts()">Generate Now (fallback)</button>
         </div>
         <div class="linkedin-status" id="linkedinConnectionStatus"><b>API status:</b> REVIEW PENDING • <b>Credentials:</b> checking… • <b>Publishing:</b> DISABLED</div>
         <div class="interaction-actions" style="margin-bottom:12px">
@@ -988,7 +990,7 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
 
     <div id="gbpMainPanel" class="main-tab-panel">
       <div class="card gbp-hub">
-        <div class="platform-head"><div><h2 style="margin:0">📍 Google Business Profile Manager</h2><p style="margin:6px 0 0">Local-post drafting is ready. Publishing and performance sync remain locked until Google grants Business Profile API access and OAuth is connected.</p></div><button class="primary" onclick="generateGbpDrafts()">＋ Generate GBP Drafts</button></div>
+        <div class="platform-head"><div><h2 style="margin:0">📍 Google Business Profile Manager</h2><p style="margin:6px 0 0">Local-post research and drafting run automatically. Publishing and performance sync remain locked until Google grants Business Profile API access and OAuth is connected.</p></div><button class="primary" onclick="generateGbpDrafts()">Generate Now (fallback)</button></div>
         <div class="gbp-status"><b>API access:</b> NOT CONNECTED • <b>Publishing:</b> DISABLED • <b>Drafting:</b> READY • <b>Approval:</b> MANUAL</div>
         <div id="gbpDraftList" class="gbp-grid"><div class="gbp-card">No Google Business Profile drafts yet.</div></div>
       </div>
@@ -2163,7 +2165,8 @@ async function loadApprovalQueueIntelligence(){
     $("aqMedium").textContent=s.medium_priority??0;
     $("aqDuplicates").textContent=s.high_duplicate_risk??0;
     $("aqCampaigns").textContent=s.campaign_linked??0;
-    $("approvalIntelBanner").innerHTML=`<b>Review priority only:</b> ${esc(s.high_priority??0)} top-tier draft(s), ${esc(s.medium_priority??0)} medium-tier draft(s), ${esc(s.high_duplicate_risk??0)} high duplicate-risk draft(s), and ${esc(s.stale_over_7_days??0)} stale draft(s). High priority is calibrated to roughly the top 20% of the queue after duplicate/quality safeguards. No action has been taken automatically.`;
+    const bp=s.by_platform||{};
+    $("approvalIntelBanner").innerHTML=`<b>Unified four-channel approval:</b> Facebook ${esc(bp.facebook??0)} • Instagram ${esc(bp.instagram??0)} • LinkedIn ${esc(bp.linkedin??0)} • Google Business ${esc(bp.google_business_profile??0)}.<br><b>Priority:</b> ${esc(s.high_priority??0)} top-tier, ${esc(s.medium_priority??0)} medium-tier and ${esc(s.high_duplicate_risk??0)} high duplicate-risk draft(s). The agent prepared and ranked them automatically; final approval remains yours.`;
     renderApprovalQueueIntelligence();
   }catch(e){
     $("approvalIntelBanner").textContent="Approval queue analysis failed: "+(e?.message||String(e));
@@ -2215,8 +2218,16 @@ function renderApprovalQueueIntelligence(){
       <p><b>Intelligence score:</b> ${esc(x.intelligence_score??"—")} &nbsp; <b>Agent confidence:</b> ${esc(x.agent_confidence||"—")} &nbsp; <b>Age:</b> ${esc(x.age_days??0)} day(s)</p>
       <div class="campaign-flow"><b>${esc(risk)}</b>${x.duplicate_with?` • Similarity ${esc(x.duplicate_similarity)}% with Post ${esc(x.duplicate_with.post_number??"—")}: ${esc(x.duplicate_with.hook||"")}`:""}</div>
       <div class="campaign-score">Human review required — no approval or rejection has been applied.</div>
+      <div style="margin-top:8px"><button class="primary" onclick="openApprovalChannel('${esc(x.primary_platform||"")}')">Open ${esc(x.primary_platform==="google_business_profile"?"Google Business":x.primary_platform||"channel")} Review</button></div>
     </div>`;
   }).join("");
+}
+
+function openApprovalChannel(platform){
+  if(platform==="linkedin"){switchMainTab("linkedin");return}
+  if(platform==="google_business_profile"){switchMainTab("gbp");return}
+  switchMainTab("agent");
+  if(platform==="facebook"||platform==="instagram")switchPlatform(platform);
 }
 
 let liveOperationsData=null;
