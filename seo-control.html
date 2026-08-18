@@ -48,6 +48,13 @@
     <div class="lifecycle" id="workflowLegend">
       <span class="stage">Pending Approval</span><span class="stage">Approved</span><span class="stage">Before State</span><span class="stage">Dry Run Passed</span><span class="stage">Verified</span><span class="stage">Measuring</span><span class="stage">Improved / Mixed / Declined</span>
     </div></div>
+    <div class="card proposal">
+      <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap">
+        <div><h2 style="margin:0">🔬 Yoast Premium Mapping Discovery</h2><p style="margin:6px 0 0">Authenticated read-only catalog discovery for focus-keyphrase synonyms, four related keyphrases and their synonyms.</p></div>
+        <button class="primary" id="mappingScanBtn" onclick="runYoastMappingDiscovery()">Run Read-Only Discovery</button>
+      </div>
+      <div id="mappingScanStatus" class="flow"><b>Safety:</b> No WordPress write is permitted. Results must prove exact storage keys before these fields can enter governed execution.</div>
+    </div>
     <div class="stats">
       <div class="stat"><small>Opportunities</small><b id="sTotal">0</b></div>
       <div class="stat"><small>High priority</small><b id="sHigh">0</b></div>
@@ -79,6 +86,24 @@ async function callWpGoverned(action,payload={}){
   const raw=await r.text();let j={};try{j=JSON.parse(raw)}catch{}
   if(!r.ok||!j.success)throw Error(j.error||raw||("HTTP "+r.status));
   return j
+}
+async function runYoastMappingDiscovery(){
+  const btn=$("mappingScanBtn"),box=$("mappingScanStatus"),known=new Set(["_yoast_wpseo_title","_yoast_wpseo_metadesc","_yoast_wpseo_focuskw","_yoast_wpseo_content_score","_yoast_wpseo_estimated-reading-time-minutes","_yoast_wpseo_linkdex","_yoast_wpseo_primary_product_brand","_yoast_wpseo_primary_product_cat"]),found=new Map();
+  btn.disabled=true;btn.textContent="Discovering…";box.innerHTML="Scanning authenticated read-only batches… <b>No WordPress write is being performed.</b>";
+  try{
+    let scanned=0;
+    for(let offset=0;offset<500;offset+=20){
+      const r=await callWpGoverned("yoast_mapping_scan",{offset,limit:20});
+      if(r.write_performed!==false)throw Error("Safety assertion failed: discovery response did not confirm write_performed=false.");
+      const rows=r.rows||[];scanned+=rows.length;
+      for(const row of rows)for(const [key,value] of Object.entries(row.yoast_meta||{}))if(!known.has(key)&&/yoast|wpseo|focus|keyword|synonym/i.test(key))found.set(key,{key,value,page:row.url,wp_id:row.wp_id});
+      box.innerHTML=`Scanned ${scanned} catalog items read-only • candidate Premium keys found: <b>${found.size}</b>`;
+      if(rows.length<20)break;
+    }
+    const values=[...found.values()];
+    box.innerHTML=values.length?`<div class="mapping-proven"><b>Candidate Yoast Premium storage discovered.</b> Review and prove each structure before enabling writes.</div><ol>${values.map(x=>`<li><code>${esc(x.key)}</code><br><span class="note">Example page: ${esc(x.page)} • Stored shape: ${esc(JSON.stringify(x.value))}</span></li>`).join("")}</ol><div class="flow"><b>Result:</b> Read-only discovery complete. No WordPress field changed.</div>`:`<div class="mapping-pending"><b>No populated Premium synonym/related-keyphrase fields were found in the scanned catalog.</b> Exact mapping is still unproven; writes remain blocked.</div>`;
+  }catch(e){box.innerHTML=`<span class="bad"><b>Discovery stopped:</b> ${esc(e?.message||String(e))}</span><br>No WordPress write was requested.`}
+  finally{btn.disabled=false;btn.textContent="Run Read-Only Discovery"}
 }
 function phaseLabel(v){
   const m={PENDING_APPROVAL:"Pending Approval",APPROVED:"Approved",BEFORE_STATE_CAPTURED:"Before State Captured",DRY_RUN_PASSED:"Dry Run Passed",VERIFIED:"Verified",MEASURING:"Measuring",IMPROVED:"Improved",MIXED:"Mixed",DECLINED:"Declined",INSUFFICIENT_DATA:"Insufficient Data",ROLLED_BACK:"Rolled Back",EXECUTION_FAILED:"Execution Failed",APPLIED_UNVERIFIED:"Applied / Unverified",REJECTED:"Rejected",COMPLETED:"Completed"};
