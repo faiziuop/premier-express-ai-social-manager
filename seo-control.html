@@ -151,7 +151,7 @@ function phraseSynonyms(v){if(!v)return[];if(Array.isArray(v))return v.map(phras
 function keyphraseArchitecture(p){
   const src=p.keyphrase_architecture||p.yoast_keyphrases||p.keyword_architecture||{};
   const focusRaw=firstValue(src.focus_keyphrase,src.primary,p.focus_keyphrase,p.proposed_focus_keyphrase);
-  const focus={keyphrase:phraseText(focusRaw),synonyms:phraseSynonyms(firstValue(src.focus_keyphrase_synonyms,src.focus_synonyms,p.focus_keyphrase_synonyms,p.proposed_focus_keyphrase_synonyms,focusRaw))};
+  const focus={keyphrase:phraseText(focusRaw),synonyms:phraseSynonyms(firstValue(src.focus_keyphrase_synonyms,src.focus_synonyms,p.focus_keyphrase_synonyms,p.proposed_focus_synonyms,p.proposed_focus_keyphrase_synonyms,focusRaw))};
   let related=firstValue(src.related_keyphrases,src.related,p.related_keyphrases,p.proposed_related_keyphrases)||[];
   if(!Array.isArray(related))related=Object.values(related||{});
   related=related.slice(0,4).map((v,i)=>({keyphrase:phraseText(v),synonyms:phraseSynonyms(v),index:i+1}));
