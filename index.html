@@ -2167,7 +2167,7 @@ async function loadApprovalQueueIntelligence(){
     $("aqDuplicates").textContent=s.high_duplicate_risk??0;
     $("aqCampaigns").textContent=s.campaign_linked??0;
     const bp=s.by_platform||{};
-    $("approvalIntelBanner").innerHTML=`<b>Unified four-channel approval:</b> Facebook ${esc(bp.facebook??0)} • Instagram ${esc(bp.instagram??0)} • LinkedIn ${esc(bp.linkedin??0)} • Google Business ${esc(bp.google_business_profile??0)}.<br><b>Agent shortlist:</b> ${esc(s.shortlisted??0)} strongest low-duplication drafts across the four channels. The full ${esc(s.total??0)}-draft backlog remains available under “All pending”; final approval remains yours.`;
+    $("approvalIntelBanner").innerHTML=`<b>Unified four-channel approval:</b> Facebook ${esc(bp.facebook??0)} • Instagram ${esc(bp.instagram??0)} • LinkedIn ${esc(bp.linkedin??0)} • Google Business ${esc(bp.google_business_profile??0)}.<br><b>Media readiness:</b> ${esc(s.full_media_ready??0)} complete • ${esc(s.preview_only??0)} preview-only • ${esc(s.generating??0)} generating • ${esc(s.retry_scheduled??0)} retrying • ${esc(s.waiting_for_media??0)} waiting • ${esc(s.media_failed??0)} failed.<br><b>Agent shortlist:</b> ${esc(s.shortlisted??0)} strongest low-duplication drafts across the four channels. Complete media is prioritized; the full ${esc(s.total??0)}-draft backlog remains available under “All pending”; final approval remains yours.`;
     renderApprovalQueueIntelligence();
   }catch(e){
     $("approvalIntelBanner").textContent="Approval queue analysis failed: "+(e?.message||String(e));
@@ -2193,7 +2193,7 @@ function renderApprovalQueueIntelligence(){
   if(filter==="DUPLICATE")rows=rows.filter(x=>x.duplicate_risk==="high");
   if(filter==="STALE")rows=rows.filter(x=>Number(x.age_days)>7);
   if(q)rows=rows.filter(x=>[
-    x.matched_product,x.audience_segment,x.hook,x.campaign_name,x.primary_platform,x.traveller_stage,x.content_pillar
+    x.matched_product,x.audience_segment,x.hook,x.campaign_name,x.primary_platform,x.traveller_stage,x.content_pillar,x.media_state
   ].filter(Boolean).join(" ").toLowerCase().includes(q));
 
   if(!rows.length){
@@ -2204,6 +2204,8 @@ function renderApprovalQueueIntelligence(){
   $("approvalIntelGrid").innerHTML=rows.slice(0,60).map((x,i)=>{
     const risk=x.duplicate_risk==="high"?"HIGH DUPLICATE RISK":x.duplicate_risk==="medium"?"MEDIUM DUPLICATE RISK":"LOW DUPLICATE RISK";
     const score=Number(x.priority_score||0);
+    const mediaLabels={FULL_MEDIA_READY:"MEDIA READY",PREVIEW_ONLY:"PREVIEW ONLY",GENERATING:"GENERATING",RETRY_SCHEDULED:"AUTO RETRY",WAITING_FOR_MEDIA:"WAITING FOR MEDIA",MEDIA_FAILED:"MEDIA FAILED",CHANNEL_MEDIA_NOT_CONNECTED:"CHANNEL MEDIA NOT CONNECTED"};
+    const mediaState=x.media_state||"WAITING_FOR_MEDIA",mediaThumb=x.media_url||x.media_thumbnail_url||"";
     return `<div class="campaign-item">
       <div class="platform-head">
         <h3 style="margin:0">#${i+1} • Post ${esc(x.post_number??"—")} • ${esc(x.matched_product||"Unmapped")}</h3>
@@ -2214,8 +2216,11 @@ function renderApprovalQueueIntelligence(){
         ${x.audience_segment?`<span class="opp-tag">${esc(x.audience_segment)}</span>`:""}
         ${x.traveller_stage?`<span class="opp-tag">${esc(x.traveller_stage)}</span>`:""}
         ${x.content_pillar?`<span class="opp-tag">${esc(x.content_pillar)}</span>`:""}
+        <span class="opp-tag">${esc(mediaLabels[mediaState]||mediaState)}</span>
       </div>
+      ${mediaThumb?`<div class="media-preview" style="margin-top:10px"><img src="${esc(mediaThumb)}" alt="${esc(x.matched_product||"Approval media preview")}" loading="lazy"></div>`:""}
       <p><b>Hook:</b> ${esc(x.hook||"")}</p>
+      <p><b>Media:</b> ${esc(mediaLabels[mediaState]||mediaState)}${x.media_generation_error?` • ${esc(x.media_generation_error)}`:""}</p>
       ${x.campaign_name?`<p><b>Campaign:</b> ${esc(x.campaign_name)} ${x.campaign_status?`• ${esc(x.campaign_status)}`:""}</p>`:""}
       <p><b>Intelligence score:</b> ${esc(x.intelligence_score??"—")} &nbsp; <b>Agent confidence:</b> ${esc(x.agent_confidence||"—")} &nbsp; <b>Age:</b> ${esc(x.age_days??0)} day(s)</p>
       <div class="campaign-flow"><b>${esc(risk)}</b>${x.duplicate_with?` • Similarity ${esc(x.duplicate_similarity)}% with Post ${esc(x.duplicate_with.post_number??"—")}: ${esc(x.duplicate_with.hook||"")}`:""}</div>
