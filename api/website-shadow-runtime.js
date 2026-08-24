@@ -5,13 +5,14 @@ const OWNER_USER_ID = "a3a56856-7613-48a6-898c-1526a76f8ee7";
 
 function providerReadiness() {
   const gatewayKey = Boolean(process.env.AI_GATEWAY_API_KEY);
+  const vercelOidc = Boolean(process.env.VERCEL_OIDC_TOKEN);
   const openAiKey = Boolean(process.env.OPENAI_API_KEY);
   const anthropicKey = Boolean(process.env.ANTHROPIC_API_KEY);
   const googleKey = Boolean(
     process.env.GOOGLE_GENERATIVE_AI_API_KEY || process.env.GEMINI_API_KEY
   );
   const configuredProviders = [
-    gatewayKey && "vercel_ai_gateway",
+    (gatewayKey || vercelOidc) && "vercel_ai_gateway",
     openAiKey && "openai",
     anthropicKey && "anthropic",
     googleKey && "google"
@@ -21,6 +22,13 @@ function providerReadiness() {
     ready: configuredProviders.length > 0,
     mode: configuredProviders.length > 0 ? "CREDENTIAL_PRESENT_LOCKED" : "NOT_CONFIGURED",
     configured_providers: configuredProviders,
+    authentication: vercelOidc
+      ? "VERCEL_OIDC"
+      : gatewayKey
+        ? "AI_GATEWAY_API_KEY"
+        : configuredProviders.length > 0
+          ? "PROVIDER_KEY"
+          : "NONE",
     isolation: "WEBSITE_SHADOW_ONLY",
     generation_enabled: false,
     storage_enabled: false,
