@@ -20,6 +20,7 @@
     <button class="tab" data-panel="blueprints" role="tab" aria-selected="false">Blueprint Registry</button>
     <button class="tab" data-panel="compatibility" role="tab" aria-selected="false">Compatibility Tests</button>
     <button class="tab" data-panel="shadow" role="tab" aria-selected="false">Shadow Mode</button>
+    <button class="tab" data-panel="saved-shadows" role="tab" aria-selected="false">Saved Shadow Assessments</button>
     <button class="tab" data-panel="readiness" role="tab" aria-selected="false">Activation Readiness</button>
     <button class="tab" data-panel="proposal-standard" role="tab" aria-selected="false">Proposal Standard</button>
     <button class="tab" data-panel="workflow-rules" role="tab" aria-selected="false">Agent Workflow</button>
@@ -269,7 +270,6 @@
     <div class="card"><div class="main-head"><div><h2>Authenticated Runtime Verification</h2><p class="muted">Server-side confirmation of owner identity, RLS visibility, source binding and zero-write isolation.</p></div><span id="runtimeAuditBadge" class="badge">NOT CHECKED</span></div>
       <div id="runtimeAuditStatus" class="inventory-status">Open Shadow Mode while signed in to verify the server boundary.</div>
       <div class="stats"><div class="stat"><small>Canonical categories</small><b id="runtimeCategories">—</b></div><div class="stat"><small>Canonical drafts</small><b id="runtimeDrafts">—</b></div><div class="stat"><small>Verified evidence</small><b id="runtimeEvidence">—</b></div><div class="stat"><small>Source mismatches</small><b id="runtimeMismatches">—</b></div><div class="stat"><small>WordPress writes</small><b id="runtimeWrites">—</b></div></div>
-      <div id="shadowGenerateStatus" class="inventory-status">Select “Generate improved shadow” beside a stored product to run the isolated category-aware generator.</div>
       <p class="footer-note">Generation can only append an unverified immutable shadow draft. It cannot approve, execute, publish, or change WordPress and Yoast.</p>
     </div>
     <div class="card"><div class="main-head"><div><h2>Website Foundation Completion Control</h2><p class="muted">One authoritative checkpoint prevents partial work from being described as ready.</p></div><span id="foundationStateBadge" class="badge">CALCULATING</span></div>
@@ -363,7 +363,12 @@
         <tr><td>OMITTED</td><td>No adequate evidence exists. The draft stays useful without inventing, padding or implying the missing fact.</td></tr>
       </tbody></table></div>
     </div>
+      </section>
+
+    <section id="saved-shadows" class="panel">
+    <div class="card notice"><div class="main-head"><div><h2>Saved Shadow Assessments</h2><p>Generate, review and compare owner-only immutable shadow drafts without scrolling through system diagnostics.</p></div><span class="badge">SHADOW ONLY • WEBSITE WRITES LOCKED</span></div></div>
     <div class="card"><div class="main-head"><div><h2>Saved Shadow Assessments</h2><p class="muted">Authenticated, owner-only assessment records. Updates and deletions are denied by database policy.</p></div><button id="shadowRefresh" class="btn" type="button">Refresh</button></div>
+      <div id="shadowGenerateStatus" class="inventory-status">Select “Generate improved shadow” beside a stored product. Progress and results will appear beside that product.</div>
       <div id="shadowJobStatus" class="inventory-status">Open this tab while signed in to load your isolated assessments.</div>
       <div class="table-responsive"><table class="rule-table"><thead><tr><th>Product</th><th>Blueprint</th><th>Status</th><th>Quality gate</th><th>Evidence</th><th>Draft</th><th>Protected source</th><th>Created</th></tr></thead><tbody id="shadowJobRows"></tbody></table></div>
     </div>
@@ -372,9 +377,10 @@
       <div class="shadow-lock"><b>Unverified shadow content — publishing is impossible here.</b><br>No approval, execution, WordPress or Yoast controls are connected to this reviewer.</div>
       <div id="shadowDraftBody"></div>
     </div>
+
   </section>
 
-  <section id="readiness" class="panel">
+<section id="readiness" class="panel">
     <div class="card notice"><div class="main-head"><div><h2>Activation Readiness</h2><p>The Website Intelligence design is progressing correctly, but it is deliberately not ready to control generation or WordPress.</p></div><span class="badge">NOT READY FOR AUTOMATION</span></div></div>
     <div class="card"><h2>Phase A — Foundation</h2><table class="rule-table"><thead><tr><th>Control</th><th>Status</th><th>Evidence</th></tr></thead><tbody>
       <tr><td>Isolated Website Intelligence page</td><td class="match-good">Complete</td><td>Separate page with no existing-agent replacement.</td></tr>
@@ -872,7 +878,7 @@ document.getElementById("inventoryRefresh").addEventListener("click",()=>loadInv
 document.getElementById("shadowRefresh").addEventListener("click",loadShadowJobs);
 document.getElementById("shadowJobRows").addEventListener("click",event=>{const review=event.target.closest("[data-shadow-review]");if(review)return reviewShadowDraft(review.dataset.shadowReview);const generate=event.target.closest("[data-shadow-generate]");if(generate)generateImprovedShadow(generate.dataset.shadowGenerate,generate)});
 document.getElementById("shadowDraftClose").addEventListener("click",()=>document.getElementById("shadowDraftReview").classList.add("hidden"));
-document.querySelectorAll(".tab").forEach(tab=>tab.onclick=()=>{document.querySelectorAll(".tab").forEach(x=>{x.classList.remove("active");x.setAttribute("aria-selected","false")});document.querySelectorAll(".panel").forEach(x=>x.classList.remove("active"));tab.classList.add("active");tab.setAttribute("aria-selected","true");document.getElementById(tab.dataset.panel).classList.add("active");if(tab.dataset.panel==="products")loadInventory();if(tab.dataset.panel==="shadow")loadShadowJobs()});
+document.querySelectorAll(".tab").forEach(tab=>tab.onclick=()=>{document.querySelectorAll(".tab").forEach(x=>{x.classList.remove("active");x.setAttribute("aria-selected","false")});document.querySelectorAll(".panel").forEach(x=>x.classList.remove("active"));tab.classList.add("active");tab.setAttribute("aria-selected","true");document.getElementById(tab.dataset.panel).classList.add("active");if(tab.dataset.panel==="products")loadInventory();if(tab.dataset.panel==="shadow"||tab.dataset.panel==="saved-shadows")loadShadowJobs()});
 renderCategory("attractions");
 loadClassification();
 </script>
