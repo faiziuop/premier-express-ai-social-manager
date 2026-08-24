@@ -30,8 +30,8 @@ function providerReadiness() {
           ? "PROVIDER_KEY"
           : "NONE",
     isolation: "WEBSITE_SHADOW_ONLY",
-    generation_enabled: false,
-    storage_enabled: false,
+    generation_enabled: configuredProviders.length > 0,
+    storage_enabled: true,
     publishing_enabled: false
   };
 }
