@@ -136,9 +136,19 @@ async function rest(table,method,authorization,query={},body){
 }
 async function gateway(messages){
  const token=process.env.AI_GATEWAY_API_KEY||process.env.VERCEL_OIDC_TOKEN;if(!token)throw new Error("AI Gateway not configured");
- const response=await fetch("https://ai-gateway.vercel.sh/v1/chat/completions",{method:"POST",headers:{authorization:"Bearer "+token,"content-type":"application/json"},body:JSON.stringify({model:"openai/gpt-5.4",messages,response_format:{type:"json_object"},temperature:.35})});
- const payload=await response.json().catch(()=>({}));if(!response.ok)throw new Error("AI Gateway HTTP "+response.status);
- let value=String(payload?.choices?.[0]?.message?.content||"").trim(),fence=String.fromCharCode(96).repeat(3);if(value.startsWith(fence))value=value.replace(/^.{3}[a-z]*\\s*/i,"").replace(/.{3}$/,"").trim();return JSON.parse(value);
+ let lastError;
+ for(let attempt=1;attempt<=3;attempt++){
+  try{
+   const response=await fetch("https://ai-gateway.vercel.sh/v1/chat/completions",{method:"POST",headers:{authorization:"Bearer "+token,"content-type":"application/json"},body:JSON.stringify({model:"openai/gpt-5.4",messages,response_format:{type:"json_object"},temperature:.35,max_completion_tokens:8000}),signal:AbortSignal.timeout(90000)});
+   const payload=await response.json().catch(()=>({}));
+   if(response.ok){let value=String(payload?.choices?.[0]?.message?.content||"").trim(),fence=String.fromCharCode(96).repeat(3);if(value.startsWith(fence))value=value.replace(/^.{3}[a-z]*\s*/i,"").replace(/.{3}$/,"").trim();return JSON.parse(value);}
+   const retryable=response.status===429||response.status>=500;
+   if(!retryable)throw Object.assign(new Error("AI Gateway rejected the request (HTTP "+response.status+")"),{permanent:true});
+   lastError=new Error("AI Gateway transient HTTP "+response.status);
+  }catch(error){if(error?.permanent)throw error;lastError=error;}
+  if(attempt<3)await new Promise(resolve=>setTimeout(resolve,attempt*1500));
+ }
+ throw new Error("AI Gateway remained unavailable after internal retries: "+(lastError?.message||String(lastError)));
 }
 function prompt(job,baseline,evidence){return [
  "Act as Premier Express Tourism Dubai's senior human tourism editor. Return JSON only: {title,short_description,sections,editorial_note,preservation_ledger}.",
