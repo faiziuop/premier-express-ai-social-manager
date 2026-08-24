@@ -131,9 +131,9 @@ async function gateway(messages){
     if(value.startsWith(fence))value=value.replace(/^.{3}[a-z]*\s*/i,"").replace(/.{3}$/,"").trim();
     return JSON.parse(value);
    }
-   const code=Number(payload?.errors?.[0]?.code||0),retryable=response.status===429||response.status>=500||code===7505;
-   if(!retryable)throw Object.assign(new Error("CLOUDFLARE_WORKERS_AI_REJECTED_"+(code||response.status)),{permanent:true});
-   lastError=new Error("Cloudflare Workers AI transient error "+(code||response.status));
+   const code=Number(payload?.errors?.[0]?.code||0),detail=String(payload?.errors?.[0]?.message||"").slice(0,240),retryable=response.status===429||response.status>=500||code===7505;
+   if(!retryable)throw Object.assign(new Error("CLOUDFLARE_WORKERS_AI_REJECTED_"+(code||response.status)+(detail?": "+detail:"")),{permanent:true});
+   lastError=new Error("Cloudflare Workers AI transient error "+(code||response.status)+(detail?": "+detail:""));
   }catch(error){if(error?.permanent)throw error;lastError=error;}
   if(attempt<3)await new Promise(resolve=>setTimeout(resolve,attempt*1500));
  }
