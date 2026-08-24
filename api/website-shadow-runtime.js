@@ -101,6 +101,7 @@ const COMMON_SECTION_GROUPS=[
  ["Related",["related","similar","fleet options","recommended services","more experiences"]]
 ];
 const wordCount=v=>String(v||"").trim().split(/\s+/).filter(Boolean).length;
+const isFaqHeading=value=>/frequently asked|\bfaqs?\b/i.test(String(value||""));
 function decodeWp(value){return String(value||"").replace(/&#8211;|&ndash;/g,"–").replace(/&#8217;|&rsquo;/g,"’").replace(/&amp;/g,"&").replace(/<[^>]+>/g,"").trim();}
 async function relatedProducts(job){
  const first=await fetch("https://dubaipremiertourism.com/wp-json/wp/v2/product?per_page=100&page=1&_fields=id,slug,link,title");
@@ -121,10 +122,27 @@ function normalizeDraft(draft,related){
  for(const section of draft.sections){
   section.level="H2";
   if(section.content)section.content=cleanText(section.content);
-  if(Array.isArray(section.items))section.items=section.items.map(item=>({...item,level:"H3",answer:cleanText(item.answer)})).filter(item=>item.question&&item.answer);
-  if(Array.isArray(section.subsections))section.subsections=section.subsections.map(item=>({...item,level:"H3"}));
-  if(Array.isArray(section.bullets)){section.bullets=[...new Set(section.bullets.map(cleanText).filter(Boolean))];if(/why choose/i.test(String(section.heading||""))&&section.bullets.length>6)section.bullets=section.bullets.slice(0,6);}
-  if(Array.isArray(section.items)&&/frequently asked/i.test(String(section.heading||""))&&section.items.length>5)section.items=section.items.slice(0,5);
+  const faqMode=isFaqHeading(section.heading);
+  if(faqMode){
+   section.heading="Frequently Asked Questions";
+   const candidates=[
+    ...(Array.isArray(section.items)?section.items:[]),
+    ...(Array.isArray(section.subsections)?section.subsections:[]),
+    ...(Array.isArray(section.faqs)?section.faqs:[]),
+    ...(Array.isArray(section.bullets)?section.bullets:[])
+   ];
+   const normalized=candidates.map(item=>{
+    if(item&&typeof item==="object")return{level:"H3",question:cleanText(item.question||item.heading||item.title||item.name),answer:cleanText(item.answer||item.content||item.text||item.description)};
+    const parts=String(item||"").split(/\s+(?:A|Answer)\s*:\s*/i),question=cleanText(parts.shift()||"").replace(/^\s*(?:Q|Question)\s*:\s*/i,""),answer=cleanText(parts.join(" "));
+    return{level:"H3",question,answer};
+   }).filter(item=>item.question&&item.answer);
+   const seen=new Set();section.items=normalized.filter(item=>{const key=item.question.toLowerCase().replace(/[^a-z0-9]+/g," ").trim();if(!key||seen.has(key))return false;seen.add(key);return true}).slice(0,5);
+   delete section.subsections;delete section.faqs;delete section.bullets;
+  }else{
+   if(Array.isArray(section.items))section.items=section.items.map(item=>({...item,level:"H3",answer:cleanText(item.answer)})).filter(item=>item.question&&item.answer);
+   if(Array.isArray(section.subsections))section.subsections=section.subsections.map(item=>({...item,level:"H3"}));
+   if(Array.isArray(section.bullets)){section.bullets=[...new Set(section.bullets.map(cleanText).filter(Boolean))];if(/why choose/i.test(String(section.heading||""))&&section.bullets.length>6)section.bullets=section.bullets.slice(0,6);}
+  }
  }
  let relatedSection=draft.sections.find(section=>/related|similar|fleet options|recommended services|more experiences/i.test(String(section.heading||"")));
  if(!relatedSection){relatedSection={level:"H2",heading:"Related Dubai Experiences"};draft.sections.push(relatedSection);}
@@ -152,7 +170,7 @@ function validateDraft(draft,category,baseline){
  if(duplicateH2.length)errors.push("Duplicate H2 headings are not allowed");
  for(const [label,aliases] of COMMON_SECTION_GROUPS)if(!heads.some(x=>aliases.some(alias=>x.includes(alias))))errors.push("Missing section purpose: "+label);
  for(const h of CATEGORY_SECTIONS[category]||[])if(!heads.some(x=>x.includes(h.toLowerCase())))errors.push("Missing category section: "+h);
- const faq=sections.find(s=>String(s.heading||"").toLowerCase().includes("frequently asked"));
+ const faq=sections.find(s=>isFaqHeading(s.heading));
  if(!faq||!Array.isArray(faq.items)||faq.items.length!==5)errors.push("Exactly five useful FAQs required");
  const why=sections.find(s=>String(s.heading||"").toLowerCase().includes("why choose"));
  if(!why||!Array.isArray(why.bullets)||why.bullets.length<5||why.bullets.length>6)errors.push("Why Choose requires five or six product-specific reasons");
@@ -296,7 +314,7 @@ function prompt(job,baseline,evidence,related){return [
  "Act as Premier Express Tourism Dubai's senior human tourism editor. Return JSON only: {title,short_description,sections,editorial_note,preservation_ledger}.",
  "The WooCommerce product title is the only H1 and is not part of the body. Every main body section must use {level:'H2',heading,content?,bullets?,items?,subsections?}. Every subsection and FAQ item must use {level:'H3',question or heading,answer or content}. Never skip or duplicate heading levels.",
  "Create excellent professional natural human-written copy. Preserve and improve all useful coverage; never shorten the page.",
- "Short description 70-110 words; 10+ meaningful H2 sections; 5+ nonduplicate FAQs. Paragraphs for overview/expectation; bullets only where useful.",
+ "Short description 70-110 words; 10+ meaningful H2 sections; exactly 5 nonduplicate FAQs. Use the heading Frequently Asked Questions and store each FAQ in items as {level:\"H3\",question,answer}. Paragraphs for overview/expectation; bullets only where useful.",
  "Use varied Dubai tourism search phrases naturally, without stuffing. Avoid filler, repetition, research notes and internal workflow language.",
  "Never invent prices,timings,duration,inclusions,policies,ages,eligibility,transport,ticket entitlement,location or operations. Omit unresolved hard claims from customer copy.",
  "Category:"+job.blueprint_key,"Product:"+job.product_title,"Source:"+JSON.stringify(job.source_snapshot||{}),"Assessment:"+JSON.stringify(job.assessment||{}),"Baseline to improve:"+JSON.stringify(baseline||{}),"Evidence:"+JSON.stringify(evidence||[])
