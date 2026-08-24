@@ -3,6 +3,31 @@ const SUPABASE_PUBLISHABLE_KEY =
   "sb_publishable_w2Cn5cENECQqUUY3lAXH0w_GlSLz5iW";
 const OWNER_USER_ID = "a3a56856-7613-48a6-898c-1526a76f8ee7";
 
+function providerReadiness() {
+  const gatewayKey = Boolean(process.env.AI_GATEWAY_API_KEY);
+  const openAiKey = Boolean(process.env.OPENAI_API_KEY);
+  const anthropicKey = Boolean(process.env.ANTHROPIC_API_KEY);
+  const googleKey = Boolean(
+    process.env.GOOGLE_GENERATIVE_AI_API_KEY || process.env.GEMINI_API_KEY
+  );
+  const configuredProviders = [
+    gatewayKey && "vercel_ai_gateway",
+    openAiKey && "openai",
+    anthropicKey && "anthropic",
+    googleKey && "google"
+  ].filter(Boolean);
+
+  return {
+    ready: configuredProviders.length > 0,
+    mode: configuredProviders.length > 0 ? "CREDENTIAL_PRESENT_LOCKED" : "NOT_CONFIGURED",
+    configured_providers: configuredProviders,
+    isolation: "WEBSITE_SHADOW_ONLY",
+    generation_enabled: false,
+    storage_enabled: false,
+    publishing_enabled: false
+  };
+}
+
 function sameOrigin(req) {
   const origin = req.headers.origin;
   if (!origin) return true;
@@ -63,6 +88,31 @@ async function rlsSelect(table, select, authorization) {
     throw new Error(`${table} returned HTTP ${response.status}`);
   }
   return response.json();
+}
+
+async function providerStatus(req, res) {
+  const auth = await authenticateOwner(req);
+  if (!auth.ok) {
+    return res.status(auth.status).json({
+      success: false,
+      status: auth.code
+    });
+  }
+
+  return res.status(200).json({
+    success: true,
+    service: "website-shadow-runtime",
+    status: "AI_PROVIDER_ISOLATION_CHECKED",
+    provider: providerReadiness(),
+    controls: {
+      owner_authenticated: true,
+      prompt_sent: false,
+      generation_attempted: false,
+      data_stored: false,
+      wordpress_write_performed: false,
+      yoast_write_performed: false
+    }
+  });
 }
 
 async function readAudit(req, res) {
@@ -169,8 +219,9 @@ export default async function handler(req, res) {
         supabase_publishable_access: true,
         owner_identity_gate: true,
         rls_read_path: true,
-        ai_provider: false
+        ai_provider: providerReadiness().ready
       },
+      provider: providerReadiness(),
       controls: {
         authentication_required: true,
         owner_rls_required: true,
@@ -185,6 +236,10 @@ export default async function handler(req, res) {
         yoast_write_available: false
       }
     });
+  }
+
+  if (req.method === "POST" && req.body?.action === "provider_status") {
+    return providerStatus(req, res);
   }
 
   if (req.method === "POST" && req.body?.action === "read_audit") {
@@ -204,6 +259,6 @@ export default async function handler(req, res) {
     success: false,
     status: "EXECUTION_LOCKED",
     message:
-      "Only authenticated read_audit is available. No generation, WordPress or Yoast write was attempted."
+      "Only authenticated read_audit and provider_status are available. No prompt, generation, storage, WordPress or Yoast write was attempted."
   });
 }
