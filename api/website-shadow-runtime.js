@@ -300,7 +300,9 @@ export default async function handler(req, res) {
     });
   }
 
-  if (req.method === "POST" && req.body?.action === "generate_shadow_draft") { try { return await generateShadowDraft(req,res); } catch(error) { return res.status(502).json({success:false,status:"SHADOW_GENERATION_FAILED",message:error?.message||String(error),wordpress_write_performed:false,yoast_write_performed:false}); } }\n\n  if (req.method === "POST" && req.body?.action === "provider_status") {
+  if (req.method === "POST" && req.body?.action === "generate_shadow_draft") { try { return await generateShadowDraft(req,res); } catch(error) { return res.status(502).json({success:false,status:"SHADOW_GENERATION_FAILED",message:error?.message||String(error),wordpress_write_performed:false,yoast_write_performed:false}); } }
+
+  if (req.method === "POST" && req.body?.action === "provider_status") {
     return providerStatus(req, res);
   }
 
