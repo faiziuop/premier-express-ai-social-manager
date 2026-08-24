@@ -692,12 +692,13 @@ function valueText(value){if(value===null||value===undefined)return "";if(typeof
 function safeExternalUrl(value){try{const url=new URL(String(value||""));return /^https?:$/.test(url.protocol)?url.href:""}catch{return ""}}
 function renderDraftNode(node,depth=0){
   if(node===null||node===undefined)return "";
+  if(node&&typeof node==="object"&&node.url){const url=safeExternalUrl(node.url);const label=node.text||node.title||node.label||node.url;return url?"<a href='"+escapeAttribute(url)+"' target='_blank' rel='noopener'>"+escapeText(label)+"</a>":escapeText(label);}
   if(typeof node==="string"||typeof node==="number"||typeof node==="boolean")return "<p>"+escapeText(node)+"</p>";
   if(Array.isArray(node))return node.length?"<ul>"+node.map(item=>"<li>"+(typeof item==="object"?renderDraftNode(item,depth+1):escapeText(item))+"</li>").join("")+"</ul>":"<p class='muted'>No content stored.</p>";
   const heading=node.heading||node.title||node.name||node.section||node.question||node.label;
   const parts=[];
   if(heading){const level=Math.min(4,Math.max(3,depth+3));parts.push("<h"+level+">"+escapeText(heading)+"</h"+level+">")}
-  for(const key of ["content","text","description","answer","summary"]){if(node[key]&&node[key]!==heading)parts.push(renderDraftNode(node[key],depth+1))}
+  for(const key of ["short_description","content","text","description","answer","summary"]){if(node[key]&&node[key]!==heading)parts.push(renderDraftNode(node[key],depth+1))}
   for(const key of ["paragraphs","bullets","items","subsections","sections","faqs","options"]){if(node[key])parts.push(renderDraftNode(node[key],depth+1))}
   if(!parts.length)parts.push("<div class='review-json'>"+escapeText(JSON.stringify(node,null,2))+"</div>");
   return parts.join("");
