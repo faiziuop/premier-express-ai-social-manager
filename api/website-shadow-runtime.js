@@ -344,6 +344,72 @@ async function providerStatus(req, res) {
   });
 }
 
+async function activationPreflight(req, res) {
+  const auth = await authenticateOwner(req);
+  if (!auth.ok) {
+    return res.status(auth.status).json({ success: false, status: auth.code });
+  }
+
+  const jobId = String(req.body?.job_id || "").trim();
+  if (!/^[0-9a-f-]{36}$/i.test(jobId)) {
+    return res.status(400).json({ success: false, status: "INVALID_SHADOW_JOB_ID" });
+  }
+
+  const [jobs, drafts, evidence] = await Promise.all([
+    rest("website_shadow_jobs", "GET", auth.authorization, {
+      select: "id,wp_id,product_url,product_title,blueprint_key,blueprint_version,source_hash,status,publication_authorized,wordpress_write_performed,created_at",
+      id: "eq." + jobId,
+      limit: "1"
+    }),
+    rest("website_shadow_drafts", "GET", auth.authorization, {
+      select: "id,job_id,draft_version,based_on_source_hash,blueprint_key,blueprint_version,draft_content,preservation_ledger,evidence_ids,quality_report,status,approval_token,execution_token,publication_authorized,wordpress_write_performed,created_at",
+      job_id: "eq." + jobId,
+      order: "created_at.desc",
+      limit: "1"
+    }),
+    rest("website_shadow_evidence", "GET", auth.authorization, {
+      select: "id,job_id,record_type,source_type,source_url,supported_facts,conflicts,created_at",
+      job_id: "eq." + jobId,
+      order: "created_at.desc",
+      limit: "200"
+    })
+  ]);
+
+  const job = jobs?.[0];
+  const draft = drafts?.[0];
+  if (!job) return res.status(404).json({ success: false, status: "SHADOW_JOB_NOT_FOUND" });
+  if (!draft) return res.status(409).json({ success: false, status: "SHADOW_DRAFT_REQUIRED" });
+
+  const quality = draft.quality_report || {};
+  const verified = evidence.filter((row) => String(row.record_type || "").toUpperCase() === "VERIFIED");
+  const conflicts = evidence.reduce((count, row) => count + (Array.isArray(row.conflicts) ? row.conflicts.length : row.conflicts ? 1 : 0), 0);
+  const draftValidation = validateDraft(draft.draft_content || {}, job.blueprint_key, {});
+  const checks = [
+    { key: "source_binding", label: "Protected source binding", passed: String(job.source_hash) === String(draft.based_on_source_hash), evidence: "Job and immutable draft fingerprints must match." },
+    { key: "blueprint_binding", label: "Category blueprint binding", passed: job.blueprint_key === draft.blueprint_key && job.blueprint_version === draft.blueprint_version, evidence: String(job.blueprint_key) + " • " + String(job.blueprint_version) },
+    { key: "draft_structure", label: "H2/H3 and required structure", passed: draftValidation.length === 0, evidence: draftValidation.length ? draftValidation.join(" • ") : "Deterministic structure validation passed." },
+    { key: "preservation", label: "Preservation ledger", passed: Array.isArray(draft.preservation_ledger) && draft.preservation_ledger.length > 0 && quality.preservation_check === "PASS" && quality.content_loss_check === "PASS", evidence: String(Array.isArray(draft.preservation_ledger) ? draft.preservation_ledger.length : 0) + " protected ledger item(s)." },
+    { key: "editorial", label: "Professional editorial quality", passed: quality.human_editorial_check === "PASS" && quality.originality_check === "PASS" && quality.heading_hierarchy_check === "PASS", evidence: "Human editorial, originality and heading hierarchy must all pass." },
+    { key: "factual_evidence", label: "Verified factual evidence", passed: verified.length > 0 && quality.factual_support_check === "PASS" && conflicts === 0, evidence: verified.length + " verified record(s) • " + conflicts + " conflict item(s)." },
+    { key: "authorization_lock", label: "No premature authorization", passed: !job.publication_authorized && !draft.publication_authorized && !draft.approval_token && !draft.execution_token, evidence: "Approval and execution tokens remain absent." },
+    { key: "zero_write", label: "Zero WordPress writes", passed: !job.wordpress_write_performed && !draft.wordpress_write_performed, evidence: "No WordPress or Yoast write was performed." }
+  ];
+  const blockers = checks.filter((check) => !check.passed);
+  const ready = blockers.length === 0;
+
+  return res.status(200).json({
+    success: true,
+    service: "website-shadow-runtime",
+    status: ready ? "READY_FOR_CONTROLLED_IMPORT" : "ACTIVATION_PREFLIGHT_BLOCKED",
+    ready,
+    product: { job_id: job.id, draft_id: draft.id, wp_id: job.wp_id, title: job.product_title, url: job.product_url, blueprint_key: job.blueprint_key, draft_version: draft.draft_version },
+    checks,
+    blockers: blockers.map((check) => ({ key: check.key, label: check.label, evidence: check.evidence })),
+    next_step: ready ? "Human review and governed import may be enabled for this exact immutable draft." : "Resolve only the listed blockers, regenerate if necessary, and run preflight again.",
+    controls: { wordpress_write_available: false, yoast_write_available: false, approval_token_created: false, execution_token_created: false }
+  });
+}
+
 async function readAudit(req, res) {
   const auth = await authenticateOwner(req);
   if (!auth.ok) {
@@ -471,6 +537,20 @@ export default async function handler(req, res) {
 
   if (req.method === "POST" && req.body?.action === "provider_status") {
     return providerStatus(req, res);
+  }
+
+  if (req.method === "POST" && req.body?.action === "activation_preflight") {
+    try {
+      return await activationPreflight(req, res);
+    } catch (error) {
+      return res.status(502).json({
+        success: false,
+        status: "ACTIVATION_PREFLIGHT_FAILED",
+        message: error?.message || String(error),
+        wordpress_write_performed: false,
+        yoast_write_performed: false
+      });
+    }
   }
 
   if (req.method === "POST" && req.body?.action === "read_audit") {
