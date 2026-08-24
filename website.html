@@ -16,6 +16,7 @@
     <button class="tab active" data-panel="categories" role="tab" aria-selected="true">Categories</button>
     <button class="tab" data-panel="products" role="tab" aria-selected="false">Products</button>
     <button class="tab" data-panel="global" role="tab" aria-selected="false">Global Rules</button>
+    <button class="tab" data-panel="blueprints" role="tab" aria-selected="false">Blueprint Registry</button>
     <button class="tab" data-panel="proposal-standard" role="tab" aria-selected="false">Proposal Standard</button>
     <button class="tab" data-panel="workflow-rules" role="tab" aria-selected="false">Agent Workflow</button>
     <button class="tab" data-panel="ranking" role="tab" aria-selected="false">Ranking History</button>
@@ -70,6 +71,42 @@
       <tr><td>Human Editorial Quality</td><td>Mandatory excellence gate</td><td>Natural, specific tourism writing with no AI filler, keyword stuffing or mechanical patterns.</td></tr>
     </tbody></table></div>
     <div class="card"><h2>Content-value protection</h2><ul><li>Preserve all useful verified existing information.</li><li>Never shorten content merely to satisfy validation.</li><li>Enrich thin pages using approved product, supplier, official, category and global sources.</li><li>Never invent prices, timings, policies, inclusions, restrictions, capacity or guarantees.</li><li>Apply different, relevant tourism keyword maps to each product and prevent keyword cannibalization.</li><li>Write for customers, traditional search engines and AI discovery platforms.</li></ul></div>
+  </section>
+
+  <section id="blueprints" class="panel">
+    <div class="card"><div class="main-head"><div><h2>Category Blueprint Registry</h2><p class="muted">Versioned editorial rule sets prepared from our approved discussion.</p></div><span class="badge">Automation inactive</span></div>
+      <table class="rule-table"><thead><tr><th>Blueprint</th><th>Draft version</th><th>Design status</th><th>Runtime status</th></tr></thead><tbody>
+        <tr><td>Attractions & Admission</td><td>Draft 0.1</td><td>Reviewed structure</td><td>Not connected</td></tr>
+        <tr><td>City Tours & Sightseeing</td><td>Draft 0.1</td><td>Reviewed structure</td><td>Not connected</td></tr>
+        <tr><td>Desert Safaris</td><td>Draft 0.1</td><td>Reviewed structure</td><td>Not connected</td></tr>
+        <tr><td>Dhow & Dinner Cruises</td><td>Draft 0.1</td><td>Reviewed structure</td><td>Not connected</td></tr>
+        <tr><td>Private & Sharing Yachts</td><td>Draft 0.1</td><td>Reviewed structure</td><td>Not connected</td></tr>
+        <tr><td>Theme Parks & Packages</td><td>Draft 0.1</td><td>Reviewed structure</td><td>Not connected</td></tr>
+        <tr><td>Water & Adventure Activities</td><td>Draft 0.1</td><td>Reviewed structure</td><td>Not connected</td></tr>
+        <tr><td>Helicopter & Aerial Tours</td><td>Draft 0.1</td><td>Reviewed structure</td><td>Not connected</td></tr>
+        <tr><td>Vehicles & Chauffeur Services</td><td>Draft 0.1</td><td>Reviewed structure</td><td>Not connected</td></tr>
+        <tr><td>Airport & Cross-border Transfers</td><td>Draft 0.1</td><td>Reviewed structure</td><td>Not connected</td></tr>
+      </tbody></table>
+      <p class="footer-note">“Reviewed structure” records our design discussion. It does not authorize generation, publishing or backend enforcement.</p>
+    </div>
+    <div class="card"><h2>Blueprint change control</h2><table class="rule-table"><thead><tr><th>Control</th><th>Required behaviour</th></tr></thead><tbody>
+      <tr><td>Immutable version</td><td>Once activated, a blueprint version cannot be edited in place. Changes create a new version.</td></tr>
+      <tr><td>Proposal binding</td><td>Every proposal records its global, category and subtype blueprint versions.</td></tr>
+      <tr><td>No silent migration</td><td>Existing approved or pending proposals remain on their original rules unless deliberately regenerated.</td></tr>
+      <tr><td>Activation gate</td><td>Only an explicitly approved blueprint version can be loaded by the generator or validator.</td></tr>
+      <tr><td>Rollback</td><td>A previous approved blueprint can be restored without changing WordPress content.</td></tr>
+      <tr><td>Change log</td><td>Every version records sections, thresholds and safeguards added, changed or removed, with reasons.</td></tr>
+      <tr><td>Compatibility test</td><td>A new version must be tested against representative products from its own category before activation.</td></tr>
+      <tr><td>Safety separation</td><td>Approving a blueprint never approves a proposal or enables WordPress execution.</td></tr>
+    </tbody></table></div>
+    <div class="card"><h2>Product classification governance</h2><ul>
+      <li>WordPress leaf categories provide the initial class.</li>
+      <li>Mixed parents never override a more specific category.</li>
+      <li>Explicit product overrides require a recorded reason.</li>
+      <li>Conflicting classes remain blocked until one primary blueprint and any valid secondary rules are selected.</li>
+      <li>Reclassification does not modify the WordPress category automatically.</li>
+      <li>Every proposal shows the selected classification and evidence before approval.</li>
+    </ul></div>
   </section>
 
   <section id="proposal-standard" class="panel">
