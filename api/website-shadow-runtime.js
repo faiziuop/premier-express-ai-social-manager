@@ -301,7 +301,7 @@ export default async function handler(req, res) {
     const response=await fetch("https://ai-gateway.vercel.sh/v1/models",{headers:{authorization:"Bearer "+token}});
     const payload=await response.json().catch(()=>({}));
     const providerError=payload?.error||{};
-    return res.status(200).json({success:response.ok,http_status:response.status,error_code:providerError.code||null,error_type:providerError.type||null,error_message:providerError.message||null});
+    const modelIds=Array.isArray(payload?.data)?payload.data.map(item=>item.id):[];return res.status(200).json({success:response.ok,http_status:response.status,error_code:providerError.code||null,error_type:providerError.type||null,error_message:providerError.message||null,requested_model_available:modelIds.includes("openai/gpt-5.4"),openai_models:modelIds.filter(id=>String(id).startsWith("openai/")).slice(0,20)});
   }
 
   if (req.method === "GET" || req.method === "HEAD") {
