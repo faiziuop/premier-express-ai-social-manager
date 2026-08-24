@@ -100,7 +100,18 @@ const COMMON_SECTION_GROUPS=[
  ["Related",["related","similar","fleet options","recommended services","more experiences"]]
 ];
 const wordCount=v=>String(v||"").trim().split(/\s+/).filter(Boolean).length;
-function normalizeDraft(draft){
+function decodeWp(value){return String(value||"").replace(/&#8211;|&ndash;/g,"–").replace(/&#8217;|&rsquo;/g,"’").replace(/&amp;/g,"&").replace(/<[^>]+>/g,"").trim();}
+async function relatedProducts(job){
+ const first=await fetch("https://dubaipremiertourism.com/wp-json/wp/v2/product?per_page=100&page=1&_fields=id,slug,link,title");
+ if(!first.ok)throw new Error("LIVE_PRODUCT_CATALOG_HTTP_"+first.status);
+ let products=await first.json(),pages=Math.min(4,Number(first.headers.get("x-wp-totalpages")||1));
+ for(let page=2;page<=pages;page++){const response=await fetch("https://dubaipremiertourism.com/wp-json/wp/v2/product?per_page=100&page="+page+"&_fields=id,slug,link,title");if(response.ok)products=products.concat(await response.json());}
+ const own=String(job.product_url||"").replace(/\/$/,""),title=String(job.product_title||"").toLowerCase();
+ const intent={vehicles:["chauffeur","sedan","suv","van","bus","airport transfer","city tour"],transfers:["transfer","chauffeur","sedan","suv","van"],attractions:["ticket","museum","garden","view","park"],tours:["tour","sightseeing"],activities:["adventure","activity"],packages:["package","park","ticket"],safaris:["safari","desert"],cruises:["cruise","dhow","marina"],yachts:["yacht","charter"],helicopter:["helicopter","flight"]}[job.blueprint_key]||[];
+ const titleTokens=new Set(title.split(/\W+/).filter(x=>x.length>3));
+ return products.map(item=>{const itemTitle=decodeWp(item.title?.rendered),lower=itemTitle.toLowerCase(),overlap=[...titleTokens].filter(token=>lower.includes(token)).length,intentScore=intent.filter(term=>lower.includes(term)).length;return{title:itemTitle,url:String(item.link||""),score:overlap*3+intentScore};}).filter(item=>item.url&&item.url.replace(/\/$/,"")!==own&&item.url.startsWith("https://dubaipremiertourism.com/product/")&&item.score>0).sort((a,b)=>b.score-a.score||a.title.localeCompare(b.title)).slice(0,4).map(({title,url})=>({text:title,url}));
+}
+function normalizeDraft(draft,related){
  if(!draft||!Array.isArray(draft.sections))return draft;
  const seenOverview=[];draft.sections=draft.sections.filter(section=>{if(!/overview/i.test(String(section.heading||"")))return true;seenOverview.push(section);return seenOverview.length===1;});
  if(seenOverview.length>1){const first=seenOverview[0],parts=seenOverview.map(x=>String(x.content||"").trim()).filter(Boolean);first.content=[...new Set(parts)].join("\n\n");}
@@ -112,6 +123,9 @@ function normalizeDraft(draft){
   if(Array.isArray(section.bullets)){section.bullets=[...new Set(section.bullets.map(cleanText).filter(Boolean))];if(/why choose/i.test(String(section.heading||""))&&section.bullets.length>6)section.bullets=section.bullets.slice(0,6);}
   if(Array.isArray(section.items)&&/frequently asked/i.test(String(section.heading||""))&&section.items.length>5)section.items=section.items.slice(0,5);
  }
+ let relatedSection=draft.sections.find(section=>/related|similar|fleet options|recommended services|more experiences/i.test(String(section.heading||"")));
+ if(!relatedSection){relatedSection={level:"H2",heading:"Related Dubai Experiences"};draft.sections.push(relatedSection);}
+ if(Array.isArray(related)&&related.length){relatedSection.heading="Related Dubai Experiences";relatedSection.bullets=related;delete relatedSection.content;}
  return draft;
 }
 function validateDraft(draft,category,baseline){
@@ -125,6 +139,9 @@ function validateDraft(draft,category,baseline){
  const why=sections.find(s=>String(s.heading||"").toLowerCase().includes("why choose"));
  if(!why||!Array.isArray(why.bullets)||why.bullets.length<5||why.bullets.length>6)errors.push("Why Choose requires five or six product-specific reasons");
  if(!Array.isArray(draft?.preservation_ledger)||draft.preservation_ledger.length===0)errors.push("Preservation ledger is required");
+ const related=sections.find(section=>/related|similar|fleet options|recommended services|more experiences/i.test(String(section.heading||"")));
+ const links=Array.isArray(related?.bullets)?related.bullets.filter(item=>item&&typeof item==="object"&&String(item.url||"").startsWith("https://dubaipremiertourism.com/product/")):[];
+ if(links.length<3||links.length>6)errors.push("Related Dubai Experiences requires 3-6 verified internal product links");
  for(const p of ["must be confirmed","requires confirmation","pending verification","product-specific use","official this experience","insert link","research needed","placeholder"])if(raw.includes(p))errors.push("Internal or mechanical wording: "+p);
  if(/\b(number one|guaranteed|cheapest|unbeatable)\b/i.test(raw))errors.push("Unverifiable promotional superlative");
  return [...new Set(errors)];
@@ -176,7 +193,7 @@ async function gateway(messages){
  }
  throw new Error("CLOUDFLARE_WORKERS_AI_UNAVAILABLE_AFTER_RETRIES: "+(lastError?.message||String(lastError)));
 }
-function prompt(job,baseline,evidence){return [
+function prompt(job,baseline,evidence,related){return [
  "Act as Premier Express Tourism Dubai's senior human tourism editor. Return JSON only: {title,short_description,sections,editorial_note,preservation_ledger}.",
  "Sections use {level:'H2',heading,content?,bullets?,items?}; FAQ items use {question,answer}.",
  "Create excellent professional natural human-written copy. Preserve and improve all useful coverage; never shorten the page.",
@@ -190,12 +207,13 @@ async function generateShadowDraft(req,res){
  const auth=await authenticateOwner(req);if(!auth.ok)return res.status(auth.status).json({success:false,status:auth.code});
  const id=String(req.body?.job_id||"");if(!/^[0-9a-f-]{36}$/i.test(id))return res.status(400).json({success:false,status:"VALID_JOB_ID_REQUIRED"});
  console.info("[shadow-generation]",{requestId,stage:"owner_authenticated",jobId:id});
- const jobs=await rest("website_shadow_jobs","GET",auth.authorization,{select:"id,product_title,blueprint_key,blueprint_version,source_hash,source_snapshot,assessment",id:"eq."+id,limit:"1"}),job=jobs?.[0];
+ const jobs=await rest("website_shadow_jobs","GET",auth.authorization,{select:"id,product_url,product_title,blueprint_key,blueprint_version,source_hash,source_snapshot,assessment",id:"eq."+id,limit:"1"}),job=jobs?.[0];
  if(!job)return res.status(404).json({success:false,status:"SHADOW_JOB_NOT_FOUND"});
  const [drafts,evidence]=await Promise.all([rest("website_shadow_drafts","GET",auth.authorization,{select:"draft_version,draft_content,preservation_ledger",job_id:"eq."+id,order:"created_at.desc",limit:"1"}),rest("website_shadow_evidence","GET",auth.authorization,{select:"id,record_type,source_type,source_title,supported_facts,conflicts,notes",job_id:"eq."+id,limit:"50"})]);
  console.info("[shadow-generation]",{requestId,stage:"context_loaded",category:job.blueprint_key,evidenceCount:evidence.length});
- const messages=[{role:"system",content:"Obey the editorial contract and output valid JSON only."},{role:"user",content:prompt(job,drafts?.[0]?.draft_content,evidence)}];let generated,errors=[];
- for(let attempt=0;attempt<4;attempt++){console.info("[shadow-generation]",{requestId,stage:"model_attempt",attempt:attempt+1});generated=normalizeDraft(await gateway(messages));errors=validateDraft(generated,job.blueprint_key,drafts?.[0]?.draft_content);if(!errors.length){console.info("[shadow-generation]",{requestId,stage:"validation_passed",attempt:attempt+1});break;}console.info("[shadow-generation]",{requestId,stage:"validation_repair",attempt:attempt+1,errorCount:errors.length,errors});messages.push({role:"assistant",content:JSON.stringify(generated)},{role:"user",content:"Return the complete corrected JSON object. Repair every listed error precisely without padding, invention, duplicate sections or content loss: "+JSON.stringify(errors)});}
+ const liveRelated=await relatedProducts(job);console.info("[shadow-generation]",{requestId,stage:"related_products_loaded",count:liveRelated.length});
+ const messages=[{role:"system",content:"Obey the editorial contract and output valid JSON only."},{role:"user",content:prompt(job,drafts?.[0]?.draft_content,evidence,liveRelated)}];let generated,errors=[];
+ for(let attempt=0;attempt<4;attempt++){console.info("[shadow-generation]",{requestId,stage:"model_attempt",attempt:attempt+1});generated=normalizeDraft(await gateway(messages),liveRelated);errors=validateDraft(generated,job.blueprint_key,drafts?.[0]?.draft_content);if(!errors.length){console.info("[shadow-generation]",{requestId,stage:"validation_passed",attempt:attempt+1});break;}console.info("[shadow-generation]",{requestId,stage:"validation_repair",attempt:attempt+1,errorCount:errors.length,errors});messages.push({role:"assistant",content:JSON.stringify(generated)},{role:"user",content:"Return the complete corrected JSON object. Repair every listed error precisely without padding, invention, duplicate sections or content loss: "+JSON.stringify(errors)});}
  if(errors.length)return res.status(422).json({success:false,status:"INTERNAL_EXCELLENCE_GATE_NOT_PASSED",message:"The agent withheld the draft because it did not meet the final excellence standard.",wordpress_write_performed:false});
  const row={job_id:id,created_by:auth.user.id,draft_version:Number(drafts?.[0]?.draft_version||0)+1,based_on_source_hash:job.source_hash,blueprint_key:job.blueprint_key,blueprint_version:job.blueprint_version,draft_content:generated,preservation_ledger:Array.isArray(generated.preservation_ledger)?generated.preservation_ledger:(drafts?.[0]?.preservation_ledger||[]),evidence_ids:evidence.map(x=>x.id),quality_report:{quality_state:"UNVERIFIED_GENERATED_SHADOW",deterministic_validation:"PASS",preservation_coverage_check:"PASS",usefulness_check:"PASS",faq_check:"PASS",why_choose_check:"PASS",repair_attempts:messages.filter(x=>x.role==="assistant").length,publication_gate_passed:false,wordpress_changes:0,yoast_changes:0},status:"UNVERIFIED_SHADOW_DRAFT",approval_token:null,execution_token:null,publication_authorized:false,wordpress_write_performed:false};
  console.info("[shadow-generation]",{requestId,stage:"storing_unverified_draft",draftVersion:row.draft_version});
