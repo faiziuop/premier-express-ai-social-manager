@@ -738,11 +738,22 @@ async function generateImprovedShadow(jobId,button){
   if(!shadowSb)throw Error("Authentication client unavailable.");
   const {data:{session}}=await shadowSb.auth.getSession();if(!session?.access_token)throw Error("Sign in through the Main Agent first.");
   button.disabled=true;button.textContent="Generating and repairing…";if(inline){inline.textContent="Working: loading product evidence and generating the draft…";inline.className="inventory-status";}
-  status.textContent="Creating an isolated unverified draft. The agent will repair structural and editorial errors internally; no website write is available.";
-  const response=await fetch("/api/website-shadow-runtime",{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+session.access_token},body:JSON.stringify({action:"generate_shadow_draft",job_id:jobId})});
-  const payload=await response.json().catch(()=>({}));
-  if(!response.ok)throw Error((payload.status||"Generation failed")+(payload.errors?.length?" • "+payload.errors.join(" • "):"")+" • HTTP "+response.status);
-  status.textContent="Draft "+payload.draft_version+" created and structurally validated • factual state: "+(payload.factual_verification||"UNVERIFIED")+" • WordPress and Yoast unchanged.";if(inline){inline.textContent="Completed: draft "+payload.draft_version+" created and validated • website unchanged.";inline.className="inventory-status match-good";}
+  status.textContent="Creating an isolated unverified draft. Provider limits and structural repairs are handled in the background; no website write is available.";
+  let payload={},response,backgroundRetry=0;
+  while(backgroundRetry<3){
+   response=await fetch("/api/website-shadow-runtime",{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+session.access_token},body:JSON.stringify({action:"generate_shadow_draft",job_id:jobId})});
+   payload=await response.json().catch(()=>({}));
+   if(response.ok)break;
+   if(!payload.retryable||backgroundRetry>=2)throw Error((payload.status||"Generation failed")+(payload.errors?.length?" • "+payload.errors.join(" • "):"")+" • HTTP "+response.status);
+   backgroundRetry++;
+   const seconds=Math.max(15,Math.min(90,Number(payload.retry_after_seconds||45)));
+   status.textContent="AI provider is temporarily busy. Automatic background retry "+backgroundRetry+" of 2 will run in "+seconds+" seconds; the website remains unchanged.";
+   if(inline){inline.textContent="Provider busy: waiting for automatic retry "+backgroundRetry+" of 2…";inline.className="inventory-status";}
+   button.textContent="Waiting for provider…";
+   await new Promise(resolve=>setTimeout(resolve,seconds*1000));
+   button.textContent="Retrying generation…";
+  }
+  status.textContent="Draft "+payload.draft_version+" created and structurally validated • factual state: "+(payload.factual_verification||"UNVERIFIED")+" • WordPress and Yoast unchanged.";if(inline){inline.textContent="Completed: draft "+payload.draft_version+" created and validated"+(backgroundRetry?" after "+backgroundRetry+" automatic provider retry"+(backgroundRetry>1?"ies":""):"")+" • website unchanged.";inline.className="inventory-status match-good";}
   await loadShadowJobs();reviewShadowDraft(jobId);
  }catch(error){const message=error?.message||String(error);status.textContent="Shadow generation stopped safely: "+message+" No WordPress or Yoast change was attempted.";if(inline){inline.textContent="Stopped safely: "+message+" • no website change.";inline.className="inventory-status match-review";}button.textContent="Retry improved shadow";}
  finally{if(button?.isConnected){button.disabled=false;if(button.textContent!=="Retry improved shadow")button.textContent="Generate improved shadow";}}
