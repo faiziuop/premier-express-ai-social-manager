@@ -92,7 +92,7 @@ const CATEGORY_SECTIONS = {
   vehicles:["Vehicle Capacity","Ideal Uses"],transfers:["Transfer Details","Pickup Information"]
 };
 const COMMON_SECTIONS=["Tour Overview","What to Expect","Highlights","Inclusions","Exclusions","Timings","Booking","Why Choose","Frequently Asked Questions","Related Experiences"];
-const wordCount=v=>String(v||"").trim().split(/\\s+/).filter(Boolean).length;
+const wordCount=v=>String(v||"").trim().split(/\s+/).filter(Boolean).length;
 function normalizeDraft(draft){
  if(!draft||!Array.isArray(draft.sections))return draft;
  const seenOverview=[];draft.sections=draft.sections.filter(section=>{if(!/overview/i.test(String(section.heading||"")))return true;seenOverview.push(section);return seenOverview.length===1;});
@@ -111,10 +111,10 @@ function validateDraft(draft,category,baseline){
  if(!why||!Array.isArray(why.bullets)||why.bullets.length<5||why.bullets.length>6)errors.push("Why Choose requires five or six product-specific reasons");
  const generatedWords=wordCount(raw),baselineWords=wordCount(JSON.stringify(baseline||{}));
  if(baselineWords>0&&generatedWords<Math.floor(baselineWords*.9))errors.push("Content-loss regression: generated coverage is below 90% of baseline");
- const starts=[];for(const section of sections){for(const value of [section.content,...(section.bullets||[])]){const start=String(value||"").toLowerCase().split(/\\s+/).slice(0,5).join(" ");if(start)starts.push(start)}}
+ const starts=[];for(const section of sections){for(const value of [section.content,...(section.bullets||[])]){const start=String(value||"").toLowerCase().split(/\s+/).slice(0,5).join(" ");if(start)starts.push(start)}}
  if(new Set(starts).size<starts.length-2)errors.push("Repeated sentence openings make the copy sound templated");
  for(const p of ["must be confirmed","requires confirmation","pending verification","product-specific use","official this experience","insert link","research needed","placeholder"])if(raw.includes(p))errors.push("Internal or mechanical wording: "+p);
- if(/\\b(best|number one|guaranteed|cheapest|unbeatable)\\b/i.test(raw))errors.push("Unverifiable superlative");
+ if(/\b(best|number one|guaranteed|cheapest|unbeatable)\b/i.test(raw))errors.push("Unverifiable superlative");
  return [...new Set(errors)];
 }
 async function rest(table,method,authorization,query={},body){
