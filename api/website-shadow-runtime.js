@@ -151,29 +151,50 @@ async function rest(table,method,authorization,query={},body){
  const response=await fetch(url,{method,headers:{apikey:SUPABASE_PUBLISHABLE_KEY,authorization,accept:"application/json","content-type":"application/json",prefer:method==="POST"?"return=representation":""},body:body?JSON.stringify(body):undefined});
  const payload=await response.json().catch(()=>null);if(!response.ok)throw new Error(table+" HTTP "+response.status);return payload;
 }
+const GEMINI_MODELS=["gemini-3-flash-preview","gemini-2.5-flash","gemini-2.5-flash-lite"];
+function retryDelay(response,round){
+ const header=Number(response?.headers?.get?.("retry-after")||0);
+ const exponential=Math.min(45000,4000*Math.pow(2,round));
+ return Math.max(header>0?Math.min(45000,header*1000):0,exponential)+Math.floor(Math.random()*1000);
+}
 async function gemini(messages){
- const key=process.env.GEMINI_API_KEY;if(!key)throw new Error("GEMINI_CONFIGURATION_REQUIRED");
+ const key=process.env.GEMINI_API_KEY;if(!key)throw Object.assign(new Error("GEMINI_CONFIGURATION_REQUIRED"),{permanent:true});
  const system=messages.filter(x=>x.role==="system").map(x=>x.content).join("\n");
  const contents=messages.filter(x=>x.role!=="system").map(x=>({role:x.role==="assistant"?"model":"user",parts:[{text:String(x.content||"")}]}));
- let lastError;
- for(let attempt=1;attempt<=3;attempt++){
-  try{
-   const response=await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent",{method:"POST",headers:{"x-goog-api-key":key,"content-type":"application/json"},body:JSON.stringify({systemInstruction:{parts:[{text:system}]},contents,generationConfig:{temperature:.35,maxOutputTokens:8192,responseMimeType:"application/json"}}),signal:AbortSignal.timeout(90000)});
-   const payload=await response.json().catch(()=>({}));
-   if(response.ok){const value=String(payload?.candidates?.[0]?.content?.parts?.[0]?.text||"").trim();return JSON.parse(value);}
-   const retryable=response.status===429||response.status>=500;
-   if(!retryable)throw Object.assign(new Error("GEMINI_REQUEST_REJECTED_HTTP_"+response.status),{permanent:true});
-   lastError=new Error("Gemini transient HTTP "+response.status);
-  }catch(error){if(error?.permanent)throw error;lastError=error;}
-  if(attempt<3)await new Promise(resolve=>setTimeout(resolve,attempt*1500));
+ let lastError,rateLimited=false;
+ for(let round=0;round<3;round++){
+  let longestDelay=0;
+  for(const model of GEMINI_MODELS){
+   try{
+    const response=await fetch("https://generativelanguage.googleapis.com/v1beta/models/"+encodeURIComponent(model)+":generateContent",{method:"POST",headers:{"x-goog-api-key":key,"content-type":"application/json"},body:JSON.stringify({systemInstruction:{parts:[{text:system}]},contents,generationConfig:{temperature:.35,maxOutputTokens:8192,responseMimeType:"application/json"}}),signal:AbortSignal.timeout(90000)});
+    const payload=await response.json().catch(()=>({}));
+    if(response.ok){
+     const value=String(payload?.candidates?.[0]?.content?.parts?.[0]?.text||"").trim();
+     if(!value)throw new Error("GEMINI_EMPTY_RESPONSE_"+model);
+     console.info("[shadow-generation]",{stage:"provider_success",provider:"google_gemini",model,round:round+1});
+     return JSON.parse(value);
+    }
+    const detail=String(payload?.error?.message||"").slice(0,240),retryable=response.status===408||response.status===429||response.status>=500;
+    if(!retryable)throw Object.assign(new Error("GEMINI_REQUEST_REJECTED_HTTP_"+response.status+(detail?": "+detail:"")),{permanent:true});
+    rateLimited=rateLimited||response.status===429;
+    longestDelay=Math.max(longestDelay,retryDelay(response,round));
+    lastError=new Error("Gemini "+model+" transient HTTP "+response.status+(detail?": "+detail:""));
+    console.warn("[shadow-generation]",{stage:"provider_retryable",provider:"google_gemini",model,httpStatus:response.status,round:round+1});
+   }catch(error){
+    if(error?.permanent)throw error;
+    lastError=error;
+    console.warn("[shadow-generation]",{stage:"provider_exception",provider:"google_gemini",model,round:round+1,message:error?.message||String(error)});
+   }
+  }
+  if(round<2)await new Promise(resolve=>setTimeout(resolve,longestDelay||retryDelay(null,round)));
  }
- throw new Error("GEMINI_UNAVAILABLE_AFTER_RETRIES: "+(lastError?.message||String(lastError)));
+ const error=new Error((rateLimited?"AI_PROVIDER_RATE_LIMITED":"GEMINI_UNAVAILABLE_AFTER_RETRIES")+": "+(lastError?.message||String(lastError)));
+ error.retryable=true;throw error;
 }
 
-async function gateway(messages){
- if(process.env.GEMINI_API_KEY)return gemini(messages);
+async function cloudflare(messages){
  const accountId=process.env.CLOUDFLARE_ACCOUNT_ID,token=process.env.CLOUDFLARE_API_TOKEN;
- if(!accountId||!token)throw new Error("CLOUDFLARE_WORKERS_AI_CONFIGURATION_REQUIRED");
+ if(!accountId||!token)throw Object.assign(new Error("CLOUDFLARE_WORKERS_AI_CONFIGURATION_REQUIRED"),{permanent:true});
  const model="@cf/meta/llama-4-scout-17b-16e-instruct";
  let lastError;
  for(let attempt=1;attempt<=3;attempt++){
@@ -183,15 +204,30 @@ async function gateway(messages){
    if(response.ok&&payload?.success!==false){
     let value=String(payload?.result?.response||payload?.result||"").trim(),fence=String.fromCharCode(96).repeat(3);
     if(value.startsWith(fence))value=value.replace(/^.{3}[a-z]*\s*/i,"").replace(/.{3}$/,"").trim();
+    console.info("[shadow-generation]",{stage:"provider_success",provider:"cloudflare_workers_ai",model,attempt});
     return JSON.parse(value);
    }
-   const code=Number(payload?.errors?.[0]?.code||0),detail=String(payload?.errors?.[0]?.message||"").slice(0,240),quotaExhausted=code===4006&&detail.toLowerCase().includes("daily free allocation"),retryable=!quotaExhausted&&(response.status===429||response.status>=500||code===7505);
+   const code=Number(payload?.errors?.[0]?.code||0),detail=String(payload?.errors?.[0]?.message||"").slice(0,240),quotaExhausted=code===4006&&detail.toLowerCase().includes("daily free allocation"),retryable=!quotaExhausted&&(response.status===408||response.status===429||response.status>=500||code===7505);
    if(!retryable)throw Object.assign(new Error(quotaExhausted?"CLOUDFLARE_DAILY_QUOTA_EXHAUSTED":"CLOUDFLARE_WORKERS_AI_REJECTED_"+(code||response.status)+(detail?": "+detail:"")),{permanent:true});
    lastError=new Error("Cloudflare Workers AI transient error "+(code||response.status)+(detail?": "+detail:""));
   }catch(error){if(error?.permanent)throw error;lastError=error;}
-  if(attempt<3)await new Promise(resolve=>setTimeout(resolve,attempt*1500));
+  if(attempt<3)await new Promise(resolve=>setTimeout(resolve,attempt*2500+Math.floor(Math.random()*750)));
  }
- throw new Error("CLOUDFLARE_WORKERS_AI_UNAVAILABLE_AFTER_RETRIES: "+(lastError?.message||String(lastError)));
+ const error=new Error("CLOUDFLARE_WORKERS_AI_UNAVAILABLE_AFTER_RETRIES: "+(lastError?.message||String(lastError)));error.retryable=true;throw error;
+}
+async function gateway(messages){
+ let geminiError;
+ if(process.env.GEMINI_API_KEY){
+  try{return await gemini(messages);}catch(error){geminiError=error;if(error?.permanent)throw error;console.warn("[shadow-generation]",{stage:"provider_failover",from:"google_gemini",to:"cloudflare_workers_ai",message:error?.message||String(error)});}
+ }
+ if(process.env.CLOUDFLARE_ACCOUNT_ID&&process.env.CLOUDFLARE_API_TOKEN){
+  try{return await cloudflare(messages);}catch(error){
+   if(error?.message==="CLOUDFLARE_DAILY_QUOTA_EXHAUSTED"&&geminiError){const finalError=new Error("AI_PROVIDERS_TEMPORARILY_UNAVAILABLE: "+geminiError.message+"; "+error.message);finalError.retryable=true;throw finalError;}
+   throw error;
+  }
+ }
+ if(geminiError)throw geminiError;
+ throw Object.assign(new Error("AI_PROVIDER_CONFIGURATION_REQUIRED"),{permanent:true});
 }
 function prompt(job,baseline,evidence,related){return [
  "Act as Premier Express Tourism Dubai's senior human tourism editor. Return JSON only: {title,short_description,sections,editorial_note,preservation_ledger}.",
@@ -368,7 +404,7 @@ export default async function handler(req, res) {
     });
   }
 
-  if (req.method === "POST" && req.body?.action === "generate_shadow_draft") { try { return await generateShadowDraft(req,res); } catch(error) { console.error("[shadow-generation]",{stage:"failed",message:error?.message||String(error),stack:error?.stack}); return res.status(error?.message==="CLOUDFLARE_WORKERS_AI_CONFIGURATION_REQUIRED"?503:502).json({success:false,status:error?.message==="CLOUDFLARE_WORKERS_AI_CONFIGURATION_REQUIRED"?"CLOUDFLARE_WORKERS_AI_CONFIGURATION_REQUIRED":"SHADOW_GENERATION_FAILED",message:error?.message||String(error),wordpress_write_performed:false,yoast_write_performed:false}); } }
+  if (req.method === "POST" && req.body?.action === "generate_shadow_draft") { try { return await generateShadowDraft(req,res); } catch(error) { const retryable=Boolean(error?.retryable)||/^AI_PROVIDER_RATE_LIMITED|^AI_PROVIDERS_TEMPORARILY_UNAVAILABLE|_UNAVAILABLE_AFTER_RETRIES/.test(String(error?.message||"")); const configuration=/CONFIGURATION_REQUIRED/.test(String(error?.message||"")); const status=retryable?"SHADOW_PROVIDER_BUSY_RETRYABLE":configuration?"SHADOW_PROVIDER_CONFIGURATION_REQUIRED":"SHADOW_GENERATION_FAILED"; console.error("[shadow-generation]",{stage:"failed",status,retryable,message:error?.message||String(error),stack:error?.stack}); return res.status(retryable||configuration?503:502).json({success:false,status,retryable,retry_after_seconds:retryable?90:undefined,message:retryable?"The AI provider is temporarily rate-limited. The shadow job remains safe and can be retried without rescanning.":error?.message||String(error),wordpress_write_performed:false,yoast_write_performed:false}); } }
 
   if (req.method === "POST" && req.body?.action === "provider_status") {
     return providerStatus(req, res);
