@@ -694,10 +694,17 @@ function renderDraftNode(node,depth=0){
   if(node===null||node===undefined)return "";
   if(node&&typeof node==="object"&&node.url){const url=safeExternalUrl(node.url);const label=node.text||node.title||node.label||node.url;return url?"<a href='"+escapeAttribute(url)+"' target='_blank' rel='noopener'>"+escapeText(label)+"</a>":escapeText(label);}
   if(typeof node==="string"||typeof node==="number"||typeof node==="boolean")return "<p>"+escapeText(node)+"</p>";
-  if(Array.isArray(node))return node.length?"<ul>"+node.map(item=>"<li>"+(typeof item==="object"?renderDraftNode(item,depth+1):escapeText(item))+"</li>").join("")+"</ul>":"<p class='muted'>No content stored.</p>";
+  if(Array.isArray(node)){
+    if(!node.length)return "<p class='muted'>No content stored.</p>";
+    const structured=node.some(item=>item&&typeof item==="object"&&(item.heading||item.question||item.level||item.items||item.subsections));
+    return structured?node.map(item=>renderDraftNode(item,depth+1)).join(""):"<ul>"+node.map(item=>"<li>"+(typeof item==="object"?renderDraftNode(item,depth+1):escapeText(item))+"</li>").join("")+"</ul>";
+  }
   const heading=node.heading||node.title||node.name||node.section||node.question||node.label;
-  const parts=[];
-  if(heading){const level=Math.min(4,Math.max(3,depth+3));parts.push("<h"+level+">"+escapeText(heading)+"</h"+level+">")}
+  const parts=[],declared=String(node.level||"").toUpperCase(),draftRoot=depth===0&&node.title&&Array.isArray(node.sections);
+  if(heading){
+    if(draftRoot)parts.push("<div class='draft-product-title'><b>Product title (H1 on WooCommerce page):</b> "+escapeText(heading)+"</div>");
+    else{const level=declared==="H2"?2:declared==="H3"?3:Math.min(4,Math.max(3,depth+3));parts.push("<div class='heading-level-label'>"+(declared||("H"+level))+"</div><h"+level+">"+escapeText(heading)+"</h"+level+">");}
+  }
   for(const key of ["short_description","content","text","description","answer","summary"]){if(node[key]&&node[key]!==heading)parts.push(renderDraftNode(node[key],depth+1))}
   for(const key of ["paragraphs","bullets","items","subsections","sections","faqs","options"]){if(node[key])parts.push(renderDraftNode(node[key],depth+1))}
   if(!parts.length)parts.push("<div class='review-json'>"+escapeText(JSON.stringify(node,null,2))+"</div>");
