@@ -5,15 +5,16 @@ const OWNER_USER_ID = "a3a56856-7613-48a6-898c-1526a76f8ee7";
 
 function providerReadiness() {
   const geminiReady = Boolean(process.env.GEMINI_API_KEY);
+  const groqReady = Boolean(process.env.GROQ_API_KEY);
   const cloudflareReady = Boolean(process.env.CLOUDFLARE_ACCOUNT_ID) && Boolean(process.env.CLOUDFLARE_API_TOKEN);
-  const ready = geminiReady || cloudflareReady;
-  const providers=[geminiReady&&"google_gemini",cloudflareReady&&"cloudflare_workers_ai"].filter(Boolean);
+  const ready = geminiReady || groqReady || cloudflareReady;
+  const providers=[geminiReady&&"google_gemini",groqReady&&"groq",cloudflareReady&&"cloudflare_workers_ai"].filter(Boolean);
   return {
     ready,
     mode: ready ? "SHADOW_AI_PROVIDER_READY" : "AI_PROVIDER_CONFIGURATION_REQUIRED",
-    active_provider: geminiReady ? "google_gemini" : cloudflareReady ? "cloudflare_workers_ai" : null,
+    active_provider: geminiReady ? "google_gemini" : groqReady ? "groq" : cloudflareReady ? "cloudflare_workers_ai" : null,
     configured_providers: providers,
-    authentication: geminiReady ? "GEMINI_API_KEY" : cloudflareReady ? "CLOUDFLARE_API_TOKEN" : "NONE",
+    authentication: geminiReady ? "GEMINI_API_KEY" : groqReady ? "GROQ_API_KEY" : cloudflareReady ? "CLOUDFLARE_API_TOKEN" : "NONE",
     isolation: "WEBSITE_SHADOW_ONLY",
     generation_enabled: ready,
     storage_enabled: true,
@@ -151,11 +152,17 @@ async function rest(table,method,authorization,query={},body){
  const response=await fetch(url,{method,headers:{apikey:SUPABASE_PUBLISHABLE_KEY,authorization,accept:"application/json","content-type":"application/json",prefer:method==="POST"?"return=representation":""},body:body?JSON.stringify(body):undefined});
  const payload=await response.json().catch(()=>null);if(!response.ok)throw new Error(table+" HTTP "+response.status);return payload;
 }
-const GEMINI_MODELS=["gemini-3-flash-preview","gemini-2.5-flash","gemini-2.5-flash-lite"];
+const GEMINI_MODELS=["gemini-3.6-flash","gemini-3.5-flash","gemini-3.1-flash-lite"];
+const GROQ_MODELS=["openai/gpt-oss-120b","llama-3.3-70b-versatile"];
 function retryDelay(response,round){
  const header=Number(response?.headers?.get?.("retry-after")||0);
  const exponential=Math.min(45000,4000*Math.pow(2,round));
  return Math.max(header>0?Math.min(45000,header*1000):0,exponential)+Math.floor(Math.random()*1000);
+}
+function parseJsonModelOutput(value){
+ let text=String(value||"").trim(),fence=String.fromCharCode(96).repeat(3);
+ if(text.startsWith(fence))text=text.replace(/^.{3}[a-z]*\s*/i,"").replace(/.{3}$/,"").trim();
+ return JSON.parse(text);
 }
 async function gemini(messages){
  const key=process.env.GEMINI_API_KEY;if(!key)throw Object.assign(new Error("GEMINI_CONFIGURATION_REQUIRED"),{permanent:true});
@@ -163,7 +170,7 @@ async function gemini(messages){
  const contents=messages.filter(x=>x.role!=="system").map(x=>({role:x.role==="assistant"?"model":"user",parts:[{text:String(x.content||"")}]}));
  let lastError,rateLimited=false;
  for(let round=0;round<3;round++){
-  let longestDelay=0;
+  let longestDelay=0,roundRetryable=false;
   for(const model of GEMINI_MODELS){
    try{
     const response=await fetch("https://generativelanguage.googleapis.com/v1beta/models/"+encodeURIComponent(model)+":generateContent",{method:"POST",headers:{"x-goog-api-key":key,"content-type":"application/json"},body:JSON.stringify({systemInstruction:{parts:[{text:system}]},contents,generationConfig:{temperature:.35,maxOutputTokens:8192,responseMimeType:"application/json"}}),signal:AbortSignal.timeout(90000)});
@@ -172,26 +179,65 @@ async function gemini(messages){
      const value=String(payload?.candidates?.[0]?.content?.parts?.[0]?.text||"").trim();
      if(!value)throw new Error("GEMINI_EMPTY_RESPONSE_"+model);
      console.info("[shadow-generation]",{stage:"provider_success",provider:"google_gemini",model,round:round+1});
-     return JSON.parse(value);
+     return parseJsonModelOutput(value);
     }
-    const detail=String(payload?.error?.message||"").slice(0,240),retryable=response.status===408||response.status===429||response.status>=500;
+    const detail=String(payload?.error?.message||"").slice(0,240);
+    if(response.status===404){
+     lastError=new Error("Gemini model unavailable "+model+(detail?": "+detail:""));
+     console.warn("[shadow-generation]",{stage:"provider_model_unavailable",provider:"google_gemini",model,httpStatus:404});
+     continue;
+    }
+    const retryable=response.status===408||response.status===429||response.status>=500;
     if(!retryable)throw Object.assign(new Error("GEMINI_REQUEST_REJECTED_HTTP_"+response.status+(detail?": "+detail:"")),{permanent:true});
-    rateLimited=rateLimited||response.status===429;
+    roundRetryable=true;rateLimited=rateLimited||response.status===429;
     longestDelay=Math.max(longestDelay,retryDelay(response,round));
     lastError=new Error("Gemini "+model+" transient HTTP "+response.status+(detail?": "+detail:""));
     console.warn("[shadow-generation]",{stage:"provider_retryable",provider:"google_gemini",model,httpStatus:response.status,round:round+1});
    }catch(error){
     if(error?.permanent)throw error;
-    lastError=error;
+    roundRetryable=true;lastError=error;
     console.warn("[shadow-generation]",{stage:"provider_exception",provider:"google_gemini",model,round:round+1,message:error?.message||String(error)});
    }
   }
+  if(!roundRetryable)break;
   if(round<2)await new Promise(resolve=>setTimeout(resolve,longestDelay||retryDelay(null,round)));
  }
  const error=new Error((rateLimited?"AI_PROVIDER_RATE_LIMITED":"GEMINI_UNAVAILABLE_AFTER_RETRIES")+": "+(lastError?.message||String(lastError)));
- error.retryable=true;throw error;
+ error.retryable=rateLimited||!lastError?.permanent;throw error;
 }
-
+async function groq(messages){
+ const key=process.env.GROQ_API_KEY;if(!key)throw Object.assign(new Error("GROQ_CONFIGURATION_REQUIRED"),{permanent:true});
+ let lastError,rateLimited=false;
+ for(let round=0;round<2;round++){
+  let longestDelay=0,roundRetryable=false;
+  for(const model of GROQ_MODELS){
+   try{
+    const response=await fetch("https://api.groq.com/openai/v1/chat/completions",{method:"POST",headers:{authorization:"Bearer "+key,"content-type":"application/json"},body:JSON.stringify({model,messages,temperature:.35,max_completion_tokens:8192,response_format:{type:"json_object"}}),signal:AbortSignal.timeout(90000)});
+    const payload=await response.json().catch(()=>({}));
+    if(response.ok){
+     const value=String(payload?.choices?.[0]?.message?.content||"").trim();
+     if(!value)throw new Error("GROQ_EMPTY_RESPONSE_"+model);
+     console.info("[shadow-generation]",{stage:"provider_success",provider:"groq",model,round:round+1});
+     return parseJsonModelOutput(value);
+    }
+    const detail=String(payload?.error?.message||"").slice(0,240);
+    if(response.status===404||response.status===400){
+     lastError=new Error("Groq model rejected "+model+(detail?": "+detail:""));
+     console.warn("[shadow-generation]",{stage:"provider_model_unavailable",provider:"groq",model,httpStatus:response.status});
+     continue;
+    }
+    const retryable=response.status===408||response.status===429||response.status>=500;
+    if(!retryable)throw Object.assign(new Error("GROQ_REQUEST_REJECTED_HTTP_"+response.status+(detail?": "+detail:"")),{permanent:true});
+    roundRetryable=true;rateLimited=rateLimited||response.status===429;
+    longestDelay=Math.max(longestDelay,retryDelay(response,round));
+    lastError=new Error("Groq "+model+" transient HTTP "+response.status+(detail?": "+detail:""));
+   }catch(error){if(error?.permanent)throw error;roundRetryable=true;lastError=error;}
+  }
+  if(!roundRetryable)break;
+  if(round<1)await new Promise(resolve=>setTimeout(resolve,longestDelay||retryDelay(null,round)));
+ }
+ const error=new Error((rateLimited?"GROQ_RATE_LIMITED":"GROQ_UNAVAILABLE_AFTER_RETRIES")+": "+(lastError?.message||String(lastError)));error.retryable=rateLimited||!lastError?.permanent;throw error;
+}
 async function cloudflare(messages){
  const accountId=process.env.CLOUDFLARE_ACCOUNT_ID,token=process.env.CLOUDFLARE_API_TOKEN;
  if(!accountId||!token)throw Object.assign(new Error("CLOUDFLARE_WORKERS_AI_CONFIGURATION_REQUIRED"),{permanent:true});
@@ -202,10 +248,9 @@ async function cloudflare(messages){
    const response=await fetch("https://api.cloudflare.com/client/v4/accounts/"+encodeURIComponent(accountId)+"/ai/run/"+model,{method:"POST",headers:{authorization:"Bearer "+token,"content-type":"application/json"},body:JSON.stringify({messages,temperature:.35,max_tokens:8000,response_format:{type:"json_object"}}),signal:AbortSignal.timeout(90000)});
    const payload=await response.json().catch(()=>({}));
    if(response.ok&&payload?.success!==false){
-    let value=String(payload?.result?.response||payload?.result||"").trim(),fence=String.fromCharCode(96).repeat(3);
-    if(value.startsWith(fence))value=value.replace(/^.{3}[a-z]*\s*/i,"").replace(/.{3}$/,"").trim();
+    const value=String(payload?.result?.response||payload?.result||"").trim();
     console.info("[shadow-generation]",{stage:"provider_success",provider:"cloudflare_workers_ai",model,attempt});
-    return JSON.parse(value);
+    return parseJsonModelOutput(value);
    }
    const code=Number(payload?.errors?.[0]?.code||0),detail=String(payload?.errors?.[0]?.message||"").slice(0,240),quotaExhausted=code===4006&&detail.toLowerCase().includes("daily free allocation"),retryable=!quotaExhausted&&(response.status===408||response.status===429||response.status>=500||code===7505);
    if(!retryable)throw Object.assign(new Error(quotaExhausted?"CLOUDFLARE_DAILY_QUOTA_EXHAUSTED":"CLOUDFLARE_WORKERS_AI_REJECTED_"+(code||response.status)+(detail?": "+detail:"")),{permanent:true});
@@ -216,18 +261,19 @@ async function cloudflare(messages){
  const error=new Error("CLOUDFLARE_WORKERS_AI_UNAVAILABLE_AFTER_RETRIES: "+(lastError?.message||String(lastError)));error.retryable=true;throw error;
 }
 async function gateway(messages){
- let geminiError;
+ const failures=[];
  if(process.env.GEMINI_API_KEY){
-  try{return await gemini(messages);}catch(error){geminiError=error;if(error?.permanent)throw error;console.warn("[shadow-generation]",{stage:"provider_failover",from:"google_gemini",to:"cloudflare_workers_ai",message:error?.message||String(error)});}
+  try{return await gemini(messages);}catch(error){failures.push(error);console.warn("[shadow-generation]",{stage:"provider_failover",from:"google_gemini",to:process.env.GROQ_API_KEY?"groq":"cloudflare_workers_ai",message:error?.message||String(error)});}
+ }
+ if(process.env.GROQ_API_KEY){
+  try{return await groq(messages);}catch(error){failures.push(error);console.warn("[shadow-generation]",{stage:"provider_failover",from:"groq",to:"cloudflare_workers_ai",message:error?.message||String(error)});}
  }
  if(process.env.CLOUDFLARE_ACCOUNT_ID&&process.env.CLOUDFLARE_API_TOKEN){
-  try{return await cloudflare(messages);}catch(error){
-   if(error?.message==="CLOUDFLARE_DAILY_QUOTA_EXHAUSTED"&&geminiError){const finalError=new Error("AI_PROVIDERS_TEMPORARILY_UNAVAILABLE: "+geminiError.message+"; "+error.message);finalError.retryable=true;throw finalError;}
-   throw error;
-  }
+  try{return await cloudflare(messages);}catch(error){failures.push(error);}
  }
- if(geminiError)throw geminiError;
- throw Object.assign(new Error("AI_PROVIDER_CONFIGURATION_REQUIRED"),{permanent:true});
+ if(!failures.length)throw Object.assign(new Error("AI_PROVIDER_CONFIGURATION_REQUIRED"),{permanent:true});
+ const finalError=new Error("AI_PROVIDERS_TEMPORARILY_UNAVAILABLE: "+failures.map(error=>error?.message||String(error)).join("; "));
+ finalError.retryable=true;throw finalError;
 }
 function prompt(job,baseline,evidence,related){return [
  "Act as Premier Express Tourism Dubai's senior human tourism editor. Return JSON only: {title,short_description,sections,editorial_note,preservation_ledger}.",
