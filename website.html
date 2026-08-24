@@ -17,6 +17,7 @@
     <button class="tab" data-panel="products" role="tab" aria-selected="false">Products</button>
     <button class="tab" data-panel="global" role="tab" aria-selected="false">Global Rules</button>
     <button class="tab" data-panel="blueprints" role="tab" aria-selected="false">Blueprint Registry</button>
+    <button class="tab" data-panel="readiness" role="tab" aria-selected="false">Activation Readiness</button>
     <button class="tab" data-panel="proposal-standard" role="tab" aria-selected="false">Proposal Standard</button>
     <button class="tab" data-panel="workflow-rules" role="tab" aria-selected="false">Agent Workflow</button>
     <button class="tab" data-panel="ranking" role="tab" aria-selected="false">Ranking History</button>
@@ -107,6 +108,44 @@
       <li>Reclassification does not modify the WordPress category automatically.</li>
       <li>Every proposal shows the selected classification and evidence before approval.</li>
     </ul></div>
+  </section>
+
+  <section id="readiness" class="panel">
+    <div class="card notice"><div class="main-head"><div><h2>Activation Readiness</h2><p>The Website Intelligence design is progressing correctly, but it is deliberately not ready to control generation or WordPress.</p></div><span class="badge">NOT READY FOR AUTOMATION</span></div></div>
+    <div class="card"><h2>Phase A — Foundation</h2><table class="rule-table"><thead><tr><th>Control</th><th>Status</th><th>Evidence</th></tr></thead><tbody>
+      <tr><td>Isolated Website Intelligence page</td><td class="match-good">Complete</td><td>Separate page with no existing-agent replacement.</td></tr>
+      <tr><td>Live WordPress taxonomy inventory</td><td class="match-good">Complete</td><td>39 categories loaded through public read-only endpoints.</td></tr>
+      <tr><td>Live product inventory</td><td class="match-good">Complete</td><td>247 products loaded with category paths and classification.</td></tr>
+      <tr><td>Category content structures</td><td class="match-good">Complete draft</td><td>Ten reviewed blueprint classes with detailed section rules.</td></tr>
+      <tr><td>Global editorial and factual rules</td><td class="match-good">Complete draft</td><td>Human-writing, preservation, enrichment and evidence rules documented.</td></tr>
+      <tr><td>Proposal and repair reporting</td><td class="match-good">Complete draft</td><td>Preservation ledger, repair summary and safety certificate specified.</td></tr>
+      <tr><td>Read-only product inspector</td><td class="match-good">Complete</td><td>Structure, metadata, links, media and preliminary blueprint evidence.</td></tr>
+    </tbody></table></div>
+    <div class="card"><h2>Phase B — Compatibility Validation</h2><table class="rule-table"><thead><tr><th>Required gate</th><th>Current status</th><th>Pass condition</th></tr></thead><tbody>
+      <tr><td>Product override review</td><td class="match-review">Pending formal record</td><td>All 24 proposed overrides stored with reason and approved primary blueprint.</td></tr>
+      <tr><td>Representative product tests</td><td class="match-review">Pending</td><td>At least simple, standard and complex products tested for every blueprint.</td></tr>
+      <tr><td>Alternate-heading recognition</td><td class="match-review">Pending</td><td>Existing professional synonyms do not create false missing-section failures.</td></tr>
+      <tr><td>Thin-content enrichment</td><td class="match-review">Pending</td><td>Missing content is researched and expanded without inventing facts.</td></tr>
+      <tr><td>Content-loss regression</td><td class="match-review">Pending</td><td>Useful verified information loss equals zero across the representative set.</td></tr>
+      <tr><td>Human editorial review</td><td class="match-review">Pending</td><td>No AI filler, mechanical wording or repeated templates across test products.</td></tr>
+      <tr><td>Category scoring tests</td><td class="match-review">Pending</td><td>No vehicle rules penalize attractions and no attraction rules penalize services.</td></tr>
+    </tbody></table></div>
+    <div class="card"><h2>Phase C — Shadow Mode</h2><ul>
+      <li>Persist approved immutable blueprint versions without activating them.</li>
+      <li>Generate proposals in a separate non-publishing shadow path.</li>
+      <li>Compare shadow proposals with live content and preservation ledgers.</li>
+      <li>Record provider failures as deferred jobs instead of user-facing content errors.</li>
+      <li>Run autonomous repair and final validation without creating approval or execution tokens.</li>
+      <li>Review a cross-category sample before any runtime integration.</li>
+    </ul><span class="badge">Not started • publishing must remain locked</span></div>
+    <div class="card"><h2>Phase D — Controlled Activation</h2><table class="rule-table"><thead><tr><th>Activation requirement</th><th>Required state</th></tr></thead><tbody>
+      <tr><td>Blueprint versions</td><td>Explicitly approved and immutable.</td></tr>
+      <tr><td>Provider resilience</td><td>Durable deferred retry path tested; no useless immediate retry loops.</td></tr>
+      <tr><td>Representative tests</td><td>All category and content-loss regressions pass.</td></tr>
+      <tr><td>Shadow proposals</td><td>Professional quality accepted across the agreed sample.</td></tr>
+      <tr><td>Execution safety</td><td>Snapshot, approval, dry run, token, source hash, verification and rollback tested end to end.</td></tr>
+      <tr><td>Human authorization</td><td>A separate final decision is required before lifting the production execution lock.</td></tr>
+    </tbody></table><p class="footer-note">Completing a design or test phase never automatically advances the next phase.</p></div>
   </section>
 
   <section id="proposal-standard" class="panel">
