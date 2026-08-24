@@ -12,7 +12,7 @@
 <body>
 <header><div class="head"><div><b>🌐 Premier Express — Website Intelligence</b><br><small>Category rules • Content excellence • Search and AI visibility</small></div><div><a class="btn" href="/">← Main Agent</a> <a class="btn" href="/seo-control.html">SEO Control Center</a></div></div></header>
 <div class="wrap">
-  <div class="card notice"><b>Blueprint mode — read only</b><p>This page defines the approved website and category content framework. It cannot generate proposals, change Yoast data or write to WordPress.</p></div>
+  <div class="card notice"><b>Website intelligence • shadow generation</b><p>This page defines the approved category framework and can generate unverified shadow drafts only. It cannot approve, execute, change Yoast data or write to WordPress.</p></div>
   <div class="tabs" role="tablist" aria-label="Website intelligence sections">
     <button class="tab active" data-panel="categories" role="tab" aria-selected="true">Categories</button>
     <button class="tab" data-panel="products" role="tab" aria-selected="false">Products</button>
@@ -265,7 +265,7 @@
   </section>
 
   <section id="shadow" class="panel">
-    <div class="card notice"><div class="main-head"><div><h2>Isolated Shadow Mode</h2><p>Product-by-product readiness assessment is active. Research, drafting, approval tokens, Yoast changes and WordPress publishing remain disconnected.</p></div><span class="badge">ASSESSMENT ACTIVE • WRITES LOCKED</span></div></div>
+    <div class="card notice"><div class="main-head"><div><h2>Isolated Shadow Mode</h2><p>Product-by-product assessment and isolated shadow drafting are active. Research approval, execution tokens, Yoast changes and WordPress publishing remain disconnected.</p></div><span class="badge">ASSESSMENT + SHADOW GENERATION ACTIVE • WRITES LOCKED</span></div></div>
     <div class="card"><div class="main-head"><div><h2>Authenticated Runtime Verification</h2><p class="muted">Server-side confirmation of owner identity, RLS visibility, source binding and zero-write isolation.</p></div><span id="runtimeAuditBadge" class="badge">NOT CHECKED</span></div>
       <div id="runtimeAuditStatus" class="inventory-status">Open Shadow Mode while signed in to verify the server boundary.</div>
       <div class="stats"><div class="stat"><small>Canonical categories</small><b id="runtimeCategories">—</b></div><div class="stat"><small>Canonical drafts</small><b id="runtimeDrafts">—</b></div><div class="stat"><small>Verified evidence</small><b id="runtimeEvidence">—</b></div><div class="stat"><small>Source mismatches</small><b id="runtimeMismatches">—</b></div><div class="stat"><small>WordPress writes</small><b id="runtimeWrites">—</b></div></div>
@@ -279,9 +279,9 @@
     </div>
     <div class="card"><h2>Shadow lifecycle</h2><table class="rule-table"><thead><tr><th>Stage</th><th>Current state</th><th>Required output</th></tr></thead><tbody>
       <tr><td>1. Read-only assessment</td><td class="match-good">Active</td><td>Classification, source fingerprint, preservation manifest, structure gaps, factual risks and hierarchy state.</td></tr>
-      <tr><td>2. Evidence research</td><td class="match-review">Append-only storage ready • researcher not connected</td><td>Approved product, supplier/operator and official sources with supported fact records.</td></tr>
-      <tr><td>3. Shadow drafting</td><td class="match-review">Immutable storage ready • generator not connected</td><td>Complete unverified category-specific draft bound to source hash and blueprint, separate from WordPress.</td></tr>
-      <tr><td>4. Autonomous quality repair</td><td class="match-review">Not connected</td><td>Internally repair structure, editorial, originality, SEO and formatting problems without user-facing retry cycles.</td></tr>
+      <tr><td>2. Evidence research</td><td class="match-review">Candidate evidence storage active • verification workflow pending</td><td>Approved product, supplier/operator and official sources with supported fact records.</td></tr>
+      <tr><td>3. Shadow drafting</td><td class="match-review">Category-aware generator connected • immutable unverified drafts only</td><td>Complete unverified category-specific draft bound to source hash and blueprint, separate from WordPress.</td></tr>
+      <tr><td>4. Autonomous quality repair</td><td class="match-review">Not connected</td><td>Connected • up to three internal repair passes before safe failure</td></tr>
       <tr><td>5. Regression comparison</td><td class="match-review">Not connected</td><td>Zero unexplained information loss, verified factual coverage and Before/After measurements.</td></tr>
       <tr><td>6. Human acceptance sample</td><td class="match-review">Not started</td><td>Excellent professional quality accepted across every category before activation.</td></tr>
       <tr><td>7. Controlled execution</td><td class="match-review">Blocked</td><td>Separate authorization, dry run, stable source hash, execution token, verification and rollback.</td></tr>
@@ -403,7 +403,7 @@
       <li>Record provider failures as deferred jobs instead of user-facing content errors.</li>
       <li>Run autonomous repair and final validation without creating approval or execution tokens.</li>
       <li>Review a cross-category sample before any runtime integration.</li>
-    </ul><span class="badge">Assessment and immutable storage active • researcher and generator not connected • publishing locked</span></div>
+    </ul><span class="badge">Assessment, immutable storage and category-aware generator active • evidence verification and publishing locked</span></div>
     <div class="card"><h2>Phase D — Controlled Activation</h2><table class="rule-table"><thead><tr><th>Activation requirement</th><th>Required state</th></tr></thead><tbody>
       <tr><td>Blueprint versions</td><td>Explicitly approved and immutable.</td></tr>
       <tr><td>Provider resilience</td><td>Durable deferred retry path tested; no useless immediate retry loops.</td></tr>
