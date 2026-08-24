@@ -143,7 +143,13 @@ async function gateway(messages){
    const payload=await response.json().catch(()=>({}));
    if(response.ok){let value=String(payload?.choices?.[0]?.message?.content||"").trim(),fence=String.fromCharCode(96).repeat(3);if(value.startsWith(fence))value=value.replace(/^.{3}[a-z]*\s*/i,"").replace(/.{3}$/,"").trim();return JSON.parse(value);}
    const retryable=response.status===429||response.status>=500;
-   if(!retryable)throw Object.assign(new Error("AI Gateway rejected the request (HTTP "+response.status+")"),{permanent:true});
+   if(!retryable){
+    const type=String(payload?.error?.type||payload?.error?.code||"");
+    const message=type==="customer_verification_required"
+      ?"AI_GATEWAY_BILLING_VERIFICATION_REQUIRED"
+      :"AI_GATEWAY_REQUEST_REJECTED_HTTP_"+response.status;
+    throw Object.assign(new Error(message),{permanent:true});
+   }
    lastError=new Error("AI Gateway transient HTTP "+response.status);
   }catch(error){if(error?.permanent)throw error;lastError=error;}
   if(attempt<3)await new Promise(resolve=>setTimeout(resolve,attempt*1500));
@@ -296,22 +302,6 @@ export default async function handler(req, res) {
     });
   }
 
-  if (req.method === "GET" && req.query?.probe === "provider-completion") {
-    const token=process.env.AI_GATEWAY_API_KEY||process.env.VERCEL_OIDC_TOKEN;
-    const response=await fetch("https://ai-gateway.vercel.sh/v1/chat/completions",{method:"POST",headers:{authorization:"Bearer "+token,"content-type":"application/json"},body:JSON.stringify({model:"openai/gpt-5.4",messages:[{role:"user",content:"Return JSON with ok true."}],response_format:{type:"json_object"},max_completion_tokens:30})});
-    const payload=await response.json().catch(()=>({}));
-    const providerError=payload?.error||{};
-    return res.status(200).json({success:response.ok,http_status:response.status,error_code:providerError.code||null,error_type:providerError.type||null,error_message:providerError.message||null});
-  }
-
-  if (req.method === "GET" && req.query?.probe === "provider-auth") {
-    const token=process.env.AI_GATEWAY_API_KEY||process.env.VERCEL_OIDC_TOKEN;
-    const response=await fetch("https://ai-gateway.vercel.sh/v1/models",{headers:{authorization:"Bearer "+token}});
-    const payload=await response.json().catch(()=>({}));
-    const providerError=payload?.error||{};
-    const modelIds=Array.isArray(payload?.data)?payload.data.map(item=>item.id):[];return res.status(200).json({success:response.ok,http_status:response.status,error_code:providerError.code||null,error_type:providerError.type||null,error_message:providerError.message||null,requested_model_available:modelIds.includes("openai/gpt-5.4"),openai_models:modelIds.filter(id=>String(id).startsWith("openai/")).slice(0,20)});
-  }
-
   if (req.method === "GET" || req.method === "HEAD") {
     return res.status(200).json({
       success: true,
@@ -340,7 +330,7 @@ export default async function handler(req, res) {
     });
   }
 
-  if (req.method === "POST" && req.body?.action === "generate_shadow_draft") { try { return await generateShadowDraft(req,res); } catch(error) { console.error("[shadow-generation]",{stage:"failed",message:error?.message||String(error),stack:error?.stack}); return res.status(502).json({success:false,status:"SHADOW_GENERATION_FAILED",message:error?.message||String(error),wordpress_write_performed:false,yoast_write_performed:false}); } }
+  if (req.method === "POST" && req.body?.action === "generate_shadow_draft") { try { return await generateShadowDraft(req,res); } catch(error) { console.error("[shadow-generation]",{stage:"failed",message:error?.message||String(error),stack:error?.stack}); return res.status(error?.message==="AI_GATEWAY_BILLING_VERIFICATION_REQUIRED"?503:502).json({success:false,status:error?.message==="AI_GATEWAY_BILLING_VERIFICATION_REQUIRED"?"AI_GATEWAY_BILLING_VERIFICATION_REQUIRED":"SHADOW_GENERATION_FAILED",message:error?.message||String(error),wordpress_write_performed:false,yoast_write_performed:false}); } }
 
   if (req.method === "POST" && req.body?.action === "provider_status") {
     return providerStatus(req, res);
