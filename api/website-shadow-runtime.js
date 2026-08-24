@@ -4,33 +4,16 @@ const SUPABASE_PUBLISHABLE_KEY =
 const OWNER_USER_ID = "a3a56856-7613-48a6-898c-1526a76f8ee7";
 
 function providerReadiness() {
-  const gatewayKey = Boolean(process.env.AI_GATEWAY_API_KEY);
-  const vercelOidc = Boolean(process.env.VERCEL_OIDC_TOKEN);
-  const openAiKey = Boolean(process.env.OPENAI_API_KEY);
-  const anthropicKey = Boolean(process.env.ANTHROPIC_API_KEY);
-  const googleKey = Boolean(
-    process.env.GOOGLE_GENERATIVE_AI_API_KEY || process.env.GEMINI_API_KEY
-  );
-  const configuredProviders = [
-    (gatewayKey || vercelOidc) && "vercel_ai_gateway",
-    openAiKey && "openai",
-    anthropicKey && "anthropic",
-    googleKey && "google"
-  ].filter(Boolean);
-
+  const cloudflareAccount = Boolean(process.env.CLOUDFLARE_ACCOUNT_ID);
+  const cloudflareToken = Boolean(process.env.CLOUDFLARE_API_TOKEN);
+  const cloudflareReady = cloudflareAccount && cloudflareToken;
   return {
-    ready: configuredProviders.length > 0,
-    mode: configuredProviders.length > 0 ? "CREDENTIAL_PRESENT_LOCKED" : "NOT_CONFIGURED",
-    configured_providers: configuredProviders,
-    authentication: vercelOidc
-      ? "VERCEL_OIDC"
-      : gatewayKey
-        ? "AI_GATEWAY_API_KEY"
-        : configuredProviders.length > 0
-          ? "PROVIDER_KEY"
-          : "NONE",
+    ready: cloudflareReady,
+    mode: cloudflareReady ? "CLOUDFLARE_WORKERS_AI_READY" : "CLOUDFLARE_CONFIGURATION_REQUIRED",
+    configured_providers: cloudflareReady ? ["cloudflare_workers_ai"] : [],
+    authentication: cloudflareReady ? "CLOUDFLARE_API_TOKEN" : "NONE",
     isolation: "WEBSITE_SHADOW_ONLY",
-    generation_enabled: configuredProviders.length > 0,
+    generation_enabled: cloudflareReady,
     storage_enabled: true,
     publishing_enabled: false
   };
@@ -135,26 +118,26 @@ async function rest(table,method,authorization,query={},body){
  const payload=await response.json().catch(()=>null);if(!response.ok)throw new Error(table+" HTTP "+response.status);return payload;
 }
 async function gateway(messages){
- const token=process.env.AI_GATEWAY_API_KEY||process.env.VERCEL_OIDC_TOKEN;if(!token)throw new Error("AI Gateway not configured");
+ const accountId=process.env.CLOUDFLARE_ACCOUNT_ID,token=process.env.CLOUDFLARE_API_TOKEN;
+ if(!accountId||!token)throw new Error("CLOUDFLARE_WORKERS_AI_CONFIGURATION_REQUIRED");
+ const model="@cf/meta/llama-4-scout-17b-16e-instruct";
  let lastError;
  for(let attempt=1;attempt<=3;attempt++){
   try{
-   const response=await fetch("https://ai-gateway.vercel.sh/v1/chat/completions",{method:"POST",headers:{authorization:"Bearer "+token,"content-type":"application/json"},body:JSON.stringify({model:"openai/gpt-5.4",messages,response_format:{type:"json_object"},temperature:.35,max_completion_tokens:8000}),signal:AbortSignal.timeout(90000)});
+   const response=await fetch("https://api.cloudflare.com/client/v4/accounts/"+encodeURIComponent(accountId)+"/ai/run/"+model,{method:"POST",headers:{authorization:"Bearer "+token,"content-type":"application/json"},body:JSON.stringify({messages,temperature:.35,max_tokens:8000,response_format:{type:"json_object"}}),signal:AbortSignal.timeout(90000)});
    const payload=await response.json().catch(()=>({}));
-   if(response.ok){let value=String(payload?.choices?.[0]?.message?.content||"").trim(),fence=String.fromCharCode(96).repeat(3);if(value.startsWith(fence))value=value.replace(/^.{3}[a-z]*\s*/i,"").replace(/.{3}$/,"").trim();return JSON.parse(value);}
-   const retryable=response.status===429||response.status>=500;
-   if(!retryable){
-    const type=String(payload?.error?.type||payload?.error?.code||"");
-    const message=type==="customer_verification_required"
-      ?"AI_GATEWAY_BILLING_VERIFICATION_REQUIRED"
-      :"AI_GATEWAY_REQUEST_REJECTED_HTTP_"+response.status;
-    throw Object.assign(new Error(message),{permanent:true});
+   if(response.ok&&payload?.success!==false){
+    let value=String(payload?.result?.response||payload?.result||"").trim(),fence=String.fromCharCode(96).repeat(3);
+    if(value.startsWith(fence))value=value.replace(/^.{3}[a-z]*\s*/i,"").replace(/.{3}$/,"").trim();
+    return JSON.parse(value);
    }
-   lastError=new Error("AI Gateway transient HTTP "+response.status);
+   const code=Number(payload?.errors?.[0]?.code||0),retryable=response.status===429||response.status>=500||code===7505;
+   if(!retryable)throw Object.assign(new Error("CLOUDFLARE_WORKERS_AI_REJECTED_"+(code||response.status)),{permanent:true});
+   lastError=new Error("Cloudflare Workers AI transient error "+(code||response.status));
   }catch(error){if(error?.permanent)throw error;lastError=error;}
   if(attempt<3)await new Promise(resolve=>setTimeout(resolve,attempt*1500));
  }
- throw new Error("AI Gateway remained unavailable after internal retries: "+(lastError?.message||String(lastError)));
+ throw new Error("CLOUDFLARE_WORKERS_AI_UNAVAILABLE_AFTER_RETRIES: "+(lastError?.message||String(lastError)));
 }
 function prompt(job,baseline,evidence){return [
  "Act as Premier Express Tourism Dubai's senior human tourism editor. Return JSON only: {title,short_description,sections,editorial_note,preservation_ledger}.",
@@ -330,7 +313,7 @@ export default async function handler(req, res) {
     });
   }
 
-  if (req.method === "POST" && req.body?.action === "generate_shadow_draft") { try { return await generateShadowDraft(req,res); } catch(error) { console.error("[shadow-generation]",{stage:"failed",message:error?.message||String(error),stack:error?.stack}); return res.status(error?.message==="AI_GATEWAY_BILLING_VERIFICATION_REQUIRED"?503:502).json({success:false,status:error?.message==="AI_GATEWAY_BILLING_VERIFICATION_REQUIRED"?"AI_GATEWAY_BILLING_VERIFICATION_REQUIRED":"SHADOW_GENERATION_FAILED",message:error?.message||String(error),wordpress_write_performed:false,yoast_write_performed:false}); } }
+  if (req.method === "POST" && req.body?.action === "generate_shadow_draft") { try { return await generateShadowDraft(req,res); } catch(error) { console.error("[shadow-generation]",{stage:"failed",message:error?.message||String(error),stack:error?.stack}); return res.status(error?.message==="CLOUDFLARE_WORKERS_AI_CONFIGURATION_REQUIRED"?503:502).json({success:false,status:error?.message==="CLOUDFLARE_WORKERS_AI_CONFIGURATION_REQUIRED"?"CLOUDFLARE_WORKERS_AI_CONFIGURATION_REQUIRED":"SHADOW_GENERATION_FAILED",message:error?.message||String(error),wordpress_write_performed:false,yoast_write_performed:false}); } }
 
   if (req.method === "POST" && req.body?.action === "provider_status") {
     return providerStatus(req, res);
