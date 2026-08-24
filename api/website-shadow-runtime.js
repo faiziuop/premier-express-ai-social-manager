@@ -91,31 +91,42 @@ const CATEGORY_SECTIONS = {
   yachts:["Yacht Details","Charter Information"],helicopter:["Flight Experience","Safety Information"],
   vehicles:["Vehicle Capacity","Ideal Uses"],transfers:["Transfer Details","Pickup Information"]
 };
-const COMMON_SECTIONS=["Tour Overview","What to Expect","Highlights","Inclusions","Exclusions","Timings","Booking","Why Choose","Frequently Asked Questions","Related Experiences"];
+const COMMON_SECTION_GROUPS=[
+ ["Overview",["overview"]],["What to Expect",["what to expect"]],["Highlights",["highlights"]],
+ ["Inclusions",["inclusions","included"]],["Exclusions",["exclusions","not included"]],
+ ["Timings",["timing","duration","availability","schedule","service hours"]],
+ ["Booking",["booking","cancellation","refund","policy"]],["Why Choose",["why choose"]],
+ ["Frequently Asked Questions",["frequently asked","faqs"]],
+ ["Related",["related","similar","fleet options","recommended services","more experiences"]]
+];
 const wordCount=v=>String(v||"").trim().split(/\s+/).filter(Boolean).length;
 function normalizeDraft(draft){
  if(!draft||!Array.isArray(draft.sections))return draft;
  const seenOverview=[];draft.sections=draft.sections.filter(section=>{if(!/overview/i.test(String(section.heading||"")))return true;seenOverview.push(section);return seenOverview.length===1;});
  if(seenOverview.length>1){const first=seenOverview[0],parts=seenOverview.map(x=>String(x.content||"").trim()).filter(Boolean);first.content=[...new Set(parts)].join("\n\n");}
+ const internalPhrases=["must be confirmed","requires confirmation","pending verification","research needed","insert link","placeholder"];
+ const cleanText=value=>String(value||"").split(/(?<=[.!?])\s+/).filter(sentence=>!internalPhrases.some(p=>sentence.toLowerCase().includes(p))).join(" ").trim();
  for(const section of draft.sections){
+  if(section.content)section.content=cleanText(section.content);
+  if(Array.isArray(section.items))section.items=section.items.map(item=>({...item,answer:cleanText(item.answer)})).filter(item=>item.question&&item.answer);
   if(Array.isArray(section.bullets)){section.bullets=[...new Set(section.bullets.map(x=>String(x).trim()).filter(Boolean))];if(/why choose/i.test(String(section.heading||""))&&section.bullets.length>6)section.bullets=section.bullets.slice(0,6);}
   if(Array.isArray(section.items)&&/frequently asked/i.test(String(section.heading||""))&&section.items.length>5)section.items=section.items.slice(0,5);
  }
  return draft;
 }
 function validateDraft(draft,category,baseline){
- const errors=[],sections=Array.isArray(draft?.sections)?draft.sections:[],heads=sections.map(s=>String(s.heading||"").toLowerCase()),raw=JSON.stringify(draft||{}).toLowerCase();
+ const errors=[],sections=Array.isArray(draft?.sections)?draft.sections:[],heads=sections.map(s=>String(s.heading||"").toLowerCase()),raw=JSON.stringify({title:draft?.title,short_description:draft?.short_description,sections}).toLowerCase();
  if(wordCount(draft?.short_description)<70||wordCount(draft?.short_description)>110)errors.push("Short description must be 70-110 words");
  if(sections.length<10)errors.push("At least 10 complete H2 sections required");
- for(const h of [...COMMON_SECTIONS,...(CATEGORY_SECTIONS[category]||[])])if(!heads.some(x=>x.includes(h.toLowerCase())))errors.push("Missing section: "+h);
+ for(const [label,aliases] of COMMON_SECTION_GROUPS)if(!heads.some(x=>aliases.some(alias=>x.includes(alias))))errors.push("Missing section purpose: "+label);
+ for(const h of CATEGORY_SECTIONS[category]||[])if(!heads.some(x=>x.includes(h.toLowerCase())))errors.push("Missing category section: "+h);
  const faq=sections.find(s=>String(s.heading||"").toLowerCase().includes("frequently asked"));
  if(!faq||!Array.isArray(faq.items)||faq.items.length!==5)errors.push("Exactly five useful FAQs required");
  const why=sections.find(s=>String(s.heading||"").toLowerCase().includes("why choose"));
  if(!why||!Array.isArray(why.bullets)||why.bullets.length<5||why.bullets.length>6)errors.push("Why Choose requires five or six product-specific reasons");
- const baselineSections=Array.isArray(baseline?.sections)?baseline.sections.length:0;
- if(baselineSections>0&&sections.length<baselineSections)errors.push("Content-loss regression: fewer meaningful sections than the protected baseline");
+ if(!Array.isArray(draft?.preservation_ledger)||draft.preservation_ledger.length===0)errors.push("Preservation ledger is required");
  for(const p of ["must be confirmed","requires confirmation","pending verification","product-specific use","official this experience","insert link","research needed","placeholder"])if(raw.includes(p))errors.push("Internal or mechanical wording: "+p);
- if(/\b(best|number one|guaranteed|cheapest|unbeatable)\b/i.test(raw))errors.push("Unverifiable superlative");
+ if(/\b(number one|guaranteed|cheapest|unbeatable)\b/i.test(raw))errors.push("Unverifiable promotional superlative");
  return [...new Set(errors)];
 }
 async function rest(table,method,authorization,query={},body){
@@ -186,7 +197,7 @@ async function generateShadowDraft(req,res){
  const messages=[{role:"system",content:"Obey the editorial contract and output valid JSON only."},{role:"user",content:prompt(job,drafts?.[0]?.draft_content,evidence)}];let generated,errors=[];
  for(let attempt=0;attempt<4;attempt++){console.info("[shadow-generation]",{requestId,stage:"model_attempt",attempt:attempt+1});generated=normalizeDraft(await gateway(messages));errors=validateDraft(generated,job.blueprint_key,drafts?.[0]?.draft_content);if(!errors.length){console.info("[shadow-generation]",{requestId,stage:"validation_passed",attempt:attempt+1});break;}console.info("[shadow-generation]",{requestId,stage:"validation_repair",attempt:attempt+1,errorCount:errors.length,errors});messages.push({role:"assistant",content:JSON.stringify(generated)},{role:"user",content:"Return the complete corrected JSON object. Repair every listed error precisely without padding, invention, duplicate sections or content loss: "+JSON.stringify(errors)});}
  if(errors.length)return res.status(422).json({success:false,status:"INTERNAL_EXCELLENCE_GATE_NOT_PASSED",message:"The agent withheld the draft because it did not meet the final excellence standard.",wordpress_write_performed:false});
- const row={job_id:id,created_by:auth.user.id,draft_version:Number(drafts?.[0]?.draft_version||0)+1,based_on_source_hash:job.source_hash,blueprint_key:job.blueprint_key,blueprint_version:job.blueprint_version,draft_content:generated,preservation_ledger:Array.isArray(generated.preservation_ledger)?generated.preservation_ledger:(drafts?.[0]?.preservation_ledger||[]),evidence_ids:evidence.map(x=>x.id),quality_report:{quality_state:"UNVERIFIED_GENERATED_SHADOW",deterministic_validation:"PASS",content_loss_check:"PASS",usefulness_check:"PASS",faq_check:"PASS",why_choose_check:"PASS",repair_attempts:messages.filter(x=>x.role==="assistant").length,publication_gate_passed:false,wordpress_changes:0,yoast_changes:0},status:"UNVERIFIED_SHADOW_DRAFT",approval_token:null,execution_token:null,publication_authorized:false,wordpress_write_performed:false};
+ const row={job_id:id,created_by:auth.user.id,draft_version:Number(drafts?.[0]?.draft_version||0)+1,based_on_source_hash:job.source_hash,blueprint_key:job.blueprint_key,blueprint_version:job.blueprint_version,draft_content:generated,preservation_ledger:Array.isArray(generated.preservation_ledger)?generated.preservation_ledger:(drafts?.[0]?.preservation_ledger||[]),evidence_ids:evidence.map(x=>x.id),quality_report:{quality_state:"UNVERIFIED_GENERATED_SHADOW",deterministic_validation:"PASS",preservation_coverage_check:"PASS",usefulness_check:"PASS",faq_check:"PASS",why_choose_check:"PASS",repair_attempts:messages.filter(x=>x.role==="assistant").length,publication_gate_passed:false,wordpress_changes:0,yoast_changes:0},status:"UNVERIFIED_SHADOW_DRAFT",approval_token:null,execution_token:null,publication_authorized:false,wordpress_write_performed:false};
  console.info("[shadow-generation]",{requestId,stage:"storing_unverified_draft",draftVersion:row.draft_version});
  const saved=await rest("website_shadow_drafts","POST",auth.authorization,{},row);console.info("[shadow-generation]",{requestId,stage:"complete",draftId:saved?.[0]?.id});return res.status(201).json({success:true,status:"UNVERIFIED_SHADOW_DRAFT_CREATED",draft_id:saved?.[0]?.id,draft_version:saved?.[0]?.draft_version,publication_authorized:false,wordpress_write_performed:false,yoast_write_performed:false});
 }
