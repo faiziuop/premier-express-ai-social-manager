@@ -127,6 +127,27 @@
       </tbody></table>
       <p class="footer-note">Word counts select a balanced test range; they are not quality scores or target lengths.</p>
     </div>
+    <div class="card"><h2>First Structural Baseline Results</h2><p class="muted">Read-only measurements from the 30 representative live products. These observations do not judge factual accuracy, usefulness or human editorial quality.</p>
+      <div class="stats"><div class="stat"><small>Short descriptions outside draft range</small><b>17 / 30</b></div><div class="stat"><small>No public H2/H3 hierarchy</small><b>12 / 30</b></div><div class="stat"><small>No HTML list items</small><b>21 / 30</b></div><div class="stat"><small>Duplicate H2 detected</small><b>0 / 30</b></div></div>
+      <table class="rule-table"><thead><tr><th>Blueprint</th><th>Excerpt outside 70–110</th><th>No list items</th><th>Hierarchy observation</th></tr></thead><tbody>
+        <tr><td>Attractions & Admission</td><td>2 of 3</td><td>2 of 3</td><td>No H3-before-H2 issue detected</td></tr>
+        <tr><td>Tours & Sightseeing</td><td>1 of 3</td><td>3 of 3</td><td>No H3-before-H2 issue detected</td></tr>
+        <tr><td>Desert Safaris</td><td>2 of 3</td><td>3 of 3</td><td>No H3-before-H2 issue detected</td></tr>
+        <tr><td>Dhow & Dinner Cruises</td><td>2 of 3</td><td>2 of 3</td><td>One product exposes H3 before any H2</td></tr>
+        <tr><td>Private & Sharing Yachts</td><td>2 of 3</td><td>2 of 3</td><td>No H3-before-H2 issue detected</td></tr>
+        <tr><td>Theme Parks & Packages</td><td>3 of 3</td><td>2 of 3</td><td>No H3-before-H2 issue detected</td></tr>
+        <tr><td>Water & Adventure Activities</td><td>2 of 3</td><td>2 of 3</td><td>No H3-before-H2 issue detected</td></tr>
+        <tr><td>Helicopter & Aerial Tours</td><td>0 of 3</td><td>3 of 3</td><td>All three expose no H2/H3 hierarchy</td></tr>
+        <tr><td>Vehicles & Chauffeur Services</td><td>3 of 3</td><td>1 of 3</td><td>No H3-before-H2 issue detected</td></tr>
+        <tr><td>Airport & Cross-border Transfers</td><td>0 of 3</td><td>1 of 3</td><td>No H3-before-H2 issue detected</td></tr>
+      </tbody></table>
+      <div class="rule-block"><h3>Safe interpretation</h3><ul>
+        <li>Draft length ranges guide rewriting; they must not create arbitrary rejection errors.</li>
+        <li>Zero HTML bullets may indicate paragraph formatting or builder components and requires rendered semantic inspection.</li>
+        <li>Zero H2/H3 headings shows structural enrichment may be valuable, but useful existing information must still be preserved.</li>
+        <li>The single H3-before-H2 observation requires hierarchy correction only if confirmed in the rendered product content.</li>
+        <li>No duplicate H2s in this sample means duplicate-heading checks should remain protective, not assume a catalogue-wide problem.</li>
+      </ul></div><span class="badge">Structural baseline captured • semantic validation pending</span></div>
     <div class="card"><h2>Initial classification findings</h2><table class="rule-table"><thead><tr><th>Product</th><th>Current taxonomy signal</th><th>Safe decision</th></tr></thead><tbody>
       <tr><td>Palm Monorail 1-Way Pass</td><td>Falls under Sightseeing Tours.</td><td>Review as a transport/admission product before applying a tour itinerary.</td></tr>
       <tr><td>Speedboat Tour Dubai Marina</td><td>Falls under the Yacht category.</td><td>Review against Water/Adventure or Sightseeing rules rather than assuming yacht-hire facilities.</td></tr>
@@ -138,7 +159,7 @@
       <li>Alternate-heading semantic recognition.</li><li>Missing-section enrichment using verified sources.</li>
       <li>Policy, timing, inclusion and restriction fact protection.</li><li>Human editorial quality and cross-product originality.</li>
       <li>Category-appropriate scoring with no irrelevant penalties.</li><li>Dry-rendered H2/H3, list, link, FAQ and media placement validation.</li>
-    </ul><span class="badge">Samples selected • compatibility results pending</span></div>
+    </ul><span class="badge">Structural baseline complete • semantic results pending</span></div>
   </section>
 
   <section id="readiness" class="panel">
@@ -154,7 +175,7 @@
     </tbody></table></div>
     <div class="card"><h2>Phase B — Compatibility Validation</h2><table class="rule-table"><thead><tr><th>Required gate</th><th>Current status</th><th>Pass condition</th></tr></thead><tbody>
       <tr><td>Product override review</td><td class="match-review">Pending formal record</td><td>All 24 proposed overrides stored with reason and approved primary blueprint.</td></tr>
-      <tr><td>Representative product tests</td><td class="match-review">30-product sample selected</td><td>Simple, standard and complex products must now pass every compatibility test.</td></tr>
+      <tr><td>Representative product tests</td><td class="match-review">Structural baseline captured</td><td>Semantic preservation, factual and human-editorial tests remain pending.</td></tr>
       <tr><td>Alternate-heading recognition</td><td class="match-review">Pending</td><td>Existing professional synonyms do not create false missing-section failures.</td></tr>
       <tr><td>Thin-content enrichment</td><td class="match-review">Pending</td><td>Missing content is researched and expanded without inventing facts.</td></tr>
       <tr><td>Content-loss regression</td><td class="match-review">Pending</td><td>Useful verified information loss equals zero across the representative set.</td></tr>
