@@ -98,6 +98,60 @@ async function rlsSelect(table, select, authorization) {
   return response.json();
 }
 
+
+const CATEGORY_SECTIONS = {
+  attractions:["Ticket Information","Important Information"],tours:["Itinerary","Pickup Information"],
+  activities:["Safety Information","Eligibility"],packages:["Package Details","Transfer Information"],
+  safaris:["Safari Itinerary","Pickup Information"],cruises:["Cruise Experience","Boarding Information"],
+  yachts:["Yacht Details","Charter Information"],helicopter:["Flight Experience","Safety Information"],
+  vehicles:["Vehicle Capacity","Ideal Uses"],transfers:["Transfer Details","Pickup Information"]
+};
+const COMMON_SECTIONS=["Tour Overview","What to Expect","Highlights","Inclusions","Exclusions","Timings","Booking","Why Choose","Frequently Asked Questions","Related Experiences"];
+const wordCount=v=>String(v||"").trim().split(/\\s+/).filter(Boolean).length;
+function validateDraft(draft,category){
+ const errors=[],sections=Array.isArray(draft?.sections)?draft.sections:[],heads=sections.map(s=>String(s.heading||"").toLowerCase()),raw=JSON.stringify(draft||{}).toLowerCase();
+ if(wordCount(draft?.short_description)<70||wordCount(draft?.short_description)>110)errors.push("Short description must be 70-110 words");
+ if(sections.length<10)errors.push("At least 10 complete H2 sections required");
+ for(const h of [...COMMON_SECTIONS,...(CATEGORY_SECTIONS[category]||[])])if(!heads.some(x=>x.includes(h.toLowerCase())))errors.push("Missing section: "+h);
+ const faq=sections.find(s=>String(s.heading||"").toLowerCase().includes("frequently asked"));
+ if(!faq||!Array.isArray(faq.items)||faq.items.length<5)errors.push("At least five useful FAQs required");
+ for(const p of ["must be confirmed","requires confirmation","pending verification","product-specific use","official this experience","insert link","research needed","placeholder"])if(raw.includes(p))errors.push("Internal or mechanical wording: "+p);
+ if(/\\b(best|number one|guaranteed|cheapest|unbeatable)\\b/i.test(raw))errors.push("Unverifiable superlative");
+ return [...new Set(errors)];
+}
+async function rest(table,method,authorization,query={},body){
+ const url=new URL(SUPABASE_URL+"/rest/v1/"+table);for(const[k,v]of Object.entries(query))url.searchParams.set(k,v);
+ const response=await fetch(url,{method,headers:{apikey:SUPABASE_PUBLISHABLE_KEY,authorization,accept:"application/json","content-type":"application/json",prefer:method==="POST"?"return=representation":""},body:body?JSON.stringify(body):undefined});
+ const payload=await response.json().catch(()=>null);if(!response.ok)throw new Error(table+" HTTP "+response.status);return payload;
+}
+async function gateway(messages){
+ const token=process.env.AI_GATEWAY_API_KEY||process.env.VERCEL_OIDC_TOKEN;if(!token)throw new Error("AI Gateway not configured");
+ const response=await fetch("https://ai-gateway.vercel.sh/v1/chat/completions",{method:"POST",headers:{authorization:"Bearer "+token,"content-type":"application/json"},body:JSON.stringify({model:"openai/gpt-5.4",messages,response_format:{type:"json_object"},temperature:.35})});
+ const payload=await response.json().catch(()=>({}));if(!response.ok)throw new Error("AI Gateway HTTP "+response.status);
+ let value=String(payload?.choices?.[0]?.message?.content||"").trim(),fence=String.fromCharCode(96).repeat(3);if(value.startsWith(fence))value=value.replace(/^.{3}[a-z]*\\s*/i,"").replace(/.{3}$/,"").trim();return JSON.parse(value);
+}
+function prompt(job,baseline,evidence){return [
+ "Act as Premier Express Tourism Dubai's senior human tourism editor. Return JSON only: {title,short_description,sections,editorial_note,preservation_ledger}.",
+ "Sections use {level:'H2',heading,content?,bullets?,items?}; FAQ items use {question,answer}.",
+ "Create excellent professional natural human-written copy. Preserve and improve all useful coverage; never shorten the page.",
+ "Short description 70-110 words; 10+ meaningful H2 sections; 5+ nonduplicate FAQs. Paragraphs for overview/expectation; bullets only where useful.",
+ "Use varied Dubai tourism search phrases naturally, without stuffing. Avoid filler, repetition, research notes and internal workflow language.",
+ "Never invent prices,timings,duration,inclusions,policies,ages,eligibility,transport,ticket entitlement,location or operations. Omit unresolved hard claims from customer copy.",
+ "Category:"+job.blueprint_key,"Product:"+job.product_title,"Source:"+JSON.stringify(job.source_snapshot||{}),"Assessment:"+JSON.stringify(job.assessment||{}),"Baseline to improve:"+JSON.stringify(baseline||{}),"Evidence:"+JSON.stringify(evidence||[])
+ ].join("\\n");}
+async function generateShadowDraft(req,res){
+ const auth=await authenticateOwner(req);if(!auth.ok)return res.status(auth.status).json({success:false,status:auth.code});
+ const id=String(req.body?.job_id||"");if(!/^[0-9a-f-]{36}$/i.test(id))return res.status(400).json({success:false,status:"VALID_JOB_ID_REQUIRED"});
+ const jobs=await rest("website_shadow_jobs","GET",auth.authorization,{select:"id,product_title,blueprint_key,blueprint_version,source_hash,source_snapshot,assessment",id:"eq."+id,limit:"1"}),job=jobs?.[0];
+ if(!job)return res.status(404).json({success:false,status:"SHADOW_JOB_NOT_FOUND"});
+ const [drafts,evidence]=await Promise.all([rest("website_shadow_drafts","GET",auth.authorization,{select:"draft_version,draft_content,preservation_ledger",job_id:"eq."+id,order:"created_at.desc",limit:"1"}),rest("website_shadow_evidence","GET",auth.authorization,{select:"id,record_type,source_type,source_title,supported_facts,conflicts,notes",job_id:"eq."+id,limit:"50"})]);
+ const messages=[{role:"system",content:"Obey the editorial contract and output valid JSON only."},{role:"user",content:prompt(job,drafts?.[0]?.draft_content,evidence)}];let generated,errors=[];
+ for(let attempt=0;attempt<3;attempt++){generated=await gateway(messages);errors=validateDraft(generated,job.blueprint_key);if(!errors.length)break;messages.push({role:"assistant",content:JSON.stringify(generated)},{role:"user",content:"Repair all errors without padding,invention or content loss: "+JSON.stringify(errors)});}
+ if(errors.length)return res.status(422).json({success:false,status:"AUTONOMOUS_REPAIR_EXHAUSTED",errors,wordpress_write_performed:false});
+ const row={job_id:id,created_by:auth.user.id,draft_version:Number(drafts?.[0]?.draft_version||0)+1,based_on_source_hash:job.source_hash,blueprint_key:job.blueprint_key,blueprint_version:job.blueprint_version,draft_content:generated,preservation_ledger:Array.isArray(generated.preservation_ledger)?generated.preservation_ledger:(drafts?.[0]?.preservation_ledger||[]),evidence_ids:evidence.map(x=>x.id),quality_report:{quality_state:"UNVERIFIED_GENERATED_SHADOW",deterministic_validation:"PASS",repair_attempts:messages.filter(x=>x.role==="assistant").length,publication_gate_passed:false,wordpress_changes:0,yoast_changes:0},status:"UNVERIFIED_SHADOW_DRAFT",approval_token:null,execution_token:null,publication_authorized:false,wordpress_write_performed:false};
+ const saved=await rest("website_shadow_drafts","POST",auth.authorization,{},row);return res.status(201).json({success:true,status:"UNVERIFIED_SHADOW_DRAFT_CREATED",draft_id:saved?.[0]?.id,draft_version:saved?.[0]?.draft_version,publication_authorized:false,wordpress_write_performed:false,yoast_write_performed:false});
+}
+
 async function providerStatus(req, res) {
   const auth = await authenticateOwner(req);
   if (!auth.ok) {
@@ -199,7 +253,7 @@ async function readAudit(req, res) {
     },
     controls: {
       data_access: "OWNER_RLS_READ_ONLY",
-      generation_available: false,
+      generation_available: providerReadiness().ready,
       approval_available: false,
       execution_available: false,
       wordpress_write_available: false,
@@ -237,7 +291,7 @@ export default async function handler(req, res) {
         immutable_draft_required: true,
         independent_excellence_required: true,
         factual_verification_required: true,
-        generation_available: false,
+        generation_available: providerReadiness().ready,
         approval_available: false,
         execution_available: false,
         wordpress_write_available: false,
@@ -246,7 +300,7 @@ export default async function handler(req, res) {
     });
   }
 
-  if (req.method === "POST" && req.body?.action === "provider_status") {
+  if (req.method === "POST" && req.body?.action === "generate_shadow_draft") { try { return await generateShadowDraft(req,res); } catch(error) { return res.status(502).json({success:false,status:"SHADOW_GENERATION_FAILED",message:error?.message||String(error),wordpress_write_performed:false,yoast_write_performed:false}); } }\n\n  if (req.method === "POST" && req.body?.action === "provider_status") {
     return providerStatus(req, res);
   }
 
