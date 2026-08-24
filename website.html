@@ -231,6 +231,23 @@
         <li>Before and After scores must use the same blueprint version and disclose every component.</li>
       </ul></div>
     </div>
+    <div class="card"><div class="main-head"><div><h2>Cross-Product Originality Baseline</h2><p class="muted">Five-word shingle similarity and exact normalized sentence reuse measured across all 30 representative product bodies.</p></div><span class="badge">Editorial baseline requires repair</span></div>
+      <div class="stats"><div class="stat"><small>Products analysed</small><b>30</b></div><div class="stat"><small>Pairs above 12% similarity</small><b>2</b></div><div class="stat"><small>Generic sentences repeated in 5 products</small><b>6</b></div><div class="stat"><small>Publishing effect</small><b class="safe">None</b></div></div>
+      <table class="rule-table"><thead><tr><th>Finding</th><th>Evidence</th><th>Required shadow-mode correction</th></tr></thead><tbody>
+        <tr><td>Cross-category generic “Why Choose” template</td><td>Six identical sentences occur across five products including an attraction, yacht, adventure activity and vehicles.</td><td>Replace with product-specific, credible reasons derived from each product's verified value.</td></tr>
+        <tr><td>Highest sampled pair similarity</td><td>Hyundai H1 and GMC Yukon XL: 13.8% five-word-shingle similarity.</td><td>Review legitimate shared company/service facts separately from duplicated product wording.</td></tr>
+        <tr><td>Unexpected unrelated-category similarity</td><td>Museum of Illusions and GMC Yukon XL: 12.3%.</td><td>Treat shared generic booking language as template contamination, not useful category consistency.</td></tr>
+        <tr><td>Repeated policy/booking guidance</td><td>Multiple exact sentences appear in three products.</td><td>Preserve confirmed legal meaning but rewrite surrounding explanation for the exact product and customer intent.</td></tr>
+      </tbody></table>
+      <div class="rule-block"><h3>Originality gate</h3><ul>
+        <li>Exact generic marketing sentences repeated across three or more unrelated products fail editorial review.</li>
+        <li>Similarity thresholds trigger semantic review; they do not automatically reject legitimate shared policy or company facts.</li>
+        <li>Why Choose, overview, expectations and FAQs must be product-specific and cannot use a catalogue-wide fallback template.</li>
+        <li>Policy wording may remain consistent when legally required, but it is excluded from marketing-originality scoring and remains fact-protected.</li>
+        <li>The shadow proposal must reduce generic cross-category duplication without losing supported information.</li>
+      </ul></div>
+      <p class="footer-note">This baseline records current content evidence only. No live product was edited.</p>
+    </div>
     <div class="card"><h2>Initial classification findings</h2><table class="rule-table"><thead><tr><th>Product</th><th>Current taxonomy signal</th><th>Safe decision</th></tr></thead><tbody>
       <tr><td>Palm Monorail 1-Way Pass</td><td>Falls under Sightseeing Tours.</td><td>Review as a transport/admission product before applying a tour itinerary.</td></tr>
       <tr><td>Speedboat Tour Dubai Marina</td><td>Falls under the Yacht category.</td><td>Review against Water/Adventure or Sightseeing rules rather than assuming yacht-hire facilities.</td></tr>
@@ -263,7 +280,7 @@
       <tr><td>Atomic fact inventory</td><td class="match-review">Read-only signal extraction implemented</td><td>Every risk-bearing statement must be verified, preserved or corrected with approved evidence.</td></tr>
       <tr><td>Thin-content enrichment</td><td class="match-review">Gap and evidence queue implemented</td><td>Shadow enrichment must prove missing content is expanded professionally without invented facts.</td></tr>
       <tr><td>Content-loss regression</td><td class="match-review">Baseline fingerprint and manifest implemented</td><td>Shadow proposals must prove zero unexplained loss across the representative set.</td></tr>
-      <tr><td>Human editorial review</td><td class="match-review">Pending</td><td>No AI filler, mechanical wording or repeated templates across test products.</td></tr>
+      <tr><td>Human editorial review</td><td class="match-review">Baseline failed — cross-category templates detected</td><td>Shadow proposals must remove generic repetition while preserving legitimate shared facts.</td></tr>
       <tr><td>Category scoring tests</td><td class="match-review">Category matrices defined</td><td>Shadow scoring must confirm irrelevant and conditional rules never create penalties.</td></tr>
     </tbody></table></div>
     <div class="card"><h2>Phase C — Shadow Mode</h2><ul>
