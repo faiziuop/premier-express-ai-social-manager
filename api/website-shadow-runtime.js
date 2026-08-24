@@ -310,11 +310,6 @@ export default async function handler(req, res) {
     });
   }
 
-  if (req.method === "GET" && req.query?.probe === "gemini-quality") {
-    try { const result=await gemini([{role:"system",content:"Return valid JSON only."},{role:"user",content:"Return a JSON object with ok true and a 75-word short_description about a private Dubai airport transfer."}]); return res.status(200).json({success:result?.ok===true,word_count:wordCount(result?.short_description),status:"GEMINI_QUALITY_READY"}); }
-    catch(error){ return res.status(200).json({success:false,status:"GEMINI_QUALITY_FAILED",message:error?.message||String(error)}); }
-  }
-
   if (req.method === "GET" || req.method === "HEAD") {
     return res.status(200).json({
       success: true,
