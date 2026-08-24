@@ -4,16 +4,18 @@ const SUPABASE_PUBLISHABLE_KEY =
 const OWNER_USER_ID = "a3a56856-7613-48a6-898c-1526a76f8ee7";
 
 function providerReadiness() {
-  const cloudflareAccount = Boolean(process.env.CLOUDFLARE_ACCOUNT_ID);
-  const cloudflareToken = Boolean(process.env.CLOUDFLARE_API_TOKEN);
-  const cloudflareReady = cloudflareAccount && cloudflareToken;
+  const geminiReady = Boolean(process.env.GEMINI_API_KEY);
+  const cloudflareReady = Boolean(process.env.CLOUDFLARE_ACCOUNT_ID) && Boolean(process.env.CLOUDFLARE_API_TOKEN);
+  const ready = geminiReady || cloudflareReady;
+  const providers=[geminiReady&&"google_gemini",cloudflareReady&&"cloudflare_workers_ai"].filter(Boolean);
   return {
-    ready: cloudflareReady,
-    mode: cloudflareReady ? "CLOUDFLARE_WORKERS_AI_READY" : "CLOUDFLARE_CONFIGURATION_REQUIRED",
-    configured_providers: cloudflareReady ? ["cloudflare_workers_ai"] : [],
-    authentication: cloudflareReady ? "CLOUDFLARE_API_TOKEN" : "NONE",
+    ready,
+    mode: ready ? "SHADOW_AI_PROVIDER_READY" : "AI_PROVIDER_CONFIGURATION_REQUIRED",
+    active_provider: geminiReady ? "google_gemini" : cloudflareReady ? "cloudflare_workers_ai" : null,
+    configured_providers: providers,
+    authentication: geminiReady ? "GEMINI_API_KEY" : cloudflareReady ? "CLOUDFLARE_API_TOKEN" : "NONE",
     isolation: "WEBSITE_SHADOW_ONLY",
-    generation_enabled: cloudflareReady,
+    generation_enabled: ready,
     storage_enabled: true,
     publishing_enabled: false
   };
@@ -117,7 +119,27 @@ async function rest(table,method,authorization,query={},body){
  const response=await fetch(url,{method,headers:{apikey:SUPABASE_PUBLISHABLE_KEY,authorization,accept:"application/json","content-type":"application/json",prefer:method==="POST"?"return=representation":""},body:body?JSON.stringify(body):undefined});
  const payload=await response.json().catch(()=>null);if(!response.ok)throw new Error(table+" HTTP "+response.status);return payload;
 }
+async function gemini(messages){
+ const key=process.env.GEMINI_API_KEY;if(!key)throw new Error("GEMINI_CONFIGURATION_REQUIRED");
+ const system=messages.filter(x=>x.role==="system").map(x=>x.content).join("\n");
+ const contents=messages.filter(x=>x.role!=="system").map(x=>({role:x.role==="assistant"?"model":"user",parts:[{text:String(x.content||"")}]}));
+ let lastError;
+ for(let attempt=1;attempt<=3;attempt++){
+  try{
+   const response=await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent",{method:"POST",headers:{"x-goog-api-key":key,"content-type":"application/json"},body:JSON.stringify({systemInstruction:{parts:[{text:system}]},contents,generationConfig:{temperature:.35,maxOutputTokens:8192,responseMimeType:"application/json"}}),signal:AbortSignal.timeout(90000)});
+   const payload=await response.json().catch(()=>({}));
+   if(response.ok){const value=String(payload?.candidates?.[0]?.content?.parts?.[0]?.text||"").trim();return JSON.parse(value);}
+   const retryable=response.status===429||response.status>=500;
+   if(!retryable)throw Object.assign(new Error("GEMINI_REQUEST_REJECTED_HTTP_"+response.status),{permanent:true});
+   lastError=new Error("Gemini transient HTTP "+response.status);
+  }catch(error){if(error?.permanent)throw error;lastError=error;}
+  if(attempt<3)await new Promise(resolve=>setTimeout(resolve,attempt*1500));
+ }
+ throw new Error("GEMINI_UNAVAILABLE_AFTER_RETRIES: "+(lastError?.message||String(lastError)));
+}
+
 async function gateway(messages){
+ if(process.env.GEMINI_API_KEY)return gemini(messages);
  const accountId=process.env.CLOUDFLARE_ACCOUNT_ID,token=process.env.CLOUDFLARE_API_TOKEN;
  if(!accountId||!token)throw new Error("CLOUDFLARE_WORKERS_AI_CONFIGURATION_REQUIRED");
  const model="@cf/meta/llama-4-scout-17b-16e-instruct";
