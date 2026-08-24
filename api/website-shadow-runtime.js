@@ -285,6 +285,15 @@ export default async function handler(req, res) {
     });
   }
 
+  if (req.method === "GET" && req.query?.probe === "cloudflare-json") {
+    try {
+      const result=await gateway([{role:"system",content:"Return valid JSON only."},{role:"user",content:"Return {\\\"ok\\\":true}."}]);
+      return res.status(200).json({success:result?.ok===true,status:"CLOUDFLARE_JSON_READY",model:"llama-4-scout"});
+    } catch(error) {
+      return res.status(200).json({success:false,status:"CLOUDFLARE_JSON_FAILED",message:error?.message||String(error)});
+    }
+  }
+
   if (req.method === "GET" || req.method === "HEAD") {
     return res.status(200).json({
       success: true,
