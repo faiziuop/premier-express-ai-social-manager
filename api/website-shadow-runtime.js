@@ -131,8 +131,8 @@ async function gateway(messages){
     if(value.startsWith(fence))value=value.replace(/^.{3}[a-z]*\s*/i,"").replace(/.{3}$/,"").trim();
     return JSON.parse(value);
    }
-   const code=Number(payload?.errors?.[0]?.code||0),detail=String(payload?.errors?.[0]?.message||"").slice(0,240),retryable=response.status===429||response.status>=500||code===7505;
-   if(!retryable)throw Object.assign(new Error("CLOUDFLARE_WORKERS_AI_REJECTED_"+(code||response.status)+(detail?": "+detail:"")),{permanent:true});
+   const code=Number(payload?.errors?.[0]?.code||0),detail=String(payload?.errors?.[0]?.message||"").slice(0,240),quotaExhausted=code===4006&&detail.toLowerCase().includes("daily free allocation"),retryable=!quotaExhausted&&(response.status===429||response.status>=500||code===7505);
+   if(!retryable)throw Object.assign(new Error(quotaExhausted?"CLOUDFLARE_DAILY_QUOTA_EXHAUSTED":"CLOUDFLARE_WORKERS_AI_REJECTED_"+(code||response.status)+(detail?": "+detail:"")),{permanent:true});
    lastError=new Error("Cloudflare Workers AI transient error "+(code||response.status)+(detail?": "+detail:""));
   }catch(error){if(error?.permanent)throw error;lastError=error;}
   if(attempt<3)await new Promise(resolve=>setTimeout(resolve,attempt*1500));
@@ -283,15 +283,6 @@ export default async function handler(req, res) {
       success: false,
       status: "ORIGIN_REJECTED"
     });
-  }
-
-  if (req.method === "GET" && req.query?.probe === "cloudflare-json") {
-    try {
-      const result=await gateway([{role:"system",content:"Return valid JSON only."},{role:"user",content:"Return {\\\"ok\\\":true}."}]);
-      return res.status(200).json({success:result?.ok===true,status:"CLOUDFLARE_JSON_READY",model:"llama-4-scout"});
-    } catch(error) {
-      return res.status(200).json({success:false,status:"CLOUDFLARE_JSON_FAILED",message:error?.message||String(error)});
-    }
   }
 
   if (req.method === "GET" || req.method === "HEAD") {
