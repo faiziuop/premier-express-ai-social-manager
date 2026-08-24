@@ -296,6 +296,14 @@ export default async function handler(req, res) {
     });
   }
 
+  if (req.method === "GET" && req.query?.probe === "provider-completion") {
+    const token=process.env.AI_GATEWAY_API_KEY||process.env.VERCEL_OIDC_TOKEN;
+    const response=await fetch("https://ai-gateway.vercel.sh/v1/chat/completions",{method:"POST",headers:{authorization:"Bearer "+token,"content-type":"application/json"},body:JSON.stringify({model:"openai/gpt-5.4",messages:[{role:"user",content:"Return JSON with ok true."}],response_format:{type:"json_object"},max_completion_tokens:30})});
+    const payload=await response.json().catch(()=>({}));
+    const providerError=payload?.error||{};
+    return res.status(200).json({success:response.ok,http_status:response.status,error_code:providerError.code||null,error_type:providerError.type||null,error_message:providerError.message||null});
+  }
+
   if (req.method === "GET" && req.query?.probe === "provider-auth") {
     const token=process.env.AI_GATEWAY_API_KEY||process.env.VERCEL_OIDC_TOKEN;
     const response=await fetch("https://ai-gateway.vercel.sh/v1/models",{headers:{authorization:"Bearer "+token}});
