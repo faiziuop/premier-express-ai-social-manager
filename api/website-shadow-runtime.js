@@ -109,7 +109,7 @@ function normalizeDraft(draft){
  for(const section of draft.sections){
   if(section.content)section.content=cleanText(section.content);
   if(Array.isArray(section.items))section.items=section.items.map(item=>({...item,answer:cleanText(item.answer)})).filter(item=>item.question&&item.answer);
-  if(Array.isArray(section.bullets)){section.bullets=[...new Set(section.bullets.map(x=>String(x).trim()).filter(Boolean))];if(/why choose/i.test(String(section.heading||""))&&section.bullets.length>6)section.bullets=section.bullets.slice(0,6);}
+  if(Array.isArray(section.bullets)){section.bullets=[...new Set(section.bullets.map(cleanText).filter(Boolean))];if(/why choose/i.test(String(section.heading||""))&&section.bullets.length>6)section.bullets=section.bullets.slice(0,6);}
   if(Array.isArray(section.items)&&/frequently asked/i.test(String(section.heading||""))&&section.items.length>5)section.items=section.items.slice(0,5);
  }
  return draft;
