@@ -167,9 +167,30 @@
         <li>Semantic recognition cannot override factual, policy, source or content-preservation safeguards.</li>
       </ul></div>
     </div>
-    <div class="card"><h2>Rendered Semantic Validation — Pilot Finding</h2><table class="rule-table"><thead><tr><th>Product</th><th>Rendered observation</th><th>Compatibility decision</th></tr></thead><tbody>
-      <tr><td>Palm Monorail 1-Way Pass</td><td>The public page visibly presents labels including Tour Overview, Highlights &amp; Inclusions, Exclusions, Important Information, Timings &amp; Duration, Booking &amp; Cancellation Policy and Why Choose, while the product-body HTML exposes no H2/H3 hierarchy.</td><td>Preserve the existing section content, recognize its semantic coverage, and separately propose proper H2/H3 markup. Do not duplicate the sections or classify the product as empty.</td></tr>
-    </tbody></table><p class="footer-note">This confirms that visible meaning and HTML hierarchy must be measured separately. The remaining representative products still require rendered verification before compatibility can pass.</p></div>
+    <div class="card"><div class="main-head"><div><h2>Live Product-Body Semantic Validation</h2><p class="muted">All 30 representative products checked against their current public WordPress product-body HTML.</p></div><span class="badge">30 / 30 structurally classified</span></div>
+      <div class="stats"><div class="stat"><small>Semantic H2/H3 structure</small><b>18</b></div><div class="stat"><small>Visible labels without H2/H3</small><b>12</b></div><div class="stat"><small>Truly structure-empty</small><b>0</b></div><div class="stat"><small>Retrieval failures</small><b>0</b></div></div>
+      <table class="rule-table"><thead><tr><th>Blueprint</th><th>H2/H3 structure</th><th>Visible-label-only</th><th>Compatibility observation</th></tr></thead><tbody>
+        <tr><td>Attractions &amp; Admission</td><td>2</td><td>1</td><td>Butterfly Garden uses visible labels without semantic heading tags.</td></tr>
+        <tr><td>Tours &amp; Sightseeing</td><td>2</td><td>1</td><td>Palm Monorail has meaningful labelled sections but requires a transport/admission subtype and hierarchy correction.</td></tr>
+        <tr><td>Desert Safaris</td><td>1</td><td>2</td><td>Camel Trekking and Sunrise Safari retain labelled content that must not be mistaken for missing sections.</td></tr>
+        <tr><td>Dhow &amp; Dinner Cruises</td><td>2</td><td>1</td><td>VIP Dhow is label-only; Golden Glass uses H3 headings without H2 and needs hierarchy review.</td></tr>
+        <tr><td>Private &amp; Sharing Yachts</td><td>1</td><td>2</td><td>Speedboat and 64ft Dominator are label-only; the speedboat classification still requires review.</td></tr>
+        <tr><td>Theme Parks &amp; Packages</td><td>2</td><td>1</td><td>Loco Bear is label-only; Warner Bros. transfer entitlement remains a separate factual check.</td></tr>
+        <tr><td>Water &amp; Adventure Activities</td><td>2</td><td>1</td><td>Ski Dubai Full Day Slope is label-only.</td></tr>
+        <tr><td>Helicopter &amp; Aerial Tours</td><td>0</td><td>3</td><td>All three retain visible labelled sections but expose no H2/H3 hierarchy.</td></tr>
+        <tr><td>Vehicles &amp; Chauffeur Services</td><td>3</td><td>0</td><td>All sampled products expose H2/H3; service subtype facts still require verification.</td></tr>
+        <tr><td>Airport &amp; Cross-border Transfers</td><td>3</td><td>0</td><td>All sampled products expose H2/H3; border, visa and timing facts remain protected evidence.</td></tr>
+      </tbody></table>
+      <div class="rule-block"><h3>Label-only products requiring preservation-aware hierarchy repair</h3><p>Butterfly Garden Dubai; Palm Monorail 1-Way Pass; Camel Trekking Abu Dhabi; Sunrise Desert Safari Abu Dhabi; VIP Dhow Cruise Marina; Speedboat Tour Dubai Marina; 64ft Dominator Yacht; Loco Bear Mini Explorer; Ski Dubai Full Day Slope; both sharing helicopter products; and Private Helicopter Tour.</p></div>
+      <div class="rule-block"><h3>Approved interpretation</h3><ul>
+        <li>Visible-label-only content is existing content, not a blank or missing product structure.</li>
+        <li>The preservation ledger must capture every useful labelled section before any hierarchy repair.</li>
+        <li>Adding H2/H3 tags must not trigger rewriting, shortening or duplicating the underlying information.</li>
+        <li>Golden Glass Cruise requires H3-only hierarchy review, not automatic section regeneration.</li>
+        <li>Structural classification does not approve factual accuracy, editorial quality or publishing.</li>
+      </ul></div>
+      <p class="footer-note">The inspector now measures visible semantic labels separately from HTML heading hierarchy. Full rendered visual placement and factual-preservation tests remain required.</p>
+    </div>
     <div class="card"><h2>Initial classification findings</h2><table class="rule-table"><thead><tr><th>Product</th><th>Current taxonomy signal</th><th>Safe decision</th></tr></thead><tbody>
       <tr><td>Palm Monorail 1-Way Pass</td><td>Falls under Sightseeing Tours.</td><td>Review as a transport/admission product before applying a tour itinerary.</td></tr>
       <tr><td>Speedboat Tour Dubai Marina</td><td>Falls under the Yacht category.</td><td>Review against Water/Adventure or Sightseeing rules rather than assuming yacht-hire facilities.</td></tr>
@@ -197,8 +218,8 @@
     </tbody></table></div>
     <div class="card"><h2>Phase B — Compatibility Validation</h2><table class="rule-table"><thead><tr><th>Required gate</th><th>Current status</th><th>Pass condition</th></tr></thead><tbody>
       <tr><td>Product override review</td><td class="match-review">Pending formal record</td><td>All 24 proposed overrides stored with reason and approved primary blueprint.</td></tr>
-      <tr><td>Representative product tests</td><td class="match-review">Structural baseline + rendered pilot</td><td>Remaining rendered, factual-preservation and human-editorial tests must pass.</td></tr>
-      <tr><td>Alternate-heading recognition</td><td class="match-review">Alias dictionary expanded</td><td>Rendered verification must confirm professional synonyms and combined headings do not create false missing-section failures.</td></tr>
+      <tr><td>Representative product tests</td><td class="match-review">30-product semantic structure complete</td><td>Rendered visual placement, factual-preservation and human-editorial tests must still pass.</td></tr>
+      <tr><td>Alternate-heading recognition</td><td class="match-review">Dictionary verified on 30 product bodies</td><td>Full rendered visual verification must still confirm builder output and combined-heading placement.</td></tr>
       <tr><td>Thin-content enrichment</td><td class="match-review">Pending</td><td>Missing content is researched and expanded without inventing facts.</td></tr>
       <tr><td>Content-loss regression</td><td class="match-review">Pending</td><td>Useful verified information loss equals zero across the representative set.</td></tr>
       <tr><td>Human editorial review</td><td class="match-review">Pending</td><td>No AI filler, mechanical wording or repeated templates across test products.</td></tr>
