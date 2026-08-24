@@ -322,6 +322,17 @@
         <li>When evidence is absent, the agent must omit, qualify or mark the field unresolved—never invent or pad it.</li>
       </ul></div>
     </div>
+    <div class="card"><div class="main-head"><div><h2>Claim Evidence Coverage</h2><p class="muted">Evidence discovery and evidence approval are separate states. Candidate facts cannot enter publishable copy.</p></div><span class="badge">ZERO VERIFIED CLAIM RECORDS</span></div>
+      <div class="stats"><div class="stat"><small>Evidence records</small><b id="claimEvidenceRecords">—</b></div><div class="stat"><small>Verified records</small><b id="claimVerifiedRecords">—</b></div><div class="stat"><small>Candidate fact items</small><b id="claimSupportedItems">—</b></div><div class="stat"><small>Recorded conflicts</small><b id="claimConflictItems">—</b></div></div>
+      <div id="claimCoverageStatus" class="inventory-status">Load shadow evidence to calculate claim coverage.</div>
+      <div class="table-responsive"><table class="rule-table"><thead><tr><th>Source class</th><th>Records</th><th>Candidate facts</th><th>Conflicts</th><th>Permitted use</th></tr></thead><tbody id="claimCoverageRows"></tbody></table></div>
+      <div class="rule-block"><h3>Claim-state contract</h3><table class="rule-table"><tbody>
+        <tr><td class="match-review">CANDIDATE</td><td>Discovered statement only. May guide research or appear as an unresolved blocker; cannot be asserted as approved fact.</td></tr>
+        <tr><td class="match-review">CONFLICTED</td><td>Sources disagree or the live page differs from current evidence. Omit the claim and require resolution.</td></tr>
+        <tr><td class="match-good">VERIFIED</td><td>Current authoritative or supplier evidence supports the exact claim, product option and commercial context.</td></tr>
+        <tr><td>OMITTED</td><td>No adequate evidence exists. The draft stays useful without inventing, padding or implying the missing fact.</td></tr>
+      </tbody></table></div>
+    </div>
     <div class="card"><div class="main-head"><div><h2>Saved Shadow Assessments</h2><p class="muted">Authenticated, owner-only assessment records. Updates and deletions are denied by database policy.</p></div><button id="shadowRefresh" class="btn" type="button">Refresh</button></div>
       <div id="shadowJobStatus" class="inventory-status">Open this tab while signed in to load your isolated assessments.</div>
       <div class="table-responsive"><table class="rule-table"><thead><tr><th>Product</th><th>Blueprint</th><th>Status</th><th>Quality gate</th><th>Evidence</th><th>Draft</th><th>Protected source</th><th>Created</th></tr></thead><tbody id="shadowJobRows"></tbody></table></div>
@@ -684,6 +695,20 @@ function reviewShadowDraft(jobId){
   "<p class='footer-note'>Source SHA-256: <code>"+escapeText(job.source_hash)+"</code> • Draft binding: <code>"+escapeText(draft.based_on_source_hash)+"</code><br>publication_authorized="+escapeText(String(draft.publication_authorized))+" • wordpress_write_performed="+escapeText(String(draft.wordpress_write_performed))+"</p>";
   panel.classList.remove("hidden");panel.scrollIntoView({behavior:"smooth",block:"start"})
 }
+function evidenceItemCount(value){if(Array.isArray(value))return value.length;if(value&&typeof value==="object")return Object.keys(value).length;return String(value||"").trim()?1:0}
+function renderClaimCoverage(){
+ const types=["OFFICIAL_SOURCE","SUPPLIER_OPERATOR","EXISTING_WORDPRESS"];
+ const verified=shadowEvidenceCache.filter(x=>String(x.record_type||"").toUpperCase()==="VERIFIED").length;
+ const supported=shadowEvidenceCache.reduce((n,x)=>n+evidenceItemCount(x.supported_facts),0);
+ const conflicts=shadowEvidenceCache.reduce((n,x)=>n+evidenceItemCount(x.conflicts),0);
+ document.getElementById("claimEvidenceRecords").textContent=shadowEvidenceCache.length;
+ document.getElementById("claimVerifiedRecords").textContent=verified;
+ document.getElementById("claimSupportedItems").textContent=supported;
+ document.getElementById("claimConflictItems").textContent=conflicts;
+ const permission={OFFICIAL_SOURCE:"Research candidate; operational claims still require current relevance and exact product match.",SUPPLIER_OPERATOR:"May verify sellable terms only when current, attributable and option-specific.",EXISTING_WORDPRESS:"Protected baseline and discrepancy signal; never self-verifies a disputed claim."};
+ document.getElementById("claimCoverageRows").innerHTML=types.map(type=>{const rows=shadowEvidenceCache.filter(x=>x.source_type===type);return "<tr><td>"+escapeText(type)+"</td><td>"+rows.length+"</td><td>"+rows.reduce((n,x)=>n+evidenceItemCount(x.supported_facts),0)+"</td><td class='"+(rows.reduce((n,x)=>n+evidenceItemCount(x.conflicts),0)?"match-review":"match-good")+"'>"+rows.reduce((n,x)=>n+evidenceItemCount(x.conflicts),0)+"</td><td>"+escapeText(permission[type])+"</td></tr>"}).join("");
+ document.getElementById("claimCoverageStatus").textContent=verified+" verified of "+shadowEvidenceCache.length+" evidence record(s) • "+supported+" candidate fact item(s) • "+conflicts+" conflict item(s) • candidate evidence cannot authorize publication.";
+}
 const categoryEvidencePolicy={
 attractions:{sources:"Official operator notice → current official ticket/fare page → supplier voucher or rate sheet",unlocks:"Operating status, ticket entitlement, fare, child rules, timings, cancellation",fallback:"Block sale-sensitive claims and keep the proposal unpublished."},
 tours:{sources:"Current tour itinerary → supplier confirmation → approved operations sheet",unlocks:"Stop type, entry entitlement, sequence, duration, pickup, guide language, cancellation",fallback:"Describe only verified sightseeing scope; omit entry and timing promises."},
@@ -723,7 +748,7 @@ async function loadShadowJobs(){const status=document.getElementById("shadowJobS
 if(!shadowSb)throw Error("Shadow storage client is unavailable.");const {data:{session}}=await shadowSb.auth.getSession();if(!session){status.textContent="Sign in through the Main Agent to view owner-only shadow assessments.";rows.innerHTML="";return}
 status.textContent="Loading isolated shadow assessments…";const {data,error}=await shadowSb.from("website_shadow_jobs").select("id,wp_id,product_url,product_title,blueprint_key,blueprint_version,source_hash,source_snapshot,assessment,status,quality_report,created_at,publication_authorized,wordpress_write_performed").order("created_at",{ascending:false}).limit(100);if(error)throw error;
 const ids=(data||[]).map(x=>x.id);let evidence=[],drafts=[];if(ids.length){const [er,dr]=await Promise.all([shadowSb.from("website_shadow_evidence").select("id,job_id,record_type,source_type,source_title,source_url,supported_facts,conflicts,notes").in("job_id",ids),shadowSb.from("website_shadow_drafts").select("id,job_id,draft_version,based_on_source_hash,blueprint_key,blueprint_version,draft_content,preservation_ledger,evidence_ids,quality_report,status,publication_authorized,wordpress_write_performed,created_at").in("job_id",ids)]);if(er.error)throw er.error;if(dr.error)throw dr.error;evidence=er.data||[];drafts=dr.data||[]}
-shadowJobsCache=data||[];shadowEvidenceCache=evidence;shadowDraftsCache=drafts;renderShadowAcceptance();renderEvidenceRegistry();
+shadowJobsCache=data||[];shadowEvidenceCache=evidence;shadowDraftsCache=drafts;renderShadowAcceptance();renderEvidenceRegistry();renderClaimCoverage();
 const evidenceCount=id=>evidence.filter(x=>x.job_id===id).length,draftsFor=id=>drafts.filter(x=>x.job_id===id),latestDraft=id=>draftsFor(id).sort((a,b)=>new Date(b.created_at)-new Date(a.created_at))[0];
 rows.innerHTML=(data||[]).map(x=>{const draft=latestDraft(x.id);return "<tr><td><a href='"+escapeAttribute(x.product_url)+"' target='_blank' rel='noopener'>"+escapeText(x.product_title)+"</a><br><small>WP "+Number(x.wp_id)+"</small></td><td>"+escapeText(x.blueprint_key+" • "+x.blueprint_version)+"</td><td>"+escapeText(x.status)+"<br><small>Publishing "+(x.publication_authorized?"unexpected":"locked")+" • WP write "+(x.wordpress_write_performed?"unexpected":"false")+"</small></td><td>"+escapeText((draft?.quality_report||x.quality_report)?.quality_state||"Assessment only")+"<br><small>"+escapeText(safeArray((draft?.quality_report||x.quality_report)?.blocking_issues).length?safeArray((draft?.quality_report||x.quality_report)?.blocking_issues).length+" blocker(s)":"No blocker recorded")+"</small></td><td>"+evidenceCount(x.id)+" append-only record(s)</td><td>"+(draft?"<button class='btn review-action' type='button' data-shadow-review='"+escapeAttribute(x.id)+"'>Review draft</button><br><small>"+draftsFor(x.id).length+" immutable version(s)</small>":"No stored draft")+"</td><td><code>"+escapeText(String(x.source_hash).slice(0,16))+"…</code></td><td>"+escapeText(new Date(x.created_at).toLocaleString())+"</td></tr>"}).join("")||"<tr><td colspan='8'>No saved shadow assessments yet.</td></tr>";
 status.textContent=(data||[]).length+" owner-only assessment(s) • "+evidence.length+" evidence record(s) • "+drafts.length+" draft(s) • reviewer read-only • publishing locked"
