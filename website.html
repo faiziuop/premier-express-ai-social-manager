@@ -266,6 +266,11 @@
 
   <section id="shadow" class="panel">
     <div class="card notice"><div class="main-head"><div><h2>Isolated Shadow Mode</h2><p>Product-by-product readiness assessment is active. Research, drafting, approval tokens, Yoast changes and WordPress publishing remain disconnected.</p></div><span class="badge">ASSESSMENT ACTIVE • WRITES LOCKED</span></div></div>
+    <div class="card"><div class="main-head"><div><h2>Authenticated Runtime Verification</h2><p class="muted">Server-side confirmation of owner identity, RLS visibility, source binding and zero-write isolation.</p></div><span id="runtimeAuditBadge" class="badge">NOT CHECKED</span></div>
+      <div id="runtimeAuditStatus" class="inventory-status">Open Shadow Mode while signed in to verify the server boundary.</div>
+      <div class="stats"><div class="stat"><small>Canonical categories</small><b id="runtimeCategories">—</b></div><div class="stat"><small>Canonical drafts</small><b id="runtimeDrafts">—</b></div><div class="stat"><small>Verified evidence</small><b id="runtimeEvidence">—</b></div><div class="stat"><small>Source mismatches</small><b id="runtimeMismatches">—</b></div><div class="stat"><small>WordPress writes</small><b id="runtimeWrites">—</b></div></div>
+      <p class="footer-note">This check runs through the isolated Vercel server function using the active Supabase access token. No service-role key is used and no database mutation is available.</p>
+    </div>
     <div class="card"><div class="main-head"><div><h2>Website Foundation Completion Control</h2><p class="muted">One authoritative checkpoint prevents partial work from being described as ready.</p></div><span id="foundationStateBadge" class="badge">CALCULATING</span></div>
       <div id="foundationStateStatus" class="inventory-status">Load owner-only shadow data to calculate completion.</div>
       <div class="table-responsive"><table class="rule-table"><thead><tr><th>Completion gate</th><th>Required result</th><th>Current result</th></tr></thead><tbody id="foundationStateRows"></tbody></table></div>
@@ -719,6 +724,28 @@ function reviewShadowDraft(jobId){
   "<p class='footer-note'>Source SHA-256: <code>"+escapeText(job.source_hash)+"</code> • Draft binding: <code>"+escapeText(draft.based_on_source_hash)+"</code><br>publication_authorized="+escapeText(String(draft.publication_authorized))+" • wordpress_write_performed="+escapeText(String(draft.wordpress_write_performed))+"</p>";
   panel.classList.remove("hidden");panel.scrollIntoView({behavior:"smooth",block:"start"})
 }
+async function loadRuntimeAudit(session){
+ const status=document.getElementById("runtimeAuditStatus"),badge=document.getElementById("runtimeAuditBadge");
+ try{
+  if(!session?.access_token)throw Error("Sign in through the Main Agent first.");
+  status.textContent="Verifying owner-authenticated read-only runtime…";
+  const response=await fetch("/api/website-shadow-runtime",{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+session.access_token},body:JSON.stringify({action:"read_audit"})});
+  const payload=await response.json().catch(()=>({}));
+  if(!response.ok)throw Error((payload.status||"Runtime audit failed")+" • HTTP "+response.status);
+  const audit=payload.audit||{};
+  document.getElementById("runtimeCategories").textContent=Number(audit.canonical_categories||0);
+  document.getElementById("runtimeDrafts").textContent=Number(audit.canonical_drafts||0);
+  document.getElementById("runtimeEvidence").textContent=Number(audit.verified_evidence_records||0);
+  document.getElementById("runtimeMismatches").textContent=Number(audit.source_hash_mismatches||0);
+  document.getElementById("runtimeWrites").textContent=Number(audit.wordpress_writes||0);
+  const safe=payload.status==="AUTHENTICATED_READ_ONLY"&&Number(audit.source_hash_mismatches||0)===0&&Number(audit.publication_authorized||0)===0&&Number(audit.wordpress_writes||0)===0;
+  badge.textContent=safe?"READ-ONLY VERIFIED":"REVIEW REQUIRED";badge.className=safe?"badge safe":"badge";
+  status.textContent="Server audit: "+payload.status+" • owner RLS confirmed • "+Number(audit.evidence_records||0)+" evidence record(s) visible • generation, approval, execution, WordPress and Yoast remain unavailable.";
+ }catch(error){
+  badge.textContent="NOT VERIFIED";badge.className="badge";
+  status.textContent="Runtime verification unavailable: "+(error?.message||String(error))+" No write was attempted.";
+ }
+}
 function renderFoundationCompletion(){
  const canonical=["attractions","tours","activities","packages","safaris","cruises","yachts","helicopter","vehicles","transfers"];
  const latest=canonical.map(key=>{const job=shadowJobsCache.filter(x=>x.blueprint_key===key).sort((a,b)=>new Date(b.created_at)-new Date(a.created_at))[0];const draft=job?shadowDraftsCache.filter(x=>x.job_id===job.id).sort((a,b)=>new Date(b.created_at)-new Date(a.created_at))[0]:null;return job&&draft?{job,draft}:null}).filter(Boolean);
@@ -808,7 +835,7 @@ function renderShadowAcceptance(){
   document.getElementById("shadowAcceptanceStatus").textContent=(complete?"All ten category drafts audited. ":"Category audit is incomplete. ")+editorial+" passed writing and structure; "+factual+" passed factual support; "+authorized+" authorized; "+writes+" WordPress writes. Evidence blockers remain safety stops, not generator errors.";
 }
 async function loadShadowJobs(){const status=document.getElementById("shadowJobStatus"),rows=document.getElementById("shadowJobRows");if(!status||!rows)return;try{
-if(!shadowSb)throw Error("Shadow storage client is unavailable.");const {data:{session}}=await shadowSb.auth.getSession();if(!session){status.textContent="Sign in through the Main Agent to view owner-only shadow assessments.";rows.innerHTML="";return}
+if(!shadowSb)throw Error("Shadow storage client is unavailable.");const {data:{session}}=await shadowSb.auth.getSession();if(!session){status.textContent="Sign in through the Main Agent to view owner-only shadow assessments.";rows.innerHTML="";loadRuntimeAudit(null);return}await loadRuntimeAudit(session)
 status.textContent="Loading isolated shadow assessments…";const {data,error}=await shadowSb.from("website_shadow_jobs").select("id,wp_id,product_url,product_title,blueprint_key,blueprint_version,source_hash,source_snapshot,assessment,status,quality_report,created_at,publication_authorized,wordpress_write_performed").order("created_at",{ascending:false}).limit(100);if(error)throw error;
 const ids=(data||[]).map(x=>x.id);let evidence=[],drafts=[];if(ids.length){const [er,dr]=await Promise.all([shadowSb.from("website_shadow_evidence").select("id,job_id,record_type,source_type,source_title,source_url,supported_facts,conflicts,notes").in("job_id",ids),shadowSb.from("website_shadow_drafts").select("id,job_id,draft_version,based_on_source_hash,blueprint_key,blueprint_version,draft_content,preservation_ledger,evidence_ids,quality_report,status,publication_authorized,wordpress_write_performed,created_at").in("job_id",ids)]);if(er.error)throw er.error;if(dr.error)throw dr.error;evidence=er.data||[];drafts=dr.data||[]}
 shadowJobsCache=data||[];shadowEvidenceCache=evidence;shadowDraftsCache=drafts;renderFoundationCompletion();renderShadowAcceptance();renderExcellenceAudit();renderRewriteQueue();renderEvidenceRegistry();renderClaimCoverage();
