@@ -21,7 +21,7 @@
 .saved-shadow-table th{font-size:10px;letter-spacing:.01em;background:#f8fafc}
 .saved-shadow-table th:nth-child(1),.saved-shadow-table td:nth-child(1){width:15%}
 .saved-shadow-table th:nth-child(2),.saved-shadow-table td:nth-child(2){width:9%}
-.saved-shadow-table th:nth-child(3),.saved-shadow-table td:nth-child(3){width:10%}
+.saved-shadow-table.completed-view th:nth-child(3),.saved-shadow-table.completed-view td:nth-child(3){width:10%}
 .saved-shadow-table th:nth-child(4),.saved-shadow-table td:nth-child(4){width:11%}
 .saved-shadow-table th:nth-child(5),.saved-shadow-table td:nth-child(5){width:8%}
 .saved-shadow-table th:nth-child(6),.saved-shadow-table td:nth-child(6){width:14%}
@@ -74,12 +74,12 @@
 
 
 /* Six-column row with inline performance */
-.saved-shadow-table th:nth-child(1),.saved-shadow-table td:nth-child(1){width:16%}
-.saved-shadow-table th:nth-child(2),.saved-shadow-table td:nth-child(2){width:30%}
-.saved-shadow-table th:nth-child(3),.saved-shadow-table td:nth-child(3){width:10%}
-.saved-shadow-table th:nth-child(4),.saved-shadow-table td:nth-child(4){width:13%}
-.saved-shadow-table th:nth-child(5),.saved-shadow-table td:nth-child(5){width:14%}
-.saved-shadow-table th:nth-child(6),.saved-shadow-table td:nth-child(6){width:17%}
+.saved-shadow-table.completed-view th:nth-child(1),.saved-shadow-table.completed-view td:nth-child(1){width:16%}
+.saved-shadow-table.completed-view th:nth-child(2),.saved-shadow-table.completed-view td:nth-child(2){width:30%}
+.saved-shadow-table.completed-view th:nth-child(3),.saved-shadow-table.completed-view td:nth-child(3){width:10%}
+.saved-shadow-table.completed-view th:nth-child(4),.saved-shadow-table.completed-view td:nth-child(4){width:13%}
+.saved-shadow-table.completed-view th:nth-child(5),.saved-shadow-table.completed-view td:nth-child(5){width:14%}
+.saved-shadow-table.completed-view th:nth-child(6),.saved-shadow-table.completed-view td:nth-child(6){width:17%}
 .inline-performance{min-width:0}
 .inline-score-row{display:grid;grid-template-columns:1fr 1fr;gap:4px}
 .inline-score-row>span{background:#f8fafc;border-radius:6px;padding:5px;text-align:center}
@@ -90,12 +90,12 @@
 .saved-shadow-table .inline-refresh{display:inline-block;width:auto;margin-top:4px;padding:4px 7px;font-size:9px;background:#e8eef8}
 .comparison-note{font-size:8px;color:#64748b;margin-top:2px}
 @media(max-width:900px){
- .saved-shadow-table td:nth-child(1)::before{content:"Product"}
- .saved-shadow-table td:nth-child(2)::before{content:"Performance"}
- .saved-shadow-table td:nth-child(3)::before{content:"Blueprint"}
- .saved-shadow-table td:nth-child(4)::before{content:"Quality"}
- .saved-shadow-table td:nth-child(5)::before{content:"Draft"}
- .saved-shadow-table td:nth-child(6)::before{content:"Publishing"}
+ .saved-shadow-table.completed-view td:nth-child(1)::before{content:"Product"}
+ .saved-shadow-table.completed-view td:nth-child(2)::before{content:"Performance"}
+ .saved-shadow-table.completed-view td:nth-child(3)::before{content:"Blueprint"}
+ .saved-shadow-table.completed-view td:nth-child(4)::before{content:"Quality"}
+ .saved-shadow-table.completed-view td:nth-child(5)::before{content:"Draft"}
+ .saved-shadow-table.completed-view td:nth-child(6)::before{content:"Publishing"}
 }
 
 </style>
@@ -471,7 +471,7 @@
         
       </div>
       <div id="shadowJobStatus" class="inventory-status">Open this tab while signed in to load your isolated assessments.</div>
-      <div class="table-responsive saved-shadow-wrap"><table class="rule-table saved-shadow-table"><thead><tr><th>Product</th><th>Performance Comparison</th><th>Blueprint</th><th>Quality</th><th>Draft</th><th>Publishing</th></tr></thead><tbody id="shadowJobRows"></tbody></table></div>
+      <div class="table-responsive saved-shadow-wrap"><table id="savedShadowTable" class="rule-table saved-shadow-table"><thead><tr id="shadowJobHeader"><th>Product</th><th>Blueprint</th><th>Status</th><th>Quality</th><th>Evidence</th><th>Draft</th><th>Publishing</th><th>Source</th><th>Created</th></tr></thead><tbody id="shadowJobRows"></tbody></table></div>
     </div>
     <div id="shadowDraftReview" class="card shadow-review hidden" aria-live="polite">
       <div class="main-head"><div><h2 id="shadowDraftTitle">Shadow Draft Review</h2><p id="shadowDraftMeta" class="muted"></p></div><button id="shadowDraftClose" class="btn" type="button">Close review</button></div>
@@ -645,8 +645,9 @@ function renderSavedShadowAssessments(){
  let visible=source.filter(x=>!query||String(x.product_title||"").toLowerCase().includes(query)||String(x.wp_id||"").includes(query)||String(x.blueprint_key||"").toLowerCase().includes(query));
  visible.sort((a,b)=>{if(sort==="oldest")return new Date(a.created_at)-new Date(b.created_at);if(sort==="name-asc")return String(a.product_title).localeCompare(String(b.product_title));if(sort==="name-desc")return String(b.product_title).localeCompare(String(a.product_title));if(sort==="category")return String(a.blueprint_key).localeCompare(String(b.blueprint_key))||String(a.product_title).localeCompare(String(b.product_title));if(sort==="workflow"){const ap=latestShadowPublication(a.id,latestShadowDraft(a.id)?.id)?.status||a.status,bp=latestShadowPublication(b.id,latestShadowDraft(b.id)?.id)?.status||b.status;return String(ap).localeCompare(String(bp))}return new Date(b.created_at)-new Date(a.created_at)});
  document.getElementById("shadowActiveCount").textContent=active.length;document.getElementById("shadowCompletedCount").textContent=completed.length;
+ const table=document.getElementById("savedShadowTable"),header=document.getElementById("shadowJobHeader"),completedView=shadowAssessmentView==="completed";table?.classList.toggle("completed-view",completedView);header.innerHTML=completedView?"<th>Product</th><th>Performance Comparison</th><th>Blueprint</th><th>Quality</th><th>Draft</th><th>Publishing</th>":"<th>Product</th><th>Blueprint</th><th>Status</th><th>Quality</th><th>Evidence</th><th>Draft</th><th>Publishing</th><th>Source</th><th>Created</th>";
  const evidenceCount=id=>shadowEvidenceCache.filter(x=>String(x.job_id)===String(id)).length,draftsFor=id=>shadowDraftsCache.filter(x=>String(x.job_id)===String(id));
- rows.innerHTML=visible.map(x=>{const draft=latestShadowDraft(x.id),publication=latestShadowPublication(x.id,draft?.id);return "<tr><td><a href='"+escapeAttribute(x.product_url)+"' target='_blank' rel='noopener'>"+escapeText(x.product_title)+"</a><br><small>WP "+Number(x.wp_id)+"</small></td><td>"+inlinePerformanceCell(publication,x.id)+"</td><td>"+escapeText(x.blueprint_key+" • "+x.blueprint_version)+"</td><td>"+escapeText((draft?.quality_report||x.quality_report)?.quality_state||"Assessment only")+"<br><small>"+escapeText(safeArray((draft?.quality_report||x.quality_report)?.blocking_issues).length?safeArray((draft?.quality_report||x.quality_report)?.blocking_issues).length+" blocker(s)":"No blocker recorded")+"</small></td><td>"+(draft?"<button class='btn review-action' type='button' data-shadow-review='"+escapeAttribute(x.id)+"'>Review draft</button> ":"")+"<button class='btn primary' type='button' data-shadow-generate='"+escapeAttribute(x.id)+"'>Generate improved shadow</button><div id='shadow-action-"+escapeAttribute(x.id)+"' class='footer-note' aria-live='polite'>"+(draft?"Ready • publishing governed":"Assessment ready • create the first immutable draft")+"</div><small>"+(draft?draftsFor(x.id).length+" immutable version(s)":"No stored draft yet")+"</small></td><td>"+(draft?publicationControls(publication,draft,x.id):"Draft required")+"</td></tr>"}).join("")||"<tr><td colspan='6'>No "+(shadowAssessmentView==="completed"?"completed":"active")+" assessments match this search.</td></tr>";
+ rows.innerHTML=visible.map(x=>{const draft=latestShadowDraft(x.id),publication=latestShadowPublication(x.id,draft?.id),workflow=publication?.status||x.status,product="<td><a href='"+escapeAttribute(x.product_url)+"' target='_blank' rel='noopener'>"+escapeText(x.product_title)+"</a><br><small>WP "+Number(x.wp_id)+"</small></td>",blueprint="<td>"+escapeText(x.blueprint_key+" • "+x.blueprint_version)+"</td>",quality="<td>"+escapeText((draft?.quality_report||x.quality_report)?.quality_state||"Assessment only")+"<br><small>"+escapeText(safeArray((draft?.quality_report||x.quality_report)?.blocking_issues).length?safeArray((draft?.quality_report||x.quality_report)?.blocking_issues).length+" blocker(s)":"No blocker recorded")+"</small></td>",draftCell="<td>"+(draft?"<button class='btn review-action' type='button' data-shadow-review='"+escapeAttribute(x.id)+"'>Review draft</button> ":"")+"<button class='btn primary' type='button' data-shadow-generate='"+escapeAttribute(x.id)+"'>Generate improved shadow</button><div id='shadow-action-"+escapeAttribute(x.id)+"' class='footer-note' aria-live='polite'>"+(draft?"Ready • publishing governed":"Assessment ready • create the first immutable draft")+"</div><small>"+(draft?draftsFor(x.id).length+" immutable version(s)":"No stored draft yet")+"</small></td>",publishing="<td>"+(draft?publicationControls(publication,draft,x.id):"Draft required")+"</td>";if(completedView)return"<tr>"+product+"<td>"+inlinePerformanceCell(publication,x.id)+"</td>"+blueprint+quality+draftCell+publishing+"</tr>";return"<tr>"+product+blueprint+"<td>"+escapeText(workflow)+"<br><small>Publishing "+(x.publication_authorized?"authorized":"locked")+" • WP write "+(x.wordpress_write_performed?"recorded":"false")+"</small></td>"+quality+"<td>"+evidenceCount(x.id)+" append-only record(s)</td>"+draftCell+publishing+"<td><code>"+escapeText(String(x.source_hash).slice(0,16))+"…</code></td><td>"+escapeText(new Date(x.created_at).toLocaleString())+"</td></tr>"}).join("")||"<tr><td colspan='"+(completedView?6:9)+"'>No "+(completedView?"completed":"active")+" assessments match this search.</td></tr>";
  status.textContent=visible.length+" shown • "+active.length+" active • "+completed.length+" verified completed • "+shadowEvidenceCache.length+" evidence record(s) • "+shadowDraftsCache.length+" draft(s)";
 }
 const categories={
