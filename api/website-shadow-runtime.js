@@ -118,7 +118,9 @@ function normalizeDraft(draft,related){
  const seenOverview=[];draft.sections=draft.sections.filter(section=>{if(!/overview/i.test(String(section.heading||"")))return true;seenOverview.push(section);return seenOverview.length===1;});
  if(seenOverview.length>1){const first=seenOverview[0],parts=seenOverview.map(x=>String(x.content||"").trim()).filter(Boolean);first.content=[...new Set(parts)].join("\n\n");}
  const internalPhrases=["must be confirmed","requires confirmation","pending verification","research needed","insert link","placeholder"];
- const cleanText=value=>String(value||"").split(/(?<=[.!?])\s+/).filter(sentence=>!internalPhrases.some(p=>sentence.toLowerCase().includes(p))).join(" ").trim();
+ const neutralizePromotional=value=>String(value||"").replace(/\bguaranteed\s+(?:lowest|best|cheapest)\s+(?:price|rate|deal)s?\b/gi,"competitive booking options").replace(/\bguaranteed\s+to\b/gi,"designed to").replace(/\bnumber one\b/gi,"popular").replace(/\bthe\s+cheapest\s+price\b/gi,"a competitive price").replace(/\bcheapest\b/gi,"competitive").replace(/\bunbeatable\b/gi,"appealing").replace(/\s{2,}/g," ").trim();
+ const cleanText=value=>neutralizePromotional(String(value||"").split(/(?<=[.!?])\s+/).filter(sentence=>!internalPhrases.some(p=>sentence.toLowerCase().includes(p))).join(" "));
+ draft.title=neutralizePromotional(draft.title);draft.short_description=neutralizePromotional(draft.short_description);
  for(const section of draft.sections){
   section.level="H2";
   if(section.content)section.content=cleanText(section.content);
@@ -132,8 +134,8 @@ function normalizeDraft(draft,related){
     ...(Array.isArray(section.bullets)?section.bullets:[])
    ];
    const normalized=candidates.map(item=>{
-    if(item&&typeof item==="object")return{level:"H3",question:cleanText(item.question||item.heading||item.title||item.name),answer:cleanText(item.answer||item.content||item.text||item.description)};
-    const parts=String(item||"").split(/\s+(?:A|Answer)\s*:\s*/i),question=cleanText(parts.shift()||"").replace(/^\s*(?:Q|Question)\s*:\s*/i,""),answer=cleanText(parts.join(" "));
+    if(item&&typeof item==="object")return{level:"H3",question:String(item.question||item.heading||item.title||item.name||"").trim(),answer:cleanText(item.answer||item.content||item.text||item.description)};
+    const parts=String(item||"").split(/\s+(?:A|Answer)\s*:\s*/i),question=String(parts.shift()||"").trim().replace(/^\s*(?:Q|Question)\s*:\s*/i,""),answer=cleanText(parts.join(" "));
     return{level:"H3",question,answer};
    }).filter(item=>item.question&&item.answer);
    const seen=new Set();section.items=normalized.filter(item=>{const key=item.question.toLowerCase().replace(/[^a-z0-9]+/g," ").trim();if(!key||seen.has(key))return false;seen.add(key);return true}).slice(0,5);
@@ -179,7 +181,6 @@ function validateDraft(draft,category,baseline){
  const links=Array.isArray(related?.bullets)?related.bullets.filter(item=>item&&typeof item==="object"&&String(item.url||"").startsWith("https://dubaipremiertourism.com/product/")):[];
  if(links.length<3||links.length>6)errors.push("Related Dubai Experiences requires 3-6 verified internal product links");
  for(const p of ["must be confirmed","requires confirmation","pending verification","product-specific use","official this experience","insert link","research needed","placeholder"])if(raw.includes(p))errors.push("Internal or mechanical wording: "+p);
- if(/\b(number one|guaranteed|cheapest|unbeatable)\b/i.test(raw))errors.push("Unverifiable promotional superlative");
  return [...new Set(errors)];
 }
 async function rest(table,method,authorization,query={},body){
@@ -315,7 +316,7 @@ function prompt(job,baseline,evidence,related){return [
  "The WooCommerce product title is the only H1 and is not part of the body. Every main body section must use {level:'H2',heading,content?,bullets?,items?,subsections?}. Every subsection and FAQ item must use {level:'H3',question or heading,answer or content}. Never skip or duplicate heading levels.",
  "Create excellent professional natural human-written copy. Preserve and improve all useful coverage; never shorten the page.",
  "Short description 70-110 words; 10+ meaningful H2 sections; exactly 5 nonduplicate FAQs. Use the heading Frequently Asked Questions and store each FAQ in items as {level:\"H3\",question,answer}. Paragraphs for overview/expectation; bullets only where useful.",
- "Use varied Dubai tourism search phrases naturally, without stuffing. Avoid filler, repetition, research notes and internal workflow language.",
+ "Use varied Dubai tourism search phrases naturally, without stuffing. Avoid filler, repetition, research notes, internal workflow language, ranking claims, price superlatives and absolute guarantees. If the model produces promotional excess, the backend will neutralize it without rejecting the complete draft.",
  "Never invent prices,timings,duration,inclusions,policies,ages,eligibility,transport,ticket entitlement,location or operations. Omit unresolved hard claims from customer copy.",
  "Category:"+job.blueprint_key,"Product:"+job.product_title,"Source:"+JSON.stringify(job.source_snapshot||{}),"Assessment:"+JSON.stringify(job.assessment||{}),"Baseline to improve:"+JSON.stringify(baseline||{}),"Evidence:"+JSON.stringify(evidence||[])
  ].join("\\n");}
