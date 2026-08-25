@@ -6,6 +6,53 @@
 <title>Premier Express — Website Intelligence</title>
 <style>
 *{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif;background:#f5f7fb;color:#172033}header{background:#111827;color:#fff;padding:18px}.head{max-width:1180px;margin:auto;display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap}.wrap{max-width:1180px;margin:0 auto;padding:18px}.btn{display:inline-block;border:0;border-radius:9px;padding:10px 14px;font-weight:700;cursor:pointer;text-decoration:none;background:#e5e7eb;color:#172033}.btn.primary,.tab.active,.cat.active{background:#111827;color:#fff}.card{background:#fff;border-radius:14px;padding:16px;margin:14px 0;box-shadow:0 2px 12px #00000012}.notice{border-left:4px solid #2563eb;background:#eff6ff}.tabs,.cats,.chips,.stats{display:flex;gap:8px;flex-wrap:wrap}.tab,.cat{border:1px solid #d1d5db;border-radius:9px;padding:10px 13px;background:#fff;color:#172033;font-weight:700;cursor:pointer}.panel{display:none}.panel.active{display:block}.layout{display:grid;grid-template-columns:240px minmax(0,1fr);gap:18px}.sidebar{align-self:start}.cats{flex-direction:column}.cat{text-align:left;display:flex;justify-content:space-between}.main-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap}.main-head h2,.main-head p{margin:0 0 5px}.badge,.chip{display:inline-block;border-radius:999px;padding:6px 10px;font-size:12px;font-weight:700}.badge{background:#fef3c7;color:#92400e}.chip{background:#e8eef8;color:#263750}.stats{margin:14px 0}.stat{flex:1 1 140px;border:1px solid #e5e7eb;border-radius:10px;padding:12px}.stat small{display:block;color:#64748b}.stat b{display:block;font-size:24px;margin-top:4px}.rule-table{width:100%;border-collapse:collapse;margin-top:12px}.rule-table th,.rule-table td{text-align:left;vertical-align:top;padding:10px;border-bottom:1px solid #e5e7eb}.rule-table th{color:#475569;font-size:13px}.workflow{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-top:14px}.step{background:#f8fafc;border-left:3px solid #2563eb;padding:10px;border-radius:6px}.step small{display:block;color:#64748b;margin-bottom:4px}.hidden{display:none!important}.empty{padding:24px;text-align:center;color:#64748b;border:1px dashed #cbd5e1;border-radius:10px}.rule-block{margin:16px 0}.rule-block h3{margin-bottom:8px}.rule-block ul{margin-top:6px}.safe{color:#166534;background:#dcfce7}.muted{color:#64748b}.footer-note{font-size:13px;color:#64748b;margin-top:18px}.inventory-controls{display:flex;gap:10px;align-items:end;flex-wrap:wrap;margin:16px 0}.inventory-controls label{font-weight:700}.inventory-controls select,.inventory-controls input{display:block;margin-top:5px;min-width:220px;border:1px solid #cbd5e1;border-radius:8px;padding:10px;background:#fff;color:#172033}.product-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.product-item{border:1px solid #e5e7eb;border-radius:10px;padding:12px}.product-item h3{font-size:15px;margin:0 0 7px}.product-item p{font-size:13px;margin:5px 0;color:#64748b}.product-item a{color:#1d4ed8;font-weight:700;text-decoration:none}.inventory-status{padding:12px;background:#f8fafc;border-radius:8px;color:#475569}.category-tree{font-size:13px;color:#64748b;margin-top:4px}.inspection{margin:16px 0;padding:16px;border:2px solid #cbd5e1;border-radius:12px;background:#f8fafc}.inspection h2{margin-top:0}.inspection-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.detected-headings{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0}.match-good{color:#166534;font-weight:700}.match-review{color:#92400e;font-weight:700}.shadow-review{border:2px solid #2563eb;background:#f8fbff}.shadow-lock{border-left:4px solid #b91c1c;background:#fef2f2;padding:12px;border-radius:8px;color:#7f1d1d}.review-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.review-pane{border:1px solid #dbe3ef;border-radius:10px;padding:14px;background:#fff;min-width:0}.review-pane h3{margin-top:0}.draft-section{border-top:1px solid #e5e7eb;padding-top:14px;margin-top:14px}.draft-section:first-child{border-top:0;margin-top:0;padding-top:0}.draft-section p{line-height:1.65}.draft-section li{margin:7px 0;line-height:1.5}.review-json{white-space:pre-wrap;overflow-wrap:anywhere;background:#f8fafc;border-radius:8px;padding:10px;font-size:13px}.table-responsive{overflow-x:auto}.review-action{white-space:nowrap}@media(max-width:760px){.review-grid{grid-template-columns:1fr}}@media(max-width:620px){.product-grid{grid-template-columns:1fr}.inventory-controls select,.inventory-controls input{min-width:100%;width:100%}}@media(max-width:760px){.layout{grid-template-columns:1fr}.cats{flex-direction:row}.workflow{grid-template-columns:repeat(2,minmax(0,1fr))}.rule-table{display:block;overflow-x:auto}}
+
+/* Compact Saved Shadow Assessments */
+#saved-shadows .assessment-tabs{margin-top:12px;padding:4px;background:#eef2f7;border-radius:11px;width:max-content;max-width:100%}
+#saved-shadows .assessment-tabs .tab{border:0;padding:8px 12px}
+#saved-shadows .assessment-tabs .tab span{display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;margin-left:5px;padding:0 6px;border-radius:999px;background:#dbe3ef;font-size:11px}
+#saved-shadows .assessment-tabs .tab.active span{background:#fff;color:#111827}
+#saved-shadows .inventory-controls{margin:10px 0;align-items:flex-end}
+#saved-shadows .inventory-controls label{font-size:12px}
+#saved-shadows .inventory-controls input,#saved-shadows .inventory-controls select{min-width:190px;padding:8px}
+.saved-shadow-wrap{overflow:visible}
+.saved-shadow-table{width:100%;table-layout:fixed;font-size:11px}
+.saved-shadow-table th,.saved-shadow-table td{padding:6px 5px;line-height:1.25;overflow-wrap:anywhere;word-break:normal}
+.saved-shadow-table th{font-size:10px;letter-spacing:.01em;background:#f8fafc}
+.saved-shadow-table th:nth-child(1),.saved-shadow-table td:nth-child(1){width:15%}
+.saved-shadow-table th:nth-child(2),.saved-shadow-table td:nth-child(2){width:9%}
+.saved-shadow-table th:nth-child(3),.saved-shadow-table td:nth-child(3){width:10%}
+.saved-shadow-table th:nth-child(4),.saved-shadow-table td:nth-child(4){width:11%}
+.saved-shadow-table th:nth-child(5),.saved-shadow-table td:nth-child(5){width:8%}
+.saved-shadow-table th:nth-child(6),.saved-shadow-table td:nth-child(6){width:14%}
+.saved-shadow-table th:nth-child(7),.saved-shadow-table td:nth-child(7){width:16%}
+.saved-shadow-table th:nth-child(8),.saved-shadow-table td:nth-child(8){width:8%}
+.saved-shadow-table th:nth-child(9),.saved-shadow-table td:nth-child(9){width:9%}
+.saved-shadow-table .btn{display:block;width:100%;margin:2px 0;padding:6px 5px;border-radius:6px;font-size:10px;line-height:1.15;white-space:normal}
+.saved-shadow-table .footer-note{margin-top:4px;font-size:10px;line-height:1.25}
+.saved-shadow-table small{font-size:9px;line-height:1.2}
+.saved-shadow-table code{font-size:9px}
+@media(max-width:900px){
+ #saved-shadows .assessment-tabs{width:100%}
+ #saved-shadows .assessment-tabs .tab{flex:1}
+ #saved-shadows .inventory-controls label,#saved-shadows .inventory-controls input,#saved-shadows .inventory-controls select{width:100%;min-width:0}
+ .saved-shadow-table,.saved-shadow-table tbody,.saved-shadow-table tr,.saved-shadow-table td{display:block;width:100%!important}
+ .saved-shadow-table thead{display:none}
+ .saved-shadow-table tr{margin:10px 0;border:1px solid #dbe3ef;border-radius:10px;padding:6px;background:#fff}
+ .saved-shadow-table td{display:grid;grid-template-columns:105px minmax(0,1fr);gap:8px;border-bottom:1px solid #eef2f7;padding:7px}
+ .saved-shadow-table td:last-child{border-bottom:0}
+ .saved-shadow-table td::before{font-weight:700;color:#475569;font-size:10px;text-transform:uppercase}
+ .saved-shadow-table td:nth-child(1)::before{content:"Product"}
+ .saved-shadow-table td:nth-child(2)::before{content:"Blueprint"}
+ .saved-shadow-table td:nth-child(3)::before{content:"Status"}
+ .saved-shadow-table td:nth-child(4)::before{content:"Quality"}
+ .saved-shadow-table td:nth-child(5)::before{content:"Evidence"}
+ .saved-shadow-table td:nth-child(6)::before{content:"Draft"}
+ .saved-shadow-table td:nth-child(7)::before{content:"Publishing"}
+ .saved-shadow-table td:nth-child(8)::before{content:"Source"}
+ .saved-shadow-table td:nth-child(9)::before{content:"Created"}
+}
+
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.95.0/dist/umd/supabase.js"></script>
 </head>
@@ -369,7 +416,7 @@
     <div class="card notice"><div class="main-head"><div><h2>Saved Shadow Assessments</h2><p>Generate, review and compare owner-only immutable shadow drafts without scrolling through system diagnostics.</p></div><span class="badge">SHADOW ONLY • WEBSITE WRITES LOCKED</span></div></div>
     <div class="card"><div class="main-head"><div><h2>Saved Shadow Assessments</h2><p class="muted">Authenticated, owner-only assessment records. Bring a classified live product here at random, then generate and publish through the protected workflow.</p></div><div class="inspection-actions"><button id="shadowRandomProduct" class="btn primary" type="button">Bring Random Product</button><button id="shadowRefresh" class="btn" type="button">Refresh</button></div></div>
       <div id="shadowGenerateStatus" class="inventory-status">Select “Generate improved shadow” beside a stored product. Progress and results will appear beside that product.</div>
-      <div class="tabs" role="tablist" aria-label="Saved assessment status" style="margin-top:14px">
+      <div class="tabs assessment-tabs" role="tablist" aria-label="Saved assessment status">
         <button id="shadowActiveTab" class="tab active" type="button" aria-selected="true">Active Products <span id="shadowActiveCount">0</span></button>
         <button id="shadowCompletedTab" class="tab" type="button" aria-selected="false">Completed Products <span id="shadowCompletedCount">0</span></button>
       </div>
@@ -379,7 +426,7 @@
         <button id="shadowCompletedRefresh" class="btn" type="button">Refresh Completed</button>
       </div>
       <div id="shadowJobStatus" class="inventory-status">Open this tab while signed in to load your isolated assessments.</div>
-      <div class="table-responsive"><table class="rule-table"><thead><tr><th>Product</th><th>Blueprint</th><th>Status</th><th>Quality gate</th><th>Evidence</th><th>Draft</th><th>New Publishing Flow</th><th>Protected source</th><th>Created</th></tr></thead><tbody id="shadowJobRows"></tbody></table></div>
+      <div class="table-responsive saved-shadow-wrap"><table class="rule-table saved-shadow-table"><thead><tr><th>Product</th><th>Blueprint</th><th>Status</th><th>Quality</th><th>Evidence</th><th>Draft</th><th>Publishing</th><th>Source</th><th>Created</th></tr></thead><tbody id="shadowJobRows"></tbody></table></div>
     </div>
     <div id="shadowDraftReview" class="card shadow-review hidden" aria-live="polite">
       <div class="main-head"><div><h2 id="shadowDraftTitle">Shadow Draft Review</h2><p id="shadowDraftMeta" class="muted"></p></div><button id="shadowDraftClose" class="btn" type="button">Close review</button></div>
