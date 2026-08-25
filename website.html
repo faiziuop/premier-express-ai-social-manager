@@ -53,6 +53,25 @@
  .saved-shadow-table td:nth-child(9)::before{content:"Created"}
 }
 
+
+.completed-performance{margin:12px 0;padding:14px;border:1px solid #dbe3ef;border-radius:12px;background:#f8fbff}
+.completed-performance .main-head{align-items:center}
+.performance-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:10px}
+.performance-card{border:1px solid #dbe3ef;border-radius:11px;background:#fff;padding:12px;min-width:0}
+.performance-card h3{font-size:14px;margin:0 0 3px}
+.performance-card .product-meta{font-size:10px;color:#64748b;margin-bottom:9px}
+.score-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+.score-box{border-radius:8px;background:#f8fafc;padding:8px;text-align:center}
+.score-box small{display:block;color:#64748b;font-size:9px;text-transform:uppercase}
+.score-box b{display:block;font-size:17px;margin-top:3px}
+.score-box .improved{color:#166534}
+.gsc-box{margin-top:7px;padding:9px;border-radius:8px;background:#eef6ff}
+.gsc-line{display:grid;grid-template-columns:1fr auto 1fr;gap:7px;align-items:center;text-align:center}
+.gsc-position b{display:block;font-size:16px}.gsc-position small{font-size:9px;color:#64748b}
+.gsc-arrow{font-weight:700;color:#2563eb}
+.gsc-note{font-size:10px;color:#64748b;margin:7px 0 0;line-height:1.35}
+@media(max-width:760px){.performance-grid{grid-template-columns:1fr}.score-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.95.0/dist/umd/supabase.js"></script>
 </head>
@@ -423,9 +442,14 @@
       <div class="inventory-controls">
         <label>Search product<input id="shadowProductSearch" type="search" placeholder="Search by product name, WP ID or category"></label>
         <label>Sort assessments<select id="shadowProductSort"><option value="newest">Newest first</option><option value="oldest">Oldest first</option><option value="name-asc">Product name A–Z</option><option value="name-desc">Product name Z–A</option><option value="category">Category</option><option value="workflow">Workflow status</option></select></label>
-        <button id="shadowCompletedRefresh" class="btn" type="button">Refresh Completed</button>
+        
       </div>
       <div id="shadowJobStatus" class="inventory-status">Open this tab while signed in to load your isolated assessments.</div>
+      <div id="completedPerformancePanel" class="completed-performance hidden">
+        <div class="main-head"><div><h3>Completed Product Performance</h3><p class="muted">Comparable agent scores and verified Google Search Console observations for published products.</p></div><button id="shadowCompletedRefresh" class="btn primary" type="button">Refresh Search Console Comparison</button></div>
+        <div id="completedPerformanceStatus" class="footer-note">Refresh to reread live products and retrieve the latest available Search Console comparison.</div>
+        <div id="completedPerformanceGrid" class="performance-grid"></div>
+      </div>
       <div class="table-responsive saved-shadow-wrap"><table class="rule-table saved-shadow-table"><thead><tr><th>Product</th><th>Blueprint</th><th>Status</th><th>Quality</th><th>Evidence</th><th>Draft</th><th>Publishing</th><th>Source</th><th>Created</th></tr></thead><tbody id="shadowJobRows"></tbody></table></div>
     </div>
     <div id="shadowDraftReview" class="card shadow-review hidden" aria-live="polite">
@@ -581,6 +605,16 @@ let shadowAssessmentView="active";
 function latestShadowDraft(jobId){return shadowDraftsCache.filter(x=>String(x.job_id)===String(jobId)).sort((a,b)=>new Date(b.created_at)-new Date(a.created_at))[0]}
 function latestShadowPublication(jobId,draftId){return shadowPublicationsCache.filter(p=>String(p.job_id)===String(jobId)&&(!draftId||String(p.draft_id)===String(draftId))).sort((a,b)=>new Date(b.updated_at||b.created_at)-new Date(a.updated_at||a.created_at))[0]}
 function completedShadowAssessment(job){const draft=latestShadowDraft(job.id),publication=latestShadowPublication(job.id,draft?.id);return publication?.status==="VERIFIED"}
+function scoreChange(previous,current){if(!Number.isFinite(Number(previous))||!Number.isFinite(Number(current)))return"Unavailable";const change=Number(current)-Number(previous);return(change>=0?"+":"")+change}
+function positionLabel(observation){return observation?.position!==null&&observation?.position!==undefined?"Position "+Number(observation.position).toFixed(1)+(observation.page_number?" • Page "+observation.page_number:""):"Unavailable"}
+function renderCompletedPerformance(){
+ const panel=document.getElementById("completedPerformancePanel"),grid=document.getElementById("completedPerformanceGrid"),status=document.getElementById("completedPerformanceStatus");if(!panel||!grid||!status)return;
+ panel.classList.toggle("hidden",shadowAssessmentView!=="completed");if(shadowAssessmentView!=="completed")return;
+ const query=String(document.getElementById("shadowProductSearch")?.value||"").trim().toLowerCase(),completed=shadowJobsCache.filter(completedShadowAssessment).filter(x=>!query||String(x.product_title||"").toLowerCase().includes(query)||String(x.wp_id||"").includes(query)||String(x.blueprint_key||"").toLowerCase().includes(query)).sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
+ grid.innerHTML=completed.map(job=>{const draft=latestShadowDraft(job.id),publication=latestShadowPublication(job.id,draft?.id),report=publication?.verification?.performance_report,content=report?.content||{},seo=report?.seo||{},google=report?.google||{},previous=google.previous||{},current=google.current||{},measured=previous.position!==null&&previous.position!==undefined&&current.position!==null&&current.position!==undefined,movement=measured?Number(previous.position)-Number(current.position):null;
+ return"<article class='performance-card'><h3><a href='"+escapeAttribute(job.product_url)+"' target='_blank' rel='noopener'>"+escapeText(job.product_title)+"</a></h3><div class='product-meta'>WP "+Number(job.wp_id)+" • Verified "+escapeText(publication?.verified_at?new Date(publication.verified_at).toLocaleString():"—")+"</div>"+(report?"<div class='score-grid'><div class='score-box'><small>Content score</small><b>"+escapeText(content.previous)+" → "+escapeText(content.current)+"</b><small class='improved'>"+escapeText(scoreChange(content.previous,content.current))+"</small></div><div class='score-box'><small>SEO score</small><b>"+escapeText(seo.previous)+" → "+escapeText(seo.current)+"</b><small class='improved'>"+escapeText(scoreChange(seo.previous,seo.current))+"</small></div><div class='score-box'><small>Target keyphrase</small><b style='font-size:11px'>"+escapeText(google.target_keyword||publication?.yoast_plan?.focus_keyphrase||"Unavailable")+"</b><small>Yoast focus</small></div></div><div class='gsc-box'><div class='gsc-line'><div class='gsc-position'><small>Previous GSC ranking</small><b>"+escapeText(positionLabel(previous))+"</b></div><div class='gsc-arrow'>→</div><div class='gsc-position'><small>Current GSC ranking</small><b>"+escapeText(positionLabel(current))+"</b></div></div><p class='gsc-note'>"+(measured?"Observed movement: "+(movement>0?"+":"")+movement.toFixed(1)+" positions. This is a measured comparison, not a causation claim.":escapeText(current.reason||previous.reason||"Comparable Search Console data is not available yet."))+"</p></div>":"<div class='inventory-status'>Performance comparison has not been refreshed yet.</div>")+"</article>"}).join("")||"<div class='empty'>No completed products match this search.</div>";
+ const reports=completed.filter(job=>latestShadowPublication(job.id,latestShadowDraft(job.id)?.id)?.verification?.performance_report).length;status.textContent=reports+" of "+completed.length+" completed product comparison(s) loaded • Google positions are displayed only when reliable before-and-after observations exist.";
+}
 function renderSavedShadowAssessments(){
  const rows=document.getElementById("shadowJobRows"),status=document.getElementById("shadowJobStatus");if(!rows||!status)return;
  const query=String(document.getElementById("shadowProductSearch")?.value||"").trim().toLowerCase(),sort=String(document.getElementById("shadowProductSort")?.value||"newest");
@@ -590,7 +624,7 @@ function renderSavedShadowAssessments(){
  document.getElementById("shadowActiveCount").textContent=active.length;document.getElementById("shadowCompletedCount").textContent=completed.length;
  const evidenceCount=id=>shadowEvidenceCache.filter(x=>String(x.job_id)===String(id)).length,draftsFor=id=>shadowDraftsCache.filter(x=>String(x.job_id)===String(id));
  rows.innerHTML=visible.map(x=>{const draft=latestShadowDraft(x.id),publication=latestShadowPublication(x.id,draft?.id),workflow=publication?.status||x.status;return "<tr><td><a href='"+escapeAttribute(x.product_url)+"' target='_blank' rel='noopener'>"+escapeText(x.product_title)+"</a><br><small>WP "+Number(x.wp_id)+"</small></td><td>"+escapeText(x.blueprint_key+" • "+x.blueprint_version)+"</td><td>"+escapeText(workflow)+"<br><small>Publishing "+(x.publication_authorized?"authorized":"locked")+" • WP write "+(x.wordpress_write_performed?"recorded":"false")+"</small></td><td>"+escapeText((draft?.quality_report||x.quality_report)?.quality_state||"Assessment only")+"<br><small>"+escapeText(safeArray((draft?.quality_report||x.quality_report)?.blocking_issues).length?safeArray((draft?.quality_report||x.quality_report)?.blocking_issues).length+" blocker(s)":"No blocker recorded")+"</small></td><td>"+evidenceCount(x.id)+" append-only record(s)</td><td>"+(draft?"<button class='btn review-action' type='button' data-shadow-review='"+escapeAttribute(x.id)+"'>Review draft</button> ":"")+"<button class='btn primary' type='button' data-shadow-generate='"+escapeAttribute(x.id)+"'>Generate improved shadow</button><div id='shadow-action-"+escapeAttribute(x.id)+"' class='footer-note' aria-live='polite'>"+(draft?"Ready • publishing governed":"Assessment ready • create the first immutable draft")+"</div><small>"+(draft?draftsFor(x.id).length+" immutable version(s)":"No stored draft yet")+"</small></td><td>"+(draft?publicationControls(publication,draft,x.id):"Draft required")+"</td><td><code>"+escapeText(String(x.source_hash).slice(0,16))+"…</code></td><td>"+escapeText(new Date(x.created_at).toLocaleString())+"</td></tr>"}).join("")||"<tr><td colspan='9'>No "+(shadowAssessmentView==="completed"?"completed":"active")+" assessments match this search.</td></tr>";
- status.textContent=visible.length+" shown • "+active.length+" active • "+completed.length+" verified completed • "+shadowEvidenceCache.length+" evidence record(s) • "+shadowDraftsCache.length+" draft(s)";
+ status.textContent=visible.length+" shown • "+active.length+" active • "+completed.length+" verified completed • "+shadowEvidenceCache.length+" evidence record(s) • "+shadowDraftsCache.length+" draft(s)";renderCompletedPerformance();
 }
 const categories={
 attractions:{title:"Attractions & Admission Tickets",description:"Museums, gardens, observation decks and ticketed experiences.",type:"Experience",rules:["Short Description","Experience Overview","What to Expect","Experience Highlights","Ticket Options","Inclusions","Exclusions","Opening Hours & Duration","Location & Access","Important Visitor Information","Booking & Policy","Why Choose","FAQs","Related Attractions"],notes:["Use verified opening hours, access rules, age limits and ticket privileges.","Do not add transportation sections unless the selected product includes transport.","Never claim skip-the-line, instant confirmation or flexible cancellation without evidence."]},
@@ -1033,7 +1067,7 @@ document.getElementById("shadowActiveTab").addEventListener("click",()=>setShado
 document.getElementById("shadowCompletedTab").addEventListener("click",()=>setShadowAssessmentView("completed"));
 document.getElementById("shadowProductSearch").addEventListener("input",renderSavedShadowAssessments);
 document.getElementById("shadowProductSort").addEventListener("change",renderSavedShadowAssessments);
-document.getElementById("shadowCompletedRefresh").addEventListener("click",async()=>{shadowAssessmentView="completed";setShadowAssessmentView("completed");await loadShadowJobs()});
+document.getElementById("shadowCompletedRefresh").addEventListener("click",async event=>{const button=event.currentTarget,status=document.getElementById("completedPerformanceStatus");try{button.disabled=true;button.textContent="Refreshing comparisons…";status.textContent="Rereading completed live products and comparing stored Search Console observations…";const result=await callWebsitePublisher("shadow_refresh_completed_comparisons",{});status.textContent=result.completed_products+" completed comparison(s) refreshed from live WordPress and Google Search Console records.";await loadShadowJobs()}catch(error){status.textContent="Comparison refresh stopped: "+(error?.message||String(error))+". Existing completed products were not changed."}finally{button.disabled=false;button.textContent="Refresh Search Console Comparison"}});
 document.getElementById("shadowRefresh").addEventListener("click",loadShadowJobs);
 document.getElementById("shadowRandomProduct").addEventListener("click",bringRandomProduct);
 document.getElementById("shadowJobRows").addEventListener("click",event=>{const review=event.target.closest("[data-shadow-review]");if(review)return reviewShadowDraft(review.dataset.shadowReview);const generate=event.target.closest("[data-shadow-generate]");if(generate)return generateImprovedShadow(generate.dataset.shadowGenerate,generate);const prepare=event.target.closest("[data-publish-prepare]");if(prepare)return prepareWebsitePublication(prepare.dataset.publishPrepare,prepare.dataset.publishJob,prepare);const approve=event.target.closest("[data-publish-approve]");if(approve)return approveWebsitePublication(approve.dataset.publishApprove,approve.dataset.publishJob);const dry=event.target.closest("[data-publish-dry]");if(dry)return dryRunWebsitePublication(dry.dataset.publishDry,dry.dataset.publishJob);const execute=event.target.closest("[data-publish-execute]");if(execute)return executeWebsitePublication(execute.dataset.publishExecute,execute.dataset.publishToken,execute.dataset.publishJob);const rollback=event.target.closest("[data-publish-rollback]");if(rollback)return rollbackWebsitePublication(rollback.dataset.publishRollback,rollback.dataset.publishToken,rollback.dataset.publishJob)});
