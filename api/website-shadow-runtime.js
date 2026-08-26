@@ -230,6 +230,18 @@ function parseJsonModelOutput(value){
  if(text.startsWith(fence))text=text.replace(/^.{3}[a-z]*\s*/i,"").replace(/.{3}$/,"").trim();
  return JSON.parse(text);
 }
+async function ensureWorkflowEvidence(job,evidence,related,yoastPlan,auth,requestId){
+ const existing=new Set((Array.isArray(evidence)?evidence:[]).map(row=>String(row.source_title||"")));
+ const records=[
+  {source_title:String(job.product_title||"Product")+" — governed "+String(job.blueprint_key||"product")+" blueprint",supported_facts:["Category blueprint: "+String(job.blueprint_key||""),"Required category sections: "+(CATEGORY_SECTIONS[job.blueprint_key]||[]).join(", "),"Common governed section purposes: "+COMMON_SECTION_GROUPS.map(group=>group[0]).join(", ")],notes:"Internal category-governance provenance used to structure the shadow draft; not independent product-fact verification."},
+  {source_title:String(job.product_title||"Product")+" — live related-product catalogue",supported_facts:(Array.isArray(related)?related:[]).map(item=>String(item.text||"")+" — "+String(item.url||"")),notes:"Live Premier Express Tourism catalogue links selected for the Related Dubai Experiences section."},
+  {source_title:String(job.product_title||"Product")+" — pre-content Yoast keyword plan",supported_facts:["Focus keyphrase: "+String(yoastPlan?.focus_keyphrase||""),"Focus synonyms: "+(yoastPlan?.focus_synonyms||[]).join(", "),"Related keyphrases: "+(yoastPlan?.related_keyphrases||[]).map(item=>item.keyphrase).join(", ")],notes:"Internal SEO-planning provenance created before content generation; not evidence for operational product claims."}
+ ];
+ const missing=records.filter(record=>!existing.has(record.source_title)).map(record=>({job_id:job.id,created_by:auth.user.id,record_type:"CANDIDATE",source_type:"CATALOGUE",source_url:job.product_url,...record,retrieved_at:new Date().toISOString(),conflicts:[],wordpress_write_performed:false}));
+ if(!missing.length)return[];
+ const inserted=await rest("website_shadow_evidence","POST",auth.authorization,{},missing),rows=Array.isArray(inserted)?inserted:[];
+ console.info("[shadow-generation]",{requestId,stage:"workflow_evidence_created",jobId:job.id,count:rows.length});return rows;
+}
 async function gemini(messages){
  const key=process.env.GEMINI_API_KEY;if(!key)throw Object.assign(new Error("GEMINI_CONFIGURATION_REQUIRED"),{permanent:true});
  const system=messages.filter(x=>x.role==="system").map(x=>x.content).join("\n");
@@ -382,6 +394,7 @@ async function generateShadowDraft(req,res){
  console.info("[shadow-generation]",{requestId,stage:"context_loaded",category:job.blueprint_key,evidenceCount:evidence.length});
  const liveRelated=await relatedProducts(job);console.info("[shadow-generation]",{requestId,stage:"related_products_loaded",count:liveRelated.length});
  const keywordResult=await createShadowKeywordPlan(job,drafts?.[0]?.draft_content,evidence,requestId),yoastPlan=keywordResult.plan;
+ const workflowEvidence=await ensureWorkflowEvidence(job,evidence,liveRelated,yoastPlan,auth,requestId);evidence.push(...workflowEvidence);
  const messages=[{role:"system",content:"Obey the editorial contract and output valid JSON only."},{role:"user",content:prompt(job,drafts?.[0]?.draft_content,evidence,liveRelated,yoastPlan)}];let generated,errors=[];
  for(let attempt=0;attempt<4;attempt++){console.info("[shadow-generation]",{requestId,stage:"model_attempt",attempt:attempt+1});generated=normalizeDraft(await gateway(messages),liveRelated,job.blueprint_key);generated.preservation_ledger=deterministicPreservationLedger(job,drafts?.[0]);errors=validateDraft(generated,job.blueprint_key,drafts?.[0]?.draft_content,yoastPlan);if(!errors.length){console.info("[shadow-generation]",{requestId,stage:"validation_passed",attempt:attempt+1});break;}console.info("[shadow-generation]",{requestId,stage:"validation_repair",attempt:attempt+1,errorCount:errors.length,errors});messages.push({role:"assistant",content:JSON.stringify(generated)},{role:"user",content:"Return the complete corrected JSON object. Repair every listed error precisely without padding, invention, duplicate sections or content loss: "+JSON.stringify(errors)});}
  if(errors.length)return res.status(422).json({success:false,status:"INTERNAL_EXCELLENCE_GATE_NOT_PASSED",message:"The agent withheld the draft because it did not meet the final excellence standard.",wordpress_write_performed:false});
