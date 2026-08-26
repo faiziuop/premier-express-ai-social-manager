@@ -111,7 +111,7 @@ async function relatedProducts(job){
  const own=String(job.product_url||"").replace(/\/$/,""),title=String(job.product_title||"").toLowerCase();
  const intent={vehicles:["chauffeur","sedan","suv","van","bus","airport transfer","city tour"],transfers:["transfer","chauffeur","sedan","suv","van"],attractions:["ticket","museum","garden","view","park"],tours:["tour","sightseeing"],activities:["adventure","activity"],packages:["package","park","ticket"],safaris:["safari","desert"],cruises:["cruise","dhow","marina"],yachts:["yacht","charter"],helicopter:["helicopter","flight"]}[job.blueprint_key]||[];
  const titleTokens=new Set(title.split(/\W+/).filter(x=>x.length>3));
- return products.map(item=>{const itemTitle=decodeWp(item.title?.rendered),lower=itemTitle.toLowerCase(),overlap=[...titleTokens].filter(token=>lower.includes(token)).length,intentScore=intent.filter(term=>lower.includes(term)).length;return{title:itemTitle,url:String(item.link||""),score:overlap*3+intentScore};}).filter(item=>item.url&&item.url.replace(/\/$/,"")!==own&&item.url.startsWith("https://dubaipremiertourism.com/product/")&&item.score>0).sort((a,b)=>b.score-a.score||a.title.localeCompare(b.title)).slice(0,4).map(({title,url})=>({text:title,url}));
+ return products.map(item=>{const itemTitle=decodeWp(item.title?.rendered),lower=itemTitle.toLowerCase(),overlap=[...titleTokens].filter(token=>lower.includes(token)).length,intentScore=intent.filter(term=>lower.includes(term)).length;return{title:itemTitle,url:String(item.link||""),score:overlap*3+intentScore};}).filter(item=>item.url&&item.url.replace(/\/$/,"")!==own&&item.url.startsWith("https://dubaipremiertourism.com/product/")&&item.score>0).sort((a,b)=>b.score-a.score||a.title.localeCompare(b.title)).slice(0,6).map(({title,url})=>({text:title,url}));
 }
 function normalizeDraft(draft,related){
  if(!draft||!Array.isArray(draft.sections))return draft;
@@ -161,9 +161,20 @@ function deterministicPreservationLedger(job,previousDraft){
  if(!ledger.length)ledger.push({item:1,decision:"PRESERVE_SOURCE_SNAPSHOT",reason:"The protected source snapshot remains bound to this shadow draft by SHA-256."});
  return ledger;
 }
-function validateDraft(draft,category,baseline){
+function keywordHeadingErrors(draft,yoastPlan){
+ const plan=yoastPlan||draft?.yoast_plan||{},sections=Array.isArray(draft?.sections)?draft.sections:[],headings=sections.map(section=>String(section.heading||"")).join(" ").toLowerCase(),short=String(draft?.short_description||"").toLowerCase(),body=JSON.stringify(sections).toLowerCase();
+ const focus=String(plan.focus_keyphrase||"").trim().toLowerCase(),focusSynonyms=(Array.isArray(plan.focus_synonyms)?plan.focus_synonyms:[]).map(value=>String(value||"").trim().toLowerCase()).filter(Boolean);
+ const related=(Array.isArray(plan.related_keyphrases)?plan.related_keyphrases:[]).map(item=>[String(item?.keyphrase||"").trim().toLowerCase(),...(Array.isArray(item?.synonyms)?item.synonyms:[]).map(value=>String(value||"").trim().toLowerCase())].filter(Boolean));
+ const includesFamily=(text,family)=>family.some(term=>term.length>2&&text.includes(term));const errors=[];
+ if(focus&&!includesFamily(headings,[focus,...focusSynonyms]))errors.push("Use the focus keyphrase or a natural focus synonym in at least one H2 or H3 heading");
+ if(focus&&!includesFamily(short,[focus,...focusSynonyms]))errors.push("Use the focus keyphrase or a natural focus synonym in the short description");
+ if(focus&&!includesFamily(body,[focus,...focusSynonyms]))errors.push("Use the focus keyphrase or a natural focus synonym in the body");
+ if(related.length&&related.filter(family=>includesFamily(headings,family)).length<Math.min(2,related.length))errors.push("Use at least two related keyphrase families naturally across H2 or H3 headings");
+ return errors;
+}
+function validateDraft(draft,category,baseline,yoastPlan){
  const errors=[],sections=Array.isArray(draft?.sections)?draft.sections:[],heads=sections.map(s=>String(s.heading||"").toLowerCase()),raw=JSON.stringify({title:draft?.title,short_description:draft?.short_description,sections}).toLowerCase();
- if(wordCount(draft?.short_description)<70||wordCount(draft?.short_description)>110)errors.push("Short description must be 70-110 words");
+ if(wordCount(draft?.short_description)<70||wordCount(draft?.short_description)>90)errors.push("Short description must be 70-90 words");
  if(sections.length<10)errors.push("At least 10 complete H2 sections required");
  if(sections.some(section=>String(section.level||"").toUpperCase()!=="H2"))errors.push("Every main content section must use H2");
  const nested=sections.flatMap(section=>[...(Array.isArray(section.subsections)?section.subsections:[]),...(Array.isArray(section.items)?section.items:[])]);
@@ -179,14 +190,22 @@ function validateDraft(draft,category,baseline){
  if(!Array.isArray(draft?.preservation_ledger)||draft.preservation_ledger.length===0)errors.push("Preservation ledger is required");
  const related=sections.find(section=>/related|similar|fleet options|recommended services|more experiences/i.test(String(section.heading||"")));
  const links=Array.isArray(related?.bullets)?related.bullets.filter(item=>item&&typeof item==="object"&&String(item.url||"").startsWith("https://dubaipremiertourism.com/product/")):[];
- if(links.length<3||links.length>6)errors.push("Related Dubai Experiences requires 3-6 verified internal product links");
+ if(links.length<5||links.length>6)errors.push("Related Dubai Experiences requires 5-6 verified internal product links");
  for(const p of ["must be confirmed","requires confirmation","pending verification","product-specific use","official this experience","insert link","research needed","placeholder"])if(raw.includes(p))errors.push("Internal or mechanical wording: "+p);
+ errors.push(...keywordHeadingErrors(draft,yoastPlan));
  return [...new Set(errors)];
 }
 async function rest(table,method,authorization,query={},body){
  const url=new URL(SUPABASE_URL+"/rest/v1/"+table);for(const[k,v]of Object.entries(query))url.searchParams.set(k,v);
  const response=await fetch(url,{method,headers:{apikey:SUPABASE_PUBLISHABLE_KEY,authorization,accept:"application/json","content-type":"application/json",prefer:method==="POST"?"return=representation":""},body:body?JSON.stringify(body):undefined});
  const payload=await response.json().catch(()=>null);if(!response.ok)throw new Error(table+" HTTP "+response.status);return payload;
+}
+async function ensureBaselineEvidence(job,evidence,auth,requestId){
+ if(Array.isArray(evidence)&&evidence.length)return evidence;
+ const snapshot=job?.source_snapshot||{},facts=["Protected live product title: "+String(job?.product_title||""),"Protected live product URL: "+String(job?.product_url||""),"Assigned category blueprint: "+String(job?.blueprint_key||""),"Protected source fingerprint: "+String(job?.source_hash||"")];
+ const sourceText=String(snapshot?.short_description||snapshot?.short_description_html||snapshot?.description||snapshot?.description_html||"").replace(/<[^>]*>/g," ").replace(/\s+/g," ").trim();if(sourceText)facts.push("Protected live content excerpt: "+sourceText.slice(0,800));
+ const inserted=await rest("website_shadow_evidence","POST",auth.authorization,{}, {job_id:job.id,created_by:auth.user.id,record_type:"CANDIDATE",source_type:"LIVE_WORDPRESS_BASELINE",source_url:job.product_url,source_title:String(job.product_title||"Product")+" — protected live WordPress baseline",retrieved_at:new Date().toISOString(),supported_facts:facts,conflicts:[],notes:"Automatically recorded from the immutable live WordPress source snapshot before shadow generation. This proves provenance but is not independent supplier verification.",wordpress_write_performed:false});
+ const rows=Array.isArray(inserted)?inserted:[];if(!rows.length)throw new Error("BASELINE_EVIDENCE_RECORD_NOT_CREATED");console.info("[shadow-generation]",{requestId,stage:"baseline_evidence_created",jobId:job.id,evidenceId:rows[0].id});return rows;
 }
 const GEMINI_MODELS=["gemini-3.6-flash","gemini-3.5-flash","gemini-3.1-flash-lite"];
 const GROQ_MODELS=["openai/gpt-oss-120b","llama-3.3-70b-versatile"];
@@ -334,8 +353,8 @@ function prompt(job,baseline,evidence,related,yoastPlan){return [
  "Act as Premier Express Tourism Dubai's senior human tourism editor. Return JSON only: {title,short_description,sections,editorial_note,preservation_ledger}.",
  "The WooCommerce product title is the only H1 and is not part of the body. Every main body section must use {level:'H2',heading,content?,bullets?,items?,subsections?}. Every subsection and FAQ item must use {level:'H3',question or heading,answer or content}. Never skip or duplicate heading levels.",
  "Create excellent professional natural human-written copy. Preserve and improve all useful coverage; never shorten the page.",
- "Short description 70-110 words; 10+ meaningful H2 sections; exactly 5 nonduplicate FAQs. Use the heading Frequently Asked Questions and store each FAQ in items as {level:\"H3\",question,answer}. Paragraphs for overview/expectation; bullets only where useful.",
- "YOAST PLAN CREATED BEFORE CONTENT: "+JSON.stringify(yoastPlan)+". Use its exact focus keyphrase, natural synonyms and four related keyphrases naturally across the short description, headings and body where contextually suitable. Do not stuff, force, list, or mechanically repeat keywords.",
+ "Short description 70-90 words; 10+ meaningful H2 sections; exactly 5 nonduplicate FAQs. Use the heading Frequently Asked Questions and store each FAQ in items as {level:\"H3\",question,answer}. Paragraphs for overview/expectation; bullets only where useful.",
+ "YOAST PLAN CREATED BEFORE CONTENT: "+JSON.stringify(yoastPlan)+". Use its exact focus keyphrase, natural synonyms and four related keyphrases naturally across the short description, headings and body. At least one H2 or H3 must contain the focus keyphrase or a natural focus synonym, and at least two other H2 or H3 headings must use different related keyphrase families. Do not stuff, force, list, or mechanically repeat keywords.",
  "Use varied Dubai tourism search phrases naturally, without stuffing. Avoid filler, repetition, research notes, internal workflow language, ranking claims, price superlatives and absolute guarantees. If the model produces promotional excess, the backend will neutralize it without rejecting the complete draft.",
  "Never invent prices,timings,duration,inclusions,policies,ages,eligibility,transport,ticket entitlement,location or operations. Omit unresolved hard claims from customer copy.",
  "Category:"+job.blueprint_key,"Product:"+job.product_title,"Source:"+JSON.stringify(job.source_snapshot||{}),"Assessment:"+JSON.stringify(job.assessment||{}),"Baseline to improve:"+JSON.stringify(baseline||{}),"Evidence:"+JSON.stringify(evidence||[])
@@ -348,11 +367,12 @@ async function generateShadowDraft(req,res){
  const jobs=await rest("website_shadow_jobs","GET",auth.authorization,{select:"id,product_url,product_title,blueprint_key,blueprint_version,source_hash,source_snapshot,assessment",id:"eq."+id,limit:"1"}),job=jobs?.[0];
  if(!job)return res.status(404).json({success:false,status:"SHADOW_JOB_NOT_FOUND"});
  const [drafts,evidence]=await Promise.all([rest("website_shadow_drafts","GET",auth.authorization,{select:"draft_version,draft_content,preservation_ledger",job_id:"eq."+id,order:"created_at.desc",limit:"1"}),rest("website_shadow_evidence","GET",auth.authorization,{select:"id,record_type,source_type,source_title,supported_facts,conflicts,notes",job_id:"eq."+id,limit:"50"})]);
+ const attachedEvidence=await ensureBaselineEvidence(job,evidence,auth,requestId);if(!evidence.length)evidence.push(...attachedEvidence);
  console.info("[shadow-generation]",{requestId,stage:"context_loaded",category:job.blueprint_key,evidenceCount:evidence.length});
  const liveRelated=await relatedProducts(job);console.info("[shadow-generation]",{requestId,stage:"related_products_loaded",count:liveRelated.length});
  const keywordResult=await createShadowKeywordPlan(job,drafts?.[0]?.draft_content,evidence,requestId),yoastPlan=keywordResult.plan;
  const messages=[{role:"system",content:"Obey the editorial contract and output valid JSON only."},{role:"user",content:prompt(job,drafts?.[0]?.draft_content,evidence,liveRelated,yoastPlan)}];let generated,errors=[];
- for(let attempt=0;attempt<4;attempt++){console.info("[shadow-generation]",{requestId,stage:"model_attempt",attempt:attempt+1});generated=normalizeDraft(await gateway(messages),liveRelated);generated.preservation_ledger=deterministicPreservationLedger(job,drafts?.[0]);errors=validateDraft(generated,job.blueprint_key,drafts?.[0]?.draft_content);if(!errors.length){console.info("[shadow-generation]",{requestId,stage:"validation_passed",attempt:attempt+1});break;}console.info("[shadow-generation]",{requestId,stage:"validation_repair",attempt:attempt+1,errorCount:errors.length,errors});messages.push({role:"assistant",content:JSON.stringify(generated)},{role:"user",content:"Return the complete corrected JSON object. Repair every listed error precisely without padding, invention, duplicate sections or content loss: "+JSON.stringify(errors)});}
+ for(let attempt=0;attempt<4;attempt++){console.info("[shadow-generation]",{requestId,stage:"model_attempt",attempt:attempt+1});generated=normalizeDraft(await gateway(messages),liveRelated);generated.preservation_ledger=deterministicPreservationLedger(job,drafts?.[0]);errors=validateDraft(generated,job.blueprint_key,drafts?.[0]?.draft_content,yoastPlan);if(!errors.length){console.info("[shadow-generation]",{requestId,stage:"validation_passed",attempt:attempt+1});break;}console.info("[shadow-generation]",{requestId,stage:"validation_repair",attempt:attempt+1,errorCount:errors.length,errors});messages.push({role:"assistant",content:JSON.stringify(generated)},{role:"user",content:"Return the complete corrected JSON object. Repair every listed error precisely without padding, invention, duplicate sections or content loss: "+JSON.stringify(errors)});}
  if(errors.length)return res.status(422).json({success:false,status:"INTERNAL_EXCELLENCE_GATE_NOT_PASSED",message:"The agent withheld the draft because it did not meet the final excellence standard.",wordpress_write_performed:false});
  generated.yoast_plan=yoastPlan;
  const row={job_id:id,created_by:auth.user.id,draft_version:Number(drafts?.[0]?.draft_version||0)+1,based_on_source_hash:job.source_hash,blueprint_key:job.blueprint_key,blueprint_version:job.blueprint_version,draft_content:generated,preservation_ledger:Array.isArray(generated.preservation_ledger)?generated.preservation_ledger:(drafts?.[0]?.preservation_ledger||[]),evidence_ids:evidence.map(x=>x.id),quality_report:{quality_state:"UNVERIFIED_GENERATED_SHADOW",deterministic_validation:"PASS",factual_support_check:evidence.some(x=>String(x.record_type).toUpperCase()==="VERIFIED")?"PARTIAL_VERIFIED_EVIDENCE":"BLOCKED_NO_VERIFIED_EVIDENCE",evidence_records:evidence.length,verified_evidence_records:evidence.filter(x=>String(x.record_type).toUpperCase()==="VERIFIED").length,publication_blockers:evidence.some(x=>String(x.record_type).toUpperCase()==="VERIFIED")?["Complete claim-level evidence mapping before publication."]:["No VERIFIED evidence records are attached; candidate claims cannot authorize publication."],preservation_coverage_check:"PASS",heading_hierarchy_check:"PASS",usefulness_check:"PASS",faq_check:"PASS",why_choose_check:"PASS",yoast_plan_check:"PASS",yoast_plan_created_before_content:true,yoast_plan_source:keywordResult.source,focus_keyphrase:yoastPlan.focus_keyphrase,repair_attempts:messages.filter(x=>x.role==="assistant").length,publication_gate_passed:false,wordpress_changes:0,yoast_changes:0},status:"UNVERIFIED_SHADOW_DRAFT",approval_token:null,execution_token:null,publication_authorized:false,wordpress_write_performed:false};
@@ -424,7 +444,7 @@ async function activationPreflight(req, res) {
   const quality = draft.quality_report || {};
   const verified = evidence.filter((row) => String(row.record_type || "").toUpperCase() === "VERIFIED");
   const conflicts = evidence.reduce((count, row) => count + (Array.isArray(row.conflicts) ? row.conflicts.length : row.conflicts ? 1 : 0), 0);
-  const draftValidation = validateDraft(draft.draft_content || {}, job.blueprint_key, {});
+  const draftValidation = validateDraft(draft.draft_content || {}, job.blueprint_key, {}, draft.draft_content?.yoast_plan);
   const checks = [
     { key: "source_binding", label: "Protected source binding", passed: String(job.source_hash) === String(draft.based_on_source_hash), evidence: "Job and immutable draft fingerprints must match." },
     { key: "blueprint_binding", label: "Category blueprint binding", passed: job.blueprint_key === draft.blueprint_key && job.blueprint_version === draft.blueprint_version, evidence: String(job.blueprint_key) + " • " + String(job.blueprint_version) },
