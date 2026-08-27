@@ -101,7 +101,7 @@ module.exports = async function handler(req, res) {
       await downloadAudio(String(config.facebookMusic.public_url), musicFile);
       args.push("-stream_loop", "-1", "-i", musicFile);
       const volume = Math.max(1, Math.min(100, Number(config.facebookMusic.volume || 25))) / 100;
-      audioFilter = `;[${inputs.length}:a]volume=${volume},atrim=0:${seconds},asetpts=N/SR/TB[aout]`;
+      audioFilter = `;[${inputs.length}:a]aresample=48000,aloop=loop=-1:size=2147483647:start=0,atrim=0:${seconds},asetpts=N/SR/TB,volume=${volume}[aout]`;
       audioMap = "[aout]";
     } else {
       args.push("-f", "lavfi", "-t", String(seconds), "-i", "anullsrc=channel_layout=stereo:sample_rate=48000");
