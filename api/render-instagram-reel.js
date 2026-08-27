@@ -23,19 +23,16 @@ async function validateUser(req) {
 }
 
 async function loadPostImages(postId, auth) {
-  const postResponse = await fetch(`${SUPABASE_URL}/rest/v1/content_posts?select=id,media_url,media_type&id=eq.${encodeURIComponent(postId)}&limit=1`, { headers: auth });
-  if (!postResponse.ok) throw new Error(`Could not read Reel post (${postResponse.status}).`);
-  const post = (await postResponse.json())[0];
-  if (!post) throw new Error("Reel post was not found.");
-  const assetResponse = await fetch(`${SUPABASE_URL}/rest/v1/media_assets?select=public_url,asset_type,asset_role,sequence_index,created_at&post_id=eq.${encodeURIComponent(postId)}&status=eq.READY&order=sequence_index.asc.nullslast,created_at.asc`, { headers: auth });
-  if (!assetResponse.ok) throw new Error(`Could not read Reel images (${assetResponse.status}).`);
-  const assets = await assetResponse.json();
-  const isImage = asset => {
-    const type = String(asset.asset_type || "").toLowerCase();
-    return asset.public_url && asset.asset_role !== "ai_video_preview" && !type.includes("video") && !type.includes("reel");
-  };
-  const primary = !["video", "reel"].includes(String(post.media_type || "").toLowerCase()) ? post.media_url : null;
-  return [...new Set([primary, ...assets.filter(isImage).map(asset => asset.public_url)].filter(Boolean))].slice(0, 6);
+  const response = await fetch(`${SUPABASE_URL}/functions/v1/manual-media-register`, {
+    method: "POST",
+    headers: { ...auth, "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "list_reel_images", post_id: postId })
+  });
+  const text = await response.text();
+  let result = {};
+  try { result = JSON.parse(text); } catch {}
+  if (!response.ok || result.success === false) throw new Error(result.error || text || `Could not read Reel images (${response.status}).`);
+  return [...new Set((result.image_urls || []).map(String).filter(Boolean))].slice(0, 6);
 }
 
 async function downloadImage(url, destination) {
@@ -70,7 +67,7 @@ module.exports = async function handler(req, res) {
     if (!postId) return reply(res, 400, { success: false, error: "post_id is required." });
     const urls = await loadPostImages(postId, auth);
     if (!urls.length) return reply(res, 400, { success: false, error: "At least one image is required." });
-    const seconds = Math.max(6, Math.min(18, Number(req.body?.duration_seconds || Math.max(8, urls.length * 3))));
+    const seconds = Math.max(6, Math.min(18, Math.max(Number(req.body?.duration_seconds || 0), Math.max(8, urls.length * 3))));
     workdir = await mkdtemp(path.join(tmpdir(), "ig-reel-"));
     const inputs = [];
     for (let i = 0; i < urls.length; i++) {
