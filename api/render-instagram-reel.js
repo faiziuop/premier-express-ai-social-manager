@@ -22,7 +22,7 @@ async function validateUser(req) {
   return response.ok ? { authorization, apikey } : null;
 }
 
-async function loadPostImages(postId, auth) {
+async function loadPostRenderConfig(postId, auth) {
   const response = await fetch(`${SUPABASE_URL}/functions/v1/manual-media-register`, {
     method: "POST",
     headers: { ...auth, "Content-Type": "application/json" },
@@ -32,7 +32,10 @@ async function loadPostImages(postId, auth) {
   let result = {};
   try { result = JSON.parse(text); } catch {}
   if (!response.ok || result.success === false) throw new Error(result.error || text || `Could not read Reel images (${response.status}).`);
-  return [...new Set((result.image_urls || []).map(String).filter(Boolean))].slice(0, 6);
+  return {
+    imageUrls: [...new Set((result.image_urls || []).map(String).filter(Boolean))].slice(0, 6),
+    facebookMusic: result.facebook_music || null
+  };
 }
 
 async function downloadImage(url, destination) {
@@ -44,6 +47,18 @@ async function downloadImage(url, destination) {
   if (!type.startsWith("image/")) throw new Error("Every Reel source must be an image.");
   const bytes = Buffer.from(await response.arrayBuffer());
   if (bytes.length > 15 * 1024 * 1024) throw new Error("A source image exceeds 15 MB.");
+  await writeFile(destination, bytes);
+}
+
+async function downloadAudio(url, destination) {
+  const parsed = new URL(url);
+  if (parsed.protocol !== "https:" || !ALLOWED_MEDIA_HOSTS.has(parsed.hostname)) throw new Error("Only registered Premier Express music can be rendered.");
+  const response = await fetch(parsed, { redirect: "error" });
+  if (!response.ok) throw new Error(`Could not download selected music (${response.status}).`);
+  const type = String(response.headers.get("content-type") || "").toLowerCase();
+  if (!type.startsWith("audio/") && !type.includes("application/octet-stream")) throw new Error("Selected Facebook music is not a supported audio file.");
+  const bytes = Buffer.from(await response.arrayBuffer());
+  if (bytes.length > 30 * 1024 * 1024) throw new Error("Selected music exceeds 30 MB.");
   await writeFile(destination, bytes);
 }
 
@@ -65,7 +80,8 @@ module.exports = async function handler(req, res) {
     if (!auth) return reply(res, 401, { success: false, error: "Authenticated Social Manager session required." });
     const postId = String(req.body?.post_id || "");
     if (!postId) return reply(res, 400, { success: false, error: "post_id is required." });
-    const urls = await loadPostImages(postId, auth);
+    const config = await loadPostRenderConfig(postId, auth);
+    const urls = config.imageUrls;
     if (!urls.length) return reply(res, 400, { success: false, error: "At least one image is required." });
     const seconds = Math.max(6, Math.min(18, Math.max(Number(req.body?.duration_seconds || 0), Math.max(8, urls.length * 3))));
     workdir = await mkdtemp(path.join(tmpdir(), "ig-reel-"));
@@ -78,10 +94,21 @@ module.exports = async function handler(req, res) {
     const perImage = seconds / inputs.length;
     const args = ["-hide_banner", "-loglevel", "error"];
     for (const input of inputs) args.push("-i", input);
-    args.push("-f", "lavfi", "-t", String(seconds), "-i", "anullsrc=channel_layout=stereo:sample_rate=48000");
+    let audioMap = `${inputs.length}:a:0`;
+    let audioFilter = "";
+    if (config.facebookMusic?.public_url) {
+      const musicFile = path.join(workdir, "facebook-music.audio");
+      await downloadAudio(String(config.facebookMusic.public_url), musicFile);
+      args.push("-stream_loop", "-1", "-i", musicFile);
+      const volume = Math.max(1, Math.min(100, Number(config.facebookMusic.volume || 25))) / 100;
+      audioFilter = `;[${inputs.length}:a]volume=${volume},atrim=0:${seconds},asetpts=N/SR/TB[aout]`;
+      audioMap = "[aout]";
+    } else {
+      args.push("-f", "lavfi", "-t", String(seconds), "-i", "anullsrc=channel_layout=stereo:sample_rate=48000");
+    }
     const chains = inputs.map((_, i) => `[${i}:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,zoompan=z='min(zoom+0.0007,1.08)':d=${Math.ceil(perImage * 30)}:s=1080x1920:fps=30,setsar=1[v${i}]`);
     const concatInputs = inputs.map((_, i) => `[v${i}]`).join("");
-    args.push("-filter_complex", `${chains.join(";")};${concatInputs}concat=n=${inputs.length}:v=1:a=0,format=yuv420p[outv]`, "-map", "[outv]", "-map", `${inputs.length}:a:0`, "-c:v", "libx264", "-preset", "veryfast", "-crf", "28", "-c:a", "aac", "-b:a", "128k", "-ar", "48000", "-ac", "2", "-movflags", "+faststart", "-shortest", "-t", String(seconds), path.join(workdir, "reel.mp4"));
+    args.push("-filter_complex", `${chains.join(";")};${concatInputs}concat=n=${inputs.length}:v=1:a=0,format=yuv420p[outv]${audioFilter}`, "-map", "[outv]", "-map", audioMap, "-c:v", "libx264", "-preset", "veryfast", "-crf", "28", "-c:a", "aac", "-b:a", "128k", "-ar", "48000", "-ac", "2", "-movflags", "+faststart", "-shortest", "-t", String(seconds), path.join(workdir, "reel.mp4"));
     await runFfmpeg(args);
     const output = await readFile(path.join(workdir, "reel.mp4"));
     if (output.length > 20 * 1024 * 1024) throw new Error("Rendered Reel exceeds the 20 MB pilot limit.");

@@ -2880,7 +2880,9 @@ async function renderPosts(){
         const removePrimary=p.status!=="PUBLISHED"&&primaryAsset?.id?`<button class="danger" ${busy?"disabled":""} onclick="removeMediaAsset('${esc(p.id)}','${esc(primaryAsset.id)}')">🗑 Remove Current ${hasReelVideo?"Reel":"Image"}</button>`:"";
         const sourceImageCount=hasReelVideo?galleryAssets.filter(a=>String(a.asset_type||"").toLowerCase()==="image").length:new Set([p.media_url,...galleryAssets.filter(a=>String(a.asset_type||"").toLowerCase()==="image").map(a=>a.public_url)].filter(Boolean)).size;
         const reelAction=p.status!=="PUBLISHED"&&sourceImageCount?`<div class="media-actions"><button class="primary" ${busy?"disabled":""} onclick="prepareFacebookReel('${esc(p.id)}')">🎬 ${hasReelVideo?"Regenerate":"Generate"} Facebook Reel from All ${esc(sourceImageCount)} Image${sourceImageCount===1?"":"s"}</button><small>The agent uses every current source image in upload order and produces one Facebook-compatible 9:16 MP4 Reel.</small></div>`:"";
-        media=`<div class="media-box"><b>Primary media:</b> ${esc(p.media_type||"image")}${p.media_generation_status==="MANUAL_UPLOAD"?'<span class="media-source-badge">MANUAL</span>':'<span class="media-source-badge">AI / SYSTEM</span>'}<div class="media-actions">${removePrimary}</div><div class="media-preview">${preview}</div>${gallery}<div class="media-actions"><a href="${esc(p.media_url)}" target="_blank" rel="noopener">Open primary media</a></div>${reelAction}${p.status!=="PUBLISHED"?uploadControl(p.id,true,"facebook"):""}</div>`;
+        const musicChanged=String(p.facebook_music_id||"")!==String(p.facebook_music_rendered_id||"");
+        const facebookMusic=`<div class="campaign-flow" style="border-left:4px solid #1877f2"><b>🎵 Facebook Reel music:</b> ${p.facebook_music_id?`${esc(p.facebook_music_title||"Selected music")}${p.facebook_music_artist?` — ${esc(p.facebook_music_artist)}`:""} • ${esc(p.facebook_music_volume||25)}% volume`:"No music selected; the Reel will contain a silent AAC track."}${musicChanged?'<br><b style="color:#b42318">Regenerate the Reel to apply this music change before publishing.</b>':""}${p.status!=="PUBLISHED"?`<div class="media-actions"><button class="muted" onclick="openFacebookMusicLibrary('${esc(p.id)}')">♫ Choose from library</button>${p.facebook_music_id?`<button class="danger" onclick="clearFacebookMusic('${esc(p.id)}')">Remove music</button>`:""}</div><div class="media-upload"><b>Upload licensed music</b><br><small>MP3, M4A, AAC, or WAV up to 30 MB. You must own the track or have permission to publish it on Facebook.</small><input id="fbMusicFile-${esc(p.id)}" type="file" accept="audio/mpeg,audio/mp4,audio/aac,audio/wav"><input id="fbMusicTitle-${esc(p.id)}" placeholder="Track title"><input id="fbMusicArtist-${esc(p.id)}" placeholder="Artist / source (optional)"><input id="fbMusicLicense-${esc(p.id)}" placeholder="Licence source or proof reference"><label><input id="fbMusicRights-${esc(p.id)}" type="checkbox"> I confirm publication rights for this audio</label><label><input id="fbMusicSave-${esc(p.id)}" type="checkbox" checked> Save to reusable music library</label><button class="muted" onclick="uploadFacebookMusic('${esc(p.id)}')">⬆ Upload &amp; Select Music</button></div>`:""}</div>`;
+        media=`<div class="media-box"><b>Primary media:</b> ${esc(p.media_type||"image")}${p.media_generation_status==="MANUAL_UPLOAD"?'<span class="media-source-badge">MANUAL</span>':'<span class="media-source-badge">AI / SYSTEM</span>'}<div class="media-actions">${removePrimary}</div><div class="media-preview">${preview}</div>${gallery}<div class="media-actions"><a href="${esc(p.media_url)}" target="_blank" rel="noopener">Open primary media</a></div>${facebookMusic}${reelAction}${p.status!=="PUBLISHED"?uploadControl(p.id,true,"facebook"):""}</div>`;
       }else{
         media=`<div class="media-box"><b>Facebook media:</b> AI media is created automatically for new grounded drafts when a supported provider is available.${gallery}${p.status!=="PUBLISHED"?uploadControl(p.id,false,"facebook"):""}</div>`;
       }
@@ -2970,6 +2972,42 @@ async function clearInstagramMusic(postId){
   if(!confirm("Remove the selected Instagram music from this Reel draft?"))return;
   try{await callTrustedMediaList({action:"clear_instagram_audio",post_id:postId});await renderPosts()}
   catch(e){alert("Music removal failed: "+(e?.message||String(e)))}
+}
+
+async function openFacebookMusicLibrary(postId){
+  try{
+    const j=await callTrustedMediaList({action:"list_facebook_music",post_id:postId});
+    $("facebookMusicPicker")?.remove();const modal=document.createElement("div");modal.id="facebookMusicPicker";modal.style.cssText="position:fixed;inset:0;z-index:9999;background:rgba(15,23,42,.72);display:flex;align-items:center;justify-content:center;padding:18px";
+    window.__facebookMusicTracks=j.tracks||[];
+    const rows=(j.tracks||[]).map((t,i)=>`<div style="display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;border:1px solid #dbe2ea;border-radius:10px;padding:10px;margin:8px 0"><div><b>${esc(t.title)}</b>${t.artist?` — ${esc(t.artist)}`:""}<br><audio controls preload="none" src="${esc(t.public_url)}" style="width:min(360px,70vw);height:32px"></audio><br><small>${esc(t.license_source||t.license_type||"User-confirmed publication rights")}</small></div><button class="primary" onclick="selectFacebookMusic('${esc(postId)}',${i})">Use music</button></div>`).join("")||"<p>The reusable library is empty. Upload a licensed track and keep “Save to reusable music library” selected.</p>";
+    modal.innerHTML=`<div class="card" style="width:min(720px,96vw);max-height:88vh;overflow:auto"><button class="muted" style="float:right" onclick="$('facebookMusicPicker').remove()">✕ Close</button><h2>Reusable Facebook Music Library</h2><p><small>Only tracks you uploaded and confirmed as licensed appear here.</small></p>${rows}</div>`;document.body.appendChild(modal);
+  }catch(e){alert("Facebook music library could not be loaded: "+(e?.message||String(e)))}
+}
+
+async function selectFacebookMusic(postId,index){
+  const t=(window.__facebookMusicTracks||[])[index];if(!t)return;
+  try{await callTrustedMediaList({action:"select_facebook_music",post_id:postId,music_id:t.id,volume:25});$("facebookMusicPicker")?.remove();alert("✅ Music selected. Regenerate the Facebook Reel to mix it into the MP4.");await renderPosts()}
+  catch(e){alert("Facebook music selection failed: "+(e?.message||String(e)))}
+}
+
+async function uploadFacebookMusic(postId){
+  const file=$("fbMusicFile-"+postId)?.files?.[0],title=$("fbMusicTitle-"+postId)?.value?.trim(),artist=$("fbMusicArtist-"+postId)?.value?.trim(),license=$("fbMusicLicense-"+postId)?.value?.trim();
+  if(!file){alert("Choose an audio file first.");return}if(!title){alert("Enter the track title.");return}if(!$("fbMusicRights-"+postId)?.checked){alert("Confirm that you own the audio or have permission to publish it on Facebook.");return}
+  const allowed=["audio/mpeg","audio/mp4","audio/aac","audio/wav","audio/x-wav"];if(!allowed.includes(file.type)||file.size>30*1024*1024){alert("Upload an MP3, M4A, AAC, or WAV file under 30 MB.");return}
+  publishingIds.add(postId);
+  try{
+    const ext=(file.name.split(".").pop()||"mp3").toLowerCase().replace(/[^a-z0-9]/g,"");const path=`music/facebook/${postId}/${Date.now()}-track.${ext}`;
+    const {error}=await sb.storage.from("social-media").upload(path,file,{contentType:file.type,upsert:false});if(error)throw Error(error.message);
+    const {data}=sb.storage.from("social-media").getPublicUrl(path);if(!data?.publicUrl)throw Error("Could not create the music URL.");
+    await callTrustedMediaList({action:"register_facebook_music",post_id:postId,title,artist,license_source:license,public_url:data.publicUrl,storage_path:path,save_to_library:!!$("fbMusicSave-"+postId)?.checked,volume:25});
+    alert("✅ Music uploaded and selected. Now generate or regenerate the Facebook Reel.");
+  }catch(e){alert("Facebook music upload failed: "+(e?.message||String(e)))}finally{publishingIds.delete(postId);await renderPosts()}
+}
+
+async function clearFacebookMusic(postId){
+  if(!confirm("Remove the selected music? Regenerate the Reel afterward to remove it from the MP4."))return;
+  try{await callTrustedMediaList({action:"clear_facebook_music",post_id:postId});await renderPosts()}
+  catch(e){alert("Facebook music removal failed: "+(e?.message||String(e)))}
 }
 
 async function deletePost(id){
