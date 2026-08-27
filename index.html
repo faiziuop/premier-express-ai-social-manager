@@ -992,7 +992,14 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
     <div id="gbpMainPanel" class="main-tab-panel">
       <div class="card gbp-hub">
         <div class="platform-head"><div><h2 style="margin:0">📍 Google Business Profile Manager</h2><p style="margin:6px 0 0">Local-post research and drafting run automatically. Publishing and performance sync remain locked until Google grants Business Profile API access and OAuth is connected.</p></div><button class="primary" onclick="generateGbpDrafts()">Generate Now (fallback)</button></div>
-        <div class="gbp-status"><b>API access:</b> NOT CONNECTED • <b>Publishing:</b> DISABLED • <b>Drafting:</b> READY • <b>Approval:</b> MANUAL</div>
+        <div class="gbp-status" id="gbpConnectionStatus"><b>API access:</b> CHECKING • <b>Publishing:</b> DISABLED • <b>Drafting:</b> READY • <b>Approval:</b> MANUAL</div>
+        <div class="interaction-actions" style="margin-bottom:12px">
+          <button class="muted" onclick="checkGoogleBusinessConnection()">↻ Check Google Readiness</button>
+          <button class="primary" id="gbpConnectBtn" onclick="connectGoogleBusiness()" disabled>🔗 Connect Google Business</button>
+          <button class="muted" onclick="syncGoogleReviews()">↻ Sync Reviews</button>
+          <button class="muted" onclick="syncGooglePerformance()">↻ Sync 30-Day Performance</button>
+        </div>
+        <div id="gbpOperationsResult" class="command-help" style="margin-bottom:12px">Reviews and performance synchronization will activate after Google approval and OAuth connection.</div>
         <div id="gbpDraftList" class="gbp-grid"><div class="gbp-card">No Google Business Profile drafts yet.</div></div>
       </div>
     </div>
@@ -2793,7 +2800,12 @@ async function renderPosts(){
   const mediaAssetMap=new Map();
   const rowIds=rows.map(x=>x.id).filter(Boolean);
   if(rowIds.length){
-    const {data:assetRows}=await sb.from("media_assets").select("id,post_id,asset_type,asset_role,public_url,status,sequence_index,metadata,created_at").in("post_id",rowIds).eq("status","READY").order("sequence_index",{ascending:true});
+    let assetRows=[];
+    if(activePlatform==="instagram"){
+      try{assetRows=await loadTrustedInstagramAssets(rowIds)}catch(e){console.warn("Trusted Instagram media list unavailable",e)}
+    }else{
+      const {data}=await sb.from("media_assets").select("id,post_id,asset_type,asset_role,public_url,status,sequence_index,metadata,created_at").in("post_id",rowIds).eq("status","READY").order("sequence_index",{ascending:true});assetRows=data||[];
+    }
     for(const a of assetRows||[]){const k=String(a.post_id);if(!mediaAssetMap.has(k))mediaAssetMap.set(k,[]);mediaAssetMap.get(k).push(a);}
   }
 
@@ -2814,13 +2826,14 @@ async function renderPosts(){
     }
 
     if(activePlatform==="instagram"){
+      const instagramReelReady=["video","reel"].includes(String(p.media_type||"").toLowerCase());
       if(["PENDING_APPROVAL","EDIT_REQUESTED"].includes(p.status)){
-        actions = p.media_url
+        actions = p.media_url && instagramReelReady
           ? `<button class="primary" ${busy?"disabled":""} onclick="approveInstagramAndPublish('${esc(p.id)}')">${busy?"Publishing…":"✓ Approve &amp; Publish Instagram"}</button>`
           : `<button class="primary" ${busy?"disabled":""} onclick="approveInstagramDraft('${esc(p.id)}')">${busy?"Approving…":"✓ Approve Draft"}</button>`;
         actions += `<button class="muted" ${busy?"disabled":""} onclick="editPost('${esc(p.id)}')">✎ Edit</button>`+
                    `<button class="danger" ${busy?"disabled":""} onclick="rejectPost('${esc(p.id)}')">✕ Reject</button>`;
-      } else if(["APPROVED","READY_TO_PUBLISH"].includes(p.status) && p.media_url){
+      } else if(["APPROVED","READY_TO_PUBLISH"].includes(p.status) && p.media_url && instagramReelReady){
         actions = `<button class="primary" ${busy?"disabled":""} onclick="publishInstagram('${esc(p.id)}')">${busy?"Publishing…":"🚀 Publish Instagram"}</button>`;
       }
     }
@@ -2843,15 +2856,23 @@ async function renderPosts(){
     }
 
     const assets=mediaAssetMap.get(String(p.id))||[];
-    const galleryAssets=assets.filter(a=>a.public_url);
-    const gallery=galleryAssets.length?`<div class="media-gallery">${galleryAssets.map((a,i)=>{const isVideo=String(a.asset_type||"").toLowerCase().includes("video")||String(a.asset_type||"").toLowerCase().includes("reel");const preview=isVideo?`<video controls preload="metadata" src="${esc(a.public_url)}"></video>`:`<img src="${esc(a.public_url)}" alt="Media asset ${i+1}">`;const src=a.metadata?.source==="manual_upload"?"MANUAL":"AI";return `<div class="media-asset">${preview}<small>${esc(a.asset_role||a.asset_type||`Asset ${i+1}`)} <span class="media-source-badge">${src}</span></small><a href="${esc(a.public_url)}" target="_blank" rel="noopener">Open</a></div>`}).join("")}</div>`:"";
+    const galleryAssets=assets.filter(a=>a.public_url&&String(a.public_url)!==String(p.media_url||""));
+    const gallery=galleryAssets.length?`<div class="media-gallery">${galleryAssets.map((a,i)=>{const isVideo=String(a.asset_type||"").toLowerCase().includes("video")||String(a.asset_type||"").toLowerCase().includes("reel");const preview=isVideo?`<video controls preload="metadata" src="${esc(a.public_url)}"></video>`:`<img src="${esc(a.public_url)}" alt="Media asset ${i+1}">`;const src=a.metadata?.source==="manual_upload"?"MANUAL":"AI";const remove=p.status!=="PUBLISHED"&&a.id?`<button class="danger" ${busy?"disabled":""} onclick="removeMediaAsset('${esc(p.id)}','${esc(a.id)}')">🗑 Remove</button>`:"";return `<div class="media-asset">${remove}${preview}<small>${esc(a.asset_role||a.asset_type||`Asset ${i+1}`)} <span class="media-source-badge">${src}</span></small><a href="${esc(a.public_url)}" target="_blank" rel="noopener">Open</a></div>`}).join("")}</div>`:"";
     let media="";
     if(activePlatform==="instagram"){
       if(p.media_url){
+        const primaryAsset=assets.find(a=>String(a.public_url||"")===String(p.media_url));
+        const removePrimary=p.status!=="PUBLISHED"&&primaryAsset?.id?`<button class="danger" ${busy?"disabled":""} onclick="removeMediaAsset('${esc(p.id)}','${esc(primaryAsset.id)}')">🗑 Remove Current ${["video","reel"].includes(String(p.media_type||"").toLowerCase())?"Reel":"Image"}</button>`:"";
         const preview=["video","reel"].includes(String(p.media_type||"").toLowerCase())
           ? `<video controls preload="metadata" src="${esc(p.media_url)}"></video>`
           : `<img src="${esc(p.media_url)}" alt="Instagram primary media preview">`;
-        media=`<div class="media-box"><b>Primary media:</b> ${esc(p.media_type||"image")}${p.media_generation_status==="MANUAL_UPLOAD"?'<span class="media-source-badge">MANUAL</span>':'<span class="media-source-badge">AI / SYSTEM</span>'}<div class="media-preview">${preview}</div>${gallery}<div class="media-actions"><a href="${esc(p.media_url)}" target="_blank" rel="noopener">Open primary media</a></div>${p.status!=="PUBLISHED"?uploadControl(p.id,true,"instagram"):""}</div>`;
+        const reelImageCount=new Set([p.media_url,...galleryAssets.filter(a=>String(a.asset_type||"").toLowerCase()==="image").map(a=>a.public_url)].filter(Boolean)).size;
+        const hasReelVideo=["video","reel"].includes(String(p.media_type||"").toLowerCase());
+        const sourceImageCount=galleryAssets.filter(a=>String(a.asset_type||"").toLowerCase()==="image").length;
+        const usableImageCount=hasReelVideo?sourceImageCount:reelImageCount;
+        const reelAction=p.status!=="PUBLISHED"&&usableImageCount?`<div class="media-actions"><button class="primary" ${busy?"disabled":""} onclick="prepareInstagramReel('${esc(p.id)}')">🎬 ${hasReelVideo?"Regenerate":"Generate"} Reel from All ${esc(usableImageCount)} Image${usableImageCount===1?"":"s"}</button><small>${hasReelVideo?"The existing Reel will be replaced only after the new multi-image Reel passes verification.":"Finish uploading and replacing images first."} The agent re-reads every current source image, preserves upload order, and renders all of them into one 9:16 Reel.</small></div>`:"";
+        const musicPanel=hasReelVideo?`<div class="campaign-flow" style="border-left:4px solid #a855f7"><b>🎵 Instagram music:</b> ${p.instagram_audio_id?`${esc(p.instagram_audio_title||"Selected track")}${p.instagram_audio_artist?` — ${esc(p.instagram_audio_artist)}`:""}<br><small>Music volume ${esc(p.instagram_audio_volume||80)}%. The silent rendered video remains unchanged; Meta attaches this track during publishing.</small>`:"No track selected yet."}<div class="media-actions">${p.status!=="PUBLISHED"?`<button class="muted" ${busy?"disabled":""} onclick="browseInstagramMusic('${esc(p.id)}','')">${p.instagram_audio_id?"♫ Change music":"♫ Add music"}</button>${p.instagram_audio_id?`<button class="danger" ${busy?"disabled":""} onclick="clearInstagramMusic('${esc(p.id)}')">Remove music</button>`:""}`:""}</div></div>`:"";
+        media=`<div class="media-box"><b>Primary media:</b> ${esc(p.media_type||"image")}${p.media_generation_status==="MANUAL_UPLOAD"?'<span class="media-source-badge">MANUAL</span>':'<span class="media-source-badge">AI / SYSTEM</span>'}<div class="media-actions">${removePrimary}</div><div class="media-preview">${preview}</div>${gallery}<div class="media-actions"><a href="${esc(p.media_url)}" target="_blank" rel="noopener">Open primary media</a></div>${reelAction}${musicPanel}${p.status!=="PUBLISHED"?uploadControl(p.id,true,"instagram"):""}</div>`;
       }else{
         media=`<div class="media-box"><b>Media:</b> AI media is created automatically for new grounded drafts when a supported provider is available. Media is required before Instagram publishing.${gallery}${p.status!=="PUBLISHED"?uploadControl(p.id,false,"instagram"):""}</div>`;
       }
@@ -2889,6 +2910,65 @@ async function renderPosts(){
     const rankNote=activeView==="queue"&&qr?`<div class="queue-rank-note"><b>Review rank #${esc(qr.queue_rank??"—")}</b> • Age ${esc(qr.age_days??0)} day(s)${qr.duplicate_with?` • Similar to Post ${esc(qr.duplicate_with.post_number??"—")}`:""}<br><small>Ranking is advisory only. Your existing approve/edit/reject/schedule controls are unchanged.</small></div>`:"";
     return `<div class="card post"><span class="pill">${esc(p.status)}</span>${priorityBadge}<h2>${esc(p.post_number)}. ${esc(p.hook||p.objective||"Post")}</h2><small>${esc(activePlatform)} • ${esc(p.content_type||"")} • ${esc(p.content_date||"")}</small>${rankNote}${agentInfo}${media}<p class="caption">${esc(p.caption||"")}</p><p><b>CTA:</b> ${esc(p.cta||"")}<br><b>Visual direction:</b> ${esc(p.visual_direction||"")}</p>${publishError}${whatsappCtaState}${scheduledInfo}${publishedInfo}${deletedInfo}${actions}</div>`;
   }).join("")||`<div class='card'><h3>${activeView==="queue"?"Queue is clear":activeView==="scheduled"?"No scheduled posts":activeView==="deleted"?"Deleted is empty":"No publish history yet"}</h3>${activeView==="queue"?"Generate new content or switch platform.":activeView==="scheduled"?"Schedule a post from the Approval Queue.":activeView==="deleted"?"Deleted drafts will appear here and can be restored.":"Published, rejected, and failed posts will appear here."}</div>`;
+}
+
+async function callTrustedMediaList(payload){
+  const {data:{session}}=await sb.auth.getSession();if(!session)throw Error("Your session expired. Please sign in again.");
+  const r=await fetch(SUPABASE_URL+"/functions/v1/manual-media-register",{method:"POST",headers:{apikey:SUPABASE_KEY,Authorization:"Bearer "+session.access_token,"Content-Type":"application/json"},body:JSON.stringify(payload)});
+  const raw=await r.text();let j={};try{j=JSON.parse(raw)}catch{}if(!r.ok||!j.success)throw Error(j.error||raw||"Could not load Instagram media");return j;
+}
+async function loadTrustedInstagramAssets(postIds){
+  const j=await callTrustedMediaList({action:"list_media_assets",post_ids:[...new Set(postIds)].slice(0,50)});return j.assets||[];
+}
+async function loadTrustedReelImages(id){
+  const j=await callTrustedMediaList({action:"list_reel_images",post_id:id});return [...new Set((j.image_urls||[]).filter(Boolean))];
+}
+async function removeMediaAsset(postId,assetId){
+  if(!confirm("Remove this media from the draft? The stored file will be retained for recovery and nothing published will be changed."))return;
+  publishingIds.add(postId);await renderPosts();
+  try{const j=await callTrustedMediaList({action:"remove_asset",post_id:postId,asset_id:assetId});alert(`✅ Media removed.${j.primary_changed?" The next available media is now primary.":""}`)}
+  catch(e){alert("Media removal failed: "+(e?.message||String(e)))}
+  finally{publishingIds.delete(postId);await renderPosts()}
+}
+
+async function browseInstagramMusic(postId,query=""){
+  if(publishingIds.has(postId))return;
+  publishingIds.add(postId);await renderPosts();
+  try{
+    const j=await callTrustedMediaList({action:"browse_instagram_audio",post_id:postId,search_query:String(query||"").trim()});
+    showInstagramMusicPicker(postId,j.audio||[],String(query||""));
+  }catch(e){alert("Instagram music could not be loaded: "+(e?.message||String(e)))}
+  finally{publishingIds.delete(postId);await renderPosts()}
+}
+
+function showInstagramMusicPicker(postId,tracks,query=""){
+  $("instagramMusicPicker")?.remove();
+  const modal=document.createElement("div");modal.id="instagramMusicPicker";
+  modal.style.cssText="position:fixed;inset:0;z-index:9999;background:rgba(15,23,42,.72);display:flex;align-items:center;justify-content:center;padding:18px";
+  const rows=(tracks||[]).map((t,i)=>{
+    const art=t.cover_artwork_thumbnail_uri?`<img src="${esc(t.cover_artwork_thumbnail_uri)}" alt="" style="width:56px;height:56px;object-fit:cover;border-radius:9px">`:"";
+    const preview=t.download_url?`<audio controls preload="none" src="${esc(t.download_url)}" style="width:210px;height:32px"></audio>`:"<small>Audio preview unavailable</small>";
+    return `<div style="display:grid;grid-template-columns:60px 1fr auto;gap:10px;align-items:center;border:1px solid #dbe2ea;border-radius:10px;padding:10px;margin:8px 0">${art}<div><b>${esc(t.title)}</b><br><small>${esc(t.display_artist||"Unknown artist")} • ${esc(Math.round(Number(t.duration_in_ms||0)/1000))} sec</small><br>${preview}</div><button class="primary" onclick="selectInstagramMusic('${esc(postId)}',${i})">Use music</button></div>`;
+  }).join("")||"<p>No available tracks matched this search. Try a different word.</p>";
+  window.__instagramMusicTracks=tracks||[];
+  modal.innerHTML=`<div class="card" style="width:min(760px,96vw);max-height:88vh;overflow:auto"><button class="muted" style="float:right" onclick="$('instagramMusicPicker').remove()">✕ Close</button><h2>Instagram Reel Music</h2><p><small>These tracks are supplied by Meta for your connected account. The Instagram app may contain additional music that is not licensed for API publishing.</small></p><div style="display:flex;gap:8px"><input id="instagramMusicSearch" value="${esc(query)}" placeholder="Search song, artist, mood…" style="flex:1"><button class="muted" onclick="const q=$('instagramMusicSearch').value;$('instagramMusicPicker').remove();browseInstagramMusic('${esc(postId)}',q)">Search</button><button class="muted" onclick="$('instagramMusicPicker').remove();browseInstagramMusic('${esc(postId)}','')">Available / Trending</button></div>${rows}<p><small>You can preview the track here. Meta attaches the selected music during publishing, so the combined Reel-and-music preview is not available before it goes live.</small></p></div>`;
+  document.body.appendChild(modal);
+}
+
+async function selectInstagramMusic(postId,index){
+  const t=(window.__instagramMusicTracks||[])[index];if(!t)return;
+  try{
+    await callTrustedMediaList({action:"select_instagram_audio",post_id:postId,audio_id:t.audio_id,title:t.title,display_artist:t.display_artist,audio_type:t.audio_type,audio_volume:80,original_audio_volume:1,selection_source:"meta_audio_catalogue"});
+    $("instagramMusicPicker")?.remove();
+    alert(`✅ Music selected: ${t.title}${t.display_artist?" — "+t.display_artist:""}. It will be attached when this Reel is published.`);
+    await renderPosts();
+  }catch(e){alert("Music selection failed: "+(e?.message||String(e)))}
+}
+
+async function clearInstagramMusic(postId){
+  if(!confirm("Remove the selected Instagram music from this Reel draft?"))return;
+  try{await callTrustedMediaList({action:"clear_instagram_audio",post_id:postId});await renderPosts()}
+  catch(e){alert("Music removal failed: "+(e?.message||String(e)))}
 }
 
 async function deletePost(id){
@@ -2959,8 +3039,8 @@ function uploadControl(id,replace,platform){
   const safe=esc(id);
   const fb=platform==="facebook";
   const accept=fb?"image/jpeg,image/png,image/webp":"image/jpeg,image/png,image/webp,video/mp4";
-  const help=fb?"JPG/PNG/WebP. Manual primary media always overrides AI primary media.":"JPG/PNG/WebP or MP4. Replace the AI primary media, or add another asset and keep the AI media.";
-  return `<div class="media-upload"><b>${replace?"Your media choices":"Upload media"}</b><br><small>${help}</small><input id="mediaFile-${safe}" type="file" accept="${accept}"><div class="media-choice-actions"><button class="muted" onclick="uploadMedia('${safe}','${platform}','replace')">${replace?'↻ Replace primary':'⬆ Upload primary'}</button>${replace?`<button class="muted" onclick="uploadMedia('${safe}','${platform}','add')">＋ Add another media</button>`:""}</div></div>`;
+  const help=fb?"JPG/PNG/WebP. Manual primary media always overrides AI primary media.":"Select up to 6 JPG/PNG/WebP images together for a Reel slideshow, or one MP4. The first image becomes primary and the remaining images are added in selection order.";
+  return `<div class="media-upload"><b>${replace?"Your media choices":"Upload media"}</b><br><small>${help}</small><input id="mediaFile-${safe}" type="file" accept="${accept}" ${fb?"":"multiple"}><div class="media-choice-actions"><button class="muted" onclick="uploadMedia('${safe}','${platform}','replace')">${replace?'↻ Replace primary / images':'⬆ Upload image(s)'}</button>${replace?`<button class="muted" onclick="uploadMedia('${safe}','${platform}','add')">＋ Add image(s)</button>`:""}</div></div>`;
 }
 
 async function generatePlatform(){
@@ -2988,23 +3068,57 @@ async function generatePlatform(){
 
 async function uploadMedia(id,platform,mode="replace"){
   const input=$("mediaFile-"+id);
-  const file=input?.files?.[0];
-  if(!file){alert(platform==="facebook"?"Please choose a picture first.":"Please choose an image or MP4 video first.");return;}
+  const files=[...(input?.files||[])];
+  if(!files.length){alert(platform==="facebook"?"Please choose a picture first.":"Please choose one or more images, or one MP4 video.");return;}
+  if(platform==="facebook"&&files.length>1){alert("Facebook media remains unchanged. Please choose one picture.");return;}
+  if(platform==="instagram"&&files.length>6){alert("Please select no more than 6 images for one Reel.");return;}
   const allowed=platform==="facebook"?["image/jpeg","image/png","image/webp"]:["image/jpeg","image/png","image/webp","video/mp4"];
-  if(!allowed.includes(file.type)){alert(platform==="facebook"?"Facebook accepts JPG, PNG, or WebP pictures.":"Please upload JPG, PNG, WebP, or MP4 only.");return;}
-  if(file.size>100*1024*1024){alert("Please keep the file under 100 MB.");return;}
+  if(files.some(file=>!allowed.includes(file.type))){alert(platform==="facebook"?"Facebook accepts JPG, PNG, or WebP pictures.":"Please upload JPG, PNG, WebP, or MP4 only.");return;}
+  const videos=files.filter(file=>file.type==="video/mp4");
+  if(videos.length&&(files.length!==1||videos.length!==1)){alert("An MP4 must be uploaded by itself. Select multiple files only when all of them are images.");return;}
+  if(files.some(file=>file.size>(file.type==="video/mp4"?100:15)*1024*1024)){alert("Each image must be under 15 MB and an MP4 must be under 100 MB.");return;}
   publishingIds.add(id);await renderPosts();
   try{
-    const ext=(file.name.split(".").pop()||(file.type==="video/mp4"?"mp4":"jpg")).toLowerCase().replace(/[^a-z0-9]/g,"");
-    const path=`manual/${id}/${Date.now()}-${mode}.${ext}`;
-    const {error:upErr}=await sb.storage.from("social-media").upload(path,file,{contentType:file.type,upsert:false});if(upErr)throw Error("Upload failed: "+upErr.message);
-    const {data:urlData}=sb.storage.from("social-media").getPublicUrl(path),publicUrl=urlData?.publicUrl;if(!publicUrl)throw Error("Could not create a public media URL.");
     const {data:{session}}=await sb.auth.getSession();if(!session)throw Error("Your session expired. Please sign in again.");
-    const r=await fetch(SUPABASE_URL+"/functions/v1/manual-media-register",{method:"POST",headers:{apikey:SUPABASE_KEY,Authorization:"Bearer "+session.access_token,"Content-Type":"application/json"},body:JSON.stringify({post_id:id,public_url:publicUrl,storage_path:path,asset_type:file.type==="video/mp4"?"video":"image",mode})});
-    const raw=await r.text();let j={};try{j=JSON.parse(raw)}catch{}if(!r.ok||!j.success)throw Error(j.error||raw||"Could not register media");
-    alert(mode==="add"?"✅ Extra media added. Your current primary media was kept.":"✅ Primary media replaced. The agent will not overwrite your manual choice.");
+    if(platform==="instagram"&&mode==="add"&&!videos.length){const current=await loadTrustedReelImages(id);if(current.length+files.length>6)throw Error(`This Reel already has ${current.length} image(s). You can keep a maximum of 6. Use Replace primary / images to start a fresh batch.`)}
+    for(let i=0;i<files.length;i++){
+      const file=files[i],itemMode=mode==="replace"&&i===0?"replace":"add";
+      const ext=(file.name.split(".").pop()||(file.type==="video/mp4"?"mp4":"jpg")).toLowerCase().replace(/[^a-z0-9]/g,"");
+      const path=`manual/${id}/${Date.now()}-${i}-${itemMode}.${ext}`;
+      const {error:upErr}=await sb.storage.from("social-media").upload(path,file,{contentType:file.type,upsert:false});if(upErr)throw Error(`Upload ${i+1} failed: `+upErr.message);
+      const {data:urlData}=sb.storage.from("social-media").getPublicUrl(path),publicUrl=urlData?.publicUrl;if(!publicUrl)throw Error(`Could not create the media URL for file ${i+1}.`);
+      const r=await fetch(SUPABASE_URL+"/functions/v1/manual-media-register",{method:"POST",headers:{apikey:SUPABASE_KEY,Authorization:"Bearer "+session.access_token,"Content-Type":"application/json"},body:JSON.stringify({post_id:id,public_url:publicUrl,storage_path:path,asset_type:file.type==="video/mp4"?"video":"image",mode:itemMode})});
+      const raw=await r.text();let j={};try{j=JSON.parse(raw)}catch{}if(!r.ok||!j.success)throw Error(j.error||raw||`Could not register file ${i+1}`);
+    }
+    alert(files.length>1?`✅ ${files.length} images uploaded in Reel order. Review them, then select Create Reel from Images.`:mode==="add"?"✅ Extra media added. Your current primary media was kept.":"✅ Primary media replaced. The agent will not overwrite your manual choice.");
   }catch(e){alert(e?.message||String(e));}
   finally{publishingIds.delete(id);await renderPosts();if($("growthMainPanel")?.classList.contains("active"))await buildGrowthCycle();}
+}
+
+async function prepareInstagramReel(id){
+  if(publishingIds.has(id))return;
+  publishingIds.add(id);await renderPosts();
+  try{
+    const {data:p,error}=await sb.from("content_posts").select("id,media_url,media_type,status").eq("id",id).single();
+    if(error||!p)throw Error(error?.message||"Post not found");
+    if(!p.media_url)throw Error("Upload or generate at least one image first.");
+    const imageUrls=(await loadTrustedReelImages(id)).slice(0,6);
+    if(!imageUrls.length)throw Error("No current images were found for this Reel.");
+    if(!confirm(`Generate one Instagram Reel using all ${imageUrls.length} current image${imageUrls.length===1?"":"s"} in the displayed upload order?`))return;
+    const {data:{session}}=await sb.auth.getSession();if(!session)throw Error("Your session expired. Please sign in again.");
+    const response=await fetch("/api/render-instagram-reel",{method:"POST",headers:{Authorization:"Bearer "+session.access_token,"x-supabase-apikey":SUPABASE_KEY,"Content-Type":"application/json"},body:JSON.stringify({post_id:id,duration_seconds:Math.max(8,Math.min(18,imageUrls.length*3))})});
+    if(!response.ok){const raw=await response.text();let j={};try{j=JSON.parse(raw)}catch{}throw Error(j.error||raw||`Reel renderer failed with HTTP ${response.status}`)}
+    const renderedCount=Number(response.headers.get("X-Reel-Image-Count")||0);
+    const blob=await response.blob();if(blob.type!=="video/mp4"||!blob.size)throw Error("Renderer did not return a valid MP4 Reel.");
+    if(renderedCount!==imageUrls.length)throw Error(`Reel safety check stopped: confirmed ${imageUrls.length} images but renderer used ${renderedCount}. Nothing was replaced.`);
+    const storagePath=`reels/${id}/${Date.now()}-instagram-reel.mp4`;
+    const {error:upErr}=await sb.storage.from("social-media").upload(storagePath,blob,{contentType:"video/mp4",upsert:false});if(upErr)throw Error("Reel upload failed: "+upErr.message);
+    const {data:urlData}=sb.storage.from("social-media").getPublicUrl(storagePath),publicUrl=urlData?.publicUrl;if(!publicUrl)throw Error("Could not create the Reel media URL.");
+    const register=await fetch(SUPABASE_URL+"/functions/v1/manual-media-register",{method:"POST",headers:{apikey:SUPABASE_KEY,Authorization:"Bearer "+session.access_token,"Content-Type":"application/json"},body:JSON.stringify({post_id:id,public_url:publicUrl,storage_path:storagePath,asset_type:"video",mode:"replace",preserve_source_images:true})});
+    const raw=await register.text();let j={};try{j=JSON.parse(raw)}catch{}if(!register.ok||!j.success)throw Error(j.error||raw||"Could not register rendered Reel");
+    alert(`✅ Instagram Reel created successfully from all ${renderedCount} images. Review the MP4, then use Add music to select a Meta-authorized Instagram track.`);
+  }catch(e){alert("Reel creation did not complete: "+(e?.message||String(e)));}
+  finally{publishingIds.delete(id);await renderPosts();}
 }
 
 async function callInstagramPublisher(id){
@@ -4737,8 +4851,8 @@ async function generateLinkedInDrafts(){
 }
 async function approveLinkedInDraft(id){
   try{
-    const {error}=await sb.from("content_posts").update({status:"APPROVED",approved_at:new Date().toISOString()}).eq("id",id).eq("primary_platform","linkedin");
-    if(error)throw Error(error.message);await loadLinkedInDrafts();
+    await callApprovalBroker("approve",id,{notes:"Human approved LinkedIn draft"});
+    await loadLinkedInDrafts();
   }catch(e){alert(e?.message||String(e))}
 }
 async function editLinkedInDraft(id){
@@ -4752,16 +4866,44 @@ async function editLinkedInDraft(id){
 
 
 let gbpDraftRows=[];
+let googleBusinessOAuthStatus=null;
+async function checkGoogleBusinessConnection(){
+  const box=$("gbpConnectionStatus"),btn=$("gbpConnectBtn");
+  try{
+    const {data:{session}}=await sb.auth.getSession();if(!session)throw Error("Your session expired.");
+    const r=await fetch(SUPABASE_URL+"/functions/v1/gbp-content-agent-v1",{method:"POST",headers:{apikey:SUPABASE_KEY,Authorization:"Bearer "+session.access_token,"Content-Type":"application/json"},body:JSON.stringify({action:"status"})});
+    const raw=await r.text();let j={};try{j=JSON.parse(raw)}catch{}
+    if(!r.ok||!j.success)throw Error(j.error||raw);
+    googleBusinessOAuthStatus=j;
+    const connected=j.connection?.connection_status==="connected",configured=!!j.configured,approved=!!j.api_access_approved,locationReady=!!j.location_ready;
+    if(box)box.innerHTML=`<b>API access:</b> ${approved?"APPROVED":"PENDING"} • <b>Credentials:</b> ${configured?"READY":"MISSING"} • <b>OAuth:</b> ${connected?"CONNECTED":"NOT CONNECTED"} • <b>Location:</b> ${locationReady?"READY":"NOT SELECTED"} • <b>Publishing:</b> ${approved&&connected&&locationReady?"READY AFTER GOVERNANCE":"DISABLED"}`;
+    if(btn){btn.disabled=!approved||!configured;btn.title=btn.disabled?"Requires Google Business Profile API approval and OAuth credentials":"Connect or reconnect Google Business Profile";}
+    return j;
+  }catch(e){if(box)box.textContent="Google Business readiness error: "+(e?.message||String(e));if(btn)btn.disabled=true;return null}
+}
+async function connectGoogleBusiness(){
+  if(!googleBusinessOAuthStatus?.api_access_approved){alert("Google Business Profile API access has not been confirmed yet. Complete Google approval first, then refresh readiness.");return}
+  try{
+    const {data:{session}}=await sb.auth.getSession();if(!session)throw Error("Your session expired.");
+    const r=await fetch(SUPABASE_URL+"/functions/v1/gbp-content-agent-v1",{method:"POST",headers:{apikey:SUPABASE_KEY,Authorization:"Bearer "+session.access_token,"Content-Type":"application/json"},body:JSON.stringify({action:"start"})});
+    const raw=await r.text();let j={};try{j=JSON.parse(raw)}catch{}if(!r.ok||!j.success)throw Error(j.error||raw);
+    if(j.authorization_url)window.open(j.authorization_url,"_blank","noopener");
+  }catch(e){alert(e?.message||String(e))}
+}
 async function loadGbpDrafts(){
-  try{const {data:rows,error}=await sb.from("gbp_content_drafts").select("id,topic_type,summary,call_to_action_type,call_to_action_url,matched_product_name,status,created_at").order("created_at",{ascending:false}).limit(50);if(error)throw Error(error.message);gbpDraftRows=rows||[];renderGbpDrafts()}catch(e){$("gbpDraftList").innerHTML=`<div class="gbp-card">GBP draft load error: ${esc(e?.message||String(e))}</div>`}
+  try{const {data:rows,error}=await sb.from("gbp_content_drafts").select("id,topic_type,summary,call_to_action_type,call_to_action_url,matched_product_name,status,created_at,approved_at,published_at,external_post_name,publish_error,publish_attempts").order("created_at",{ascending:false}).limit(50);if(error)throw Error(error.message);gbpDraftRows=rows||[];renderGbpDrafts()}catch(e){$("gbpDraftList").innerHTML=`<div class="gbp-card">GBP draft load error: ${esc(e?.message||String(e))}</div>`}
 }
 function renderGbpDrafts(){
-  $("gbpDraftList").innerHTML=gbpDraftRows.map(p=>`<div class="gbp-card"><div><span class="gbp-topic">${esc(p.topic_type||"STANDARD")}</span> <span class="interaction-badge">${esc(p.status||"PENDING_APPROVAL")}</span></div><h4>${esc(p.matched_product_name||"Google Business post")}</h4><p>${esc(p.summary||"")}</p><div class="command-help"><b>CTA:</b> ${esc(p.call_to_action_type||"NONE")}${p.call_to_action_url?` • <a href="${esc(p.call_to_action_url)}" target="_blank" rel="noopener">Destination URL</a>`:""}</div><div class="interaction-actions">${p.status==="PENDING_APPROVAL"?`<button class="primary" onclick="approveGbpDraft('${esc(p.id)}')">✅ Approve Draft</button>`:""}<button class="muted" onclick="editGbpDraft('${esc(p.id)}')">✎ Edit</button></div><div class="command-help">Publishing is locked until Google Business Profile API access is approved and connected.</div></div>`).join("")||`<div class="gbp-card">No Google Business Profile drafts yet.</div>`;
+  $("gbpDraftList").innerHTML=gbpDraftRows.map(p=>`<div class="gbp-card"><div><span class="gbp-topic">${esc(p.topic_type||"STANDARD")}</span> <span class="interaction-badge">${esc(p.status||"PENDING_APPROVAL")}</span></div><h4>${esc(p.matched_product_name||"Google Business post")}</h4><p>${esc(p.summary||"")}</p><div class="command-help"><b>CTA:</b> ${esc(p.call_to_action_type||"NONE")}${p.call_to_action_url?` • <a href="${esc(p.call_to_action_url)}" target="_blank" rel="noopener">Destination URL</a>`:""}</div>${p.publish_error?`<div class="campaign-flow"><b>Publish note:</b> ${esc(p.publish_error)}</div>`:""}<div class="interaction-actions">${p.status==="PENDING_APPROVAL"?`<button class="primary" onclick="approveGbpDraft('${esc(p.id)}')">✅ Approve Draft</button>`:""}${p.status==="APPROVED"?`<button class="primary" onclick="publishGbpDraft('${esc(p.id)}')">🚀 Publish to Google</button>`:""}${p.status!=="PUBLISHED"?`<button class="muted" onclick="editGbpDraft('${esc(p.id)}')">✎ Edit</button>`:""}</div><div class="command-help">${p.status==="PUBLISHED"?`Published ${esc(p.published_at?new Date(p.published_at).toLocaleString():"")} • ${esc(p.external_post_name||"")}`:"Publishing requires Google approval, OAuth connection, and explicit human confirmation."}</div></div>`).join("")||`<div class="gbp-card">No Google Business Profile drafts yet.</div>`;
 }
 async function generateGbpDrafts(){
-  try{const {data:{session}}=await sb.auth.getSession();if(!session)throw Error("Your session expired.");const r=await fetch(SUPABASE_URL+"/functions/v1/gbp-content-agent-v1",{method:"POST",headers:{apikey:SUPABASE_KEY,Authorization:"Bearer "+session.access_token,"Content-Type":"application/json"},body:"{}"});const raw=await r.text();let j={};try{j=JSON.parse(raw)}catch{};if(!r.ok||!j.success)throw Error(j.error||raw);await loadGbpDrafts();alert(`✅ Created ${j.created||0} Google Business Profile drafts. Publishing remains disabled.`)}catch(e){alert(e?.message||String(e))}
+  try{const {data:{session}}=await sb.auth.getSession();if(!session)throw Error("Your session expired.");const r=await fetch(SUPABASE_URL+"/functions/v1/gbp-content-agent-v1",{method:"POST",headers:{apikey:SUPABASE_KEY,Authorization:"Bearer "+session.access_token,"Content-Type":"application/json"},body:JSON.stringify({action:"generate"})});const raw=await r.text();let j={};try{j=JSON.parse(raw)}catch{};if(!r.ok||!j.success)throw Error(j.error||raw);await loadGbpDrafts();alert(`✅ Created ${j.created||0} Google Business Profile drafts. Publishing remains disabled.`)}catch(e){alert(e?.message||String(e))}
 }
-async function approveGbpDraft(id){try{const {error}=await sb.from("gbp_content_drafts").update({status:"APPROVED",approved_at:new Date().toISOString()}).eq("id",id);if(error)throw Error(error.message);await loadGbpDrafts()}catch(e){alert(e?.message||String(e))}}
+async function callGoogleBusinessAction(action,payload={}){const {data:{session}}=await sb.auth.getSession();if(!session)throw Error("Your session expired.");const r=await fetch(SUPABASE_URL+"/functions/v1/gbp-content-agent-v1",{method:"POST",headers:{apikey:SUPABASE_KEY,Authorization:"Bearer "+session.access_token,"Content-Type":"application/json"},body:JSON.stringify({action,...payload})});const raw=await r.text();let j={};try{j=JSON.parse(raw)}catch{}if(!r.ok||!j.success)throw Error(j.error||raw);return j}
+async function approveGbpDraft(id){try{await callGoogleBusinessAction("approve",{draft_id:id,human_execute:true});await loadGbpDrafts()}catch(e){alert(e?.message||String(e))}}
+async function publishGbpDraft(id){if(!confirm("Publish this human-approved post to the connected Premier Express Google Business Profile?"))return;try{await callGoogleBusinessAction("publish",{draft_id:id,human_execute:true});await loadGbpDrafts();alert("✅ Google Business Profile post published and verified by the API response.")}catch(e){alert("Google publishing stopped: "+(e?.message||String(e)))}}
+async function syncGoogleReviews(){const box=$("gbpOperationsResult");try{if(box)box.textContent="Synchronizing Google reviews…";const j=await callGoogleBusinessAction("reviews");if(box)box.innerHTML=`<b>Reviews synchronized:</b> ${esc(j.reviews?.length||0)} • <b>Total:</b> ${esc(j.total_review_count??"—")} • <b>Average rating:</b> ${esc(j.average_rating??"—")}`;}catch(e){if(box)box.textContent="Review sync stopped: "+(e?.message||String(e))}}
+async function syncGooglePerformance(){const box=$("gbpOperationsResult");try{if(box)box.textContent="Synchronizing 30-day Google performance…";const j=await callGoogleBusinessAction("performance");if(box)box.innerHTML=`<b>Performance synchronized:</b> ${esc(j.range?.start||"—")} to ${esc(j.range?.end||"—")} • Stored as a comparable 30-day snapshot.`;}catch(e){if(box)box.textContent="Performance sync stopped: "+(e?.message||String(e))}}
 async function editGbpDraft(id){const p=gbpDraftRows.find(x=>String(x.id)===String(id));if(!p)return;const summary=prompt("Edit Google Business Profile post:",p.summary||"");if(summary===null)return;try{const {error}=await sb.from("gbp_content_drafts").update({summary:summary.trim(),status:"PENDING_APPROVAL",approved_at:null}).eq("id",id);if(error)throw Error(error.message);await loadGbpDrafts()}catch(e){alert(e?.message||String(e))}}
 
 let financeHubData={summary:{},bookings:[],suppliers:[],payments:[],expenses:[]};
@@ -5003,18 +5145,10 @@ async function refreshLinkedInTopStatus(){
   return j;
 }
 function refreshGoogleTopStatus(){
-  const top=$("googleTopStatus"),btn=$("googleTopConnectBtn");
-  if(top){
-    top.textContent="⏳ Business Profile API approval pending • Drafting ready • Publishing disabled";
-    top.className="unified-social-status not-connected";
-  }
-  if(btn){
-    btn.disabled=true;
-    btn.title="Connect will be enabled after Google Business Profile API access is approved.";
-  }
+  return checkGoogleBusinessConnection().then(j=>{const top=$("googleTopStatus"),btn=$("googleTopConnectBtn");if(!top)return j;const connected=j?.connection?.connection_status==="connected",ready=!!j?.api_access_approved&&connected&&!!j?.location_ready;top.textContent=ready?"🟢 Connected • Business location ready":j?.api_access_approved?"🟡 API approved • connection/location incomplete":"⏳ Business Profile API approval pending • Drafting ready";top.className="unified-social-status "+(ready?"connected":"not-connected");if(btn){btn.disabled=!j?.api_access_approved||!j?.configured;btn.title=btn.disabled?"Available after API approval and credentials":"Connect or reconnect Google Business Profile";}return j});
 }
 function connectGoogleBusinessFromTop(){
-  alert("Google Business Profile API access is still pending. Connect / Reconnect will be enabled here after approval.");
+  connectGoogleBusiness();
 }
 async function refreshUnifiedSocialAccounts(){
   await loadSocialConnections();
@@ -5075,7 +5209,7 @@ function switchMainTab(tab){
   if(interactions){loadInteractionInbox(false);loadCustomerMemory();}
   if(finance){loadFinanceHub();loadManagementIntel();}
   if(linkedin){loadLinkedInDrafts();checkLinkedInConnection();}
-  if(gbp)loadGbpDrafts();
+  if(gbp){loadGbpDrafts();checkGoogleBusinessConnection();}
   if(website&&!fullCatalogSeoData)loadFullCatalogSeo(false);
   if(website&&!seoWorkerHealthLoaded)loadSeoWorkerHealth(false);
   if(website){testWordPressConnection(false);loadSeoAuditSummary();checkSearchConsole();}

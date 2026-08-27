@@ -1,6 +1,10 @@
 {
   "cleanUrls": true,
   "functions": {
+    "api/render-instagram-reel.js": {
+      "maxDuration": 60,
+      "memory": 1024
+    },
     "api/website-shadow-runtime.js": {
       "maxDuration": 300
     }
