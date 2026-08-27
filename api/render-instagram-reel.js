@@ -78,9 +78,10 @@ module.exports = async function handler(req, res) {
     const perImage = seconds / inputs.length;
     const args = ["-hide_banner", "-loglevel", "error"];
     for (const input of inputs) args.push("-i", input);
+    args.push("-f", "lavfi", "-t", String(seconds), "-i", "anullsrc=channel_layout=stereo:sample_rate=48000");
     const chains = inputs.map((_, i) => `[${i}:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,zoompan=z='min(zoom+0.0007,1.08)':d=${Math.ceil(perImage * 30)}:s=1080x1920:fps=30,setsar=1[v${i}]`);
     const concatInputs = inputs.map((_, i) => `[v${i}]`).join("");
-    args.push("-filter_complex", `${chains.join(";")};${concatInputs}concat=n=${inputs.length}:v=1:a=0,format=yuv420p[outv]`, "-map", "[outv]", "-an", "-c:v", "libx264", "-preset", "veryfast", "-crf", "28", "-movflags", "+faststart", "-t", String(seconds), path.join(workdir, "reel.mp4"));
+    args.push("-filter_complex", `${chains.join(";")};${concatInputs}concat=n=${inputs.length}:v=1:a=0,format=yuv420p[outv]`, "-map", "[outv]", "-map", `${inputs.length}:a:0`, "-c:v", "libx264", "-preset", "veryfast", "-crf", "28", "-c:a", "aac", "-b:a", "128k", "-ar", "48000", "-ac", "2", "-movflags", "+faststart", "-shortest", "-t", String(seconds), path.join(workdir, "reel.mp4"));
     await runFfmpeg(args);
     const output = await readFile(path.join(workdir, "reel.mp4"));
     if (output.length > 20 * 1024 * 1024) throw new Error("Rendered Reel exceeds the 20 MB pilot limit.");
