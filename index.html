@@ -2859,7 +2859,8 @@ async function renderPosts(){
         const preview=["video","reel"].includes(String(p.media_type||"").toLowerCase())
           ? `<video controls preload="metadata" src="${esc(p.media_url)}"></video>`
           : `<img src="${esc(p.media_url)}" alt="Instagram primary media preview">`;
-        const reelAction=!["video","reel"].includes(String(p.media_type||"").toLowerCase())&&p.status!=="PUBLISHED"?`<div class="media-actions"><button class="primary" ${busy?"disabled":""} onclick='prepareInstagramReel(${JSON.stringify(String(p.id))},${JSON.stringify(galleryAssets.filter(a=>String(a.asset_type||"").toLowerCase()==="image").map(a=>a.public_url))})'>🎬 Create Reel from Images</button><small>The selected primary and gallery images will be rendered as a 9:16 MP4. Music selection follows after Meta audio eligibility is verified.</small></div>`:"";
+        const reelImageCount=new Set([p.media_url,...galleryAssets.filter(a=>String(a.asset_type||"").toLowerCase()==="image").map(a=>a.public_url)].filter(Boolean)).size;
+        const reelAction=!["video","reel"].includes(String(p.media_type||"").toLowerCase())&&p.status!=="PUBLISHED"?`<div class="media-actions"><button class="primary" ${busy?"disabled":""} onclick="prepareInstagramReel('${esc(p.id)}')">🎬 Generate Reel from All ${esc(reelImageCount)} Image${reelImageCount===1?"":"s"}</button><small>Finish uploading and replacing images first. When clicked, the agent re-reads every current image, preserves the upload order, and renders all of them into one 9:16 Reel.</small></div>`:"";
         media=`<div class="media-box"><b>Primary media:</b> ${esc(p.media_type||"image")}${p.media_generation_status==="MANUAL_UPLOAD"?'<span class="media-source-badge">MANUAL</span>':'<span class="media-source-badge">AI / SYSTEM</span>'}<div class="media-preview">${preview}</div>${gallery}<div class="media-actions"><a href="${esc(p.media_url)}" target="_blank" rel="noopener">Open primary media</a></div>${reelAction}${p.status!=="PUBLISHED"?uploadControl(p.id,true,"instagram"):""}</div>`;
       }else{
         media=`<div class="media-box"><b>Media:</b> AI media is created automatically for new grounded drafts when a supported provider is available. Media is required before Instagram publishing.${gallery}${p.status!=="PUBLISHED"?uploadControl(p.id,false,"instagram"):""}</div>`;
@@ -3023,7 +3024,7 @@ async function uploadMedia(id,platform,mode="replace"){
   finally{publishingIds.delete(id);await renderPosts();if($("growthMainPanel")?.classList.contains("active"))await buildGrowthCycle();}
 }
 
-async function prepareInstagramReel(id,galleryUrls=[]){
+async function prepareInstagramReel(id){
   if(publishingIds.has(id))return;
   publishingIds.add(id);await renderPosts();
   try{
@@ -3031,7 +3032,12 @@ async function prepareInstagramReel(id,galleryUrls=[]){
     if(error||!p)throw Error(error?.message||"Post not found");
     if(!p.media_url)throw Error("Upload or generate at least one image first.");
     if(["video","reel"].includes(String(p.media_type||"").toLowerCase()))throw Error("This post already has a Reel-ready video.");
-    const imageUrls=[...new Set([p.media_url,...(galleryUrls||[])].filter(Boolean))].slice(0,6);
+    const {data:assets,error:assetError}=await sb.from("media_assets").select("public_url,asset_type,asset_role,sequence_index,created_at").eq("post_id",id).eq("status","READY").order("sequence_index",{ascending:true}).order("created_at",{ascending:true});
+    if(assetError)throw Error("Could not load the complete Reel image set: "+assetError.message);
+    const registeredImages=(assets||[]).filter(a=>a.public_url&&String(a.asset_type||"").toLowerCase()==="image").map(a=>a.public_url);
+    const imageUrls=[...new Set([p.media_url,...registeredImages].filter(Boolean))].slice(0,6);
+    if(!imageUrls.length)throw Error("No current images were found for this Reel.");
+    if(!confirm(`Generate one Instagram Reel using all ${imageUrls.length} current image${imageUrls.length===1?"":"s"} in the displayed upload order?`))return;
     const {data:{session}}=await sb.auth.getSession();if(!session)throw Error("Your session expired. Please sign in again.");
     const response=await fetch("/api/render-instagram-reel",{method:"POST",headers:{Authorization:"Bearer "+session.access_token,"x-supabase-apikey":SUPABASE_KEY,"Content-Type":"application/json"},body:JSON.stringify({image_urls:imageUrls,duration_seconds:Math.max(8,Math.min(18,imageUrls.length*3))})});
     if(!response.ok){const raw=await response.text();let j={};try{j=JSON.parse(raw)}catch{}throw Error(j.error||raw||`Reel renderer failed with HTTP ${response.status}`)}
