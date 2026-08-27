@@ -2871,7 +2871,8 @@ async function renderPosts(){
         const sourceImageCount=galleryAssets.filter(a=>String(a.asset_type||"").toLowerCase()==="image").length;
         const usableImageCount=hasReelVideo?sourceImageCount:reelImageCount;
         const reelAction=p.status!=="PUBLISHED"&&usableImageCount?`<div class="media-actions"><button class="primary" ${busy?"disabled":""} onclick="prepareInstagramReel('${esc(p.id)}')">🎬 ${hasReelVideo?"Regenerate":"Generate"} Reel from All ${esc(usableImageCount)} Image${usableImageCount===1?"":"s"}</button><small>${hasReelVideo?"The existing Reel will be replaced only after the new multi-image Reel passes verification.":"Finish uploading and replacing images first."} The agent re-reads every current source image, preserves upload order, and renders all of them into one 9:16 Reel.</small></div>`:"";
-        media=`<div class="media-box"><b>Primary media:</b> ${esc(p.media_type||"image")}${p.media_generation_status==="MANUAL_UPLOAD"?'<span class="media-source-badge">MANUAL</span>':'<span class="media-source-badge">AI / SYSTEM</span>'}<div class="media-actions">${removePrimary}</div><div class="media-preview">${preview}</div>${gallery}<div class="media-actions"><a href="${esc(p.media_url)}" target="_blank" rel="noopener">Open primary media</a></div>${reelAction}${p.status!=="PUBLISHED"?uploadControl(p.id,true,"instagram"):""}</div>`;
+        const musicPanel=hasReelVideo?`<div class="campaign-flow" style="border-left:4px solid #a855f7"><b>🎵 Instagram music:</b> ${p.instagram_audio_id?`${esc(p.instagram_audio_title||"Selected track")}${p.instagram_audio_artist?` — ${esc(p.instagram_audio_artist)}`:""}<br><small>Music volume ${esc(p.instagram_audio_volume||80)}%. The silent rendered video remains unchanged; Meta attaches this track during publishing.</small>`:"No track selected yet."}<div class="media-actions">${p.status!=="PUBLISHED"?`<button class="muted" ${busy?"disabled":""} onclick="browseInstagramMusic('${esc(p.id)}','')">${p.instagram_audio_id?"♫ Change music":"♫ Add music"}</button>${p.instagram_audio_id?`<button class="danger" ${busy?"disabled":""} onclick="clearInstagramMusic('${esc(p.id)}')">Remove music</button>`:""}`:""}</div></div>`:"";
+        media=`<div class="media-box"><b>Primary media:</b> ${esc(p.media_type||"image")}${p.media_generation_status==="MANUAL_UPLOAD"?'<span class="media-source-badge">MANUAL</span>':'<span class="media-source-badge">AI / SYSTEM</span>'}<div class="media-actions">${removePrimary}</div><div class="media-preview">${preview}</div>${gallery}<div class="media-actions"><a href="${esc(p.media_url)}" target="_blank" rel="noopener">Open primary media</a></div>${reelAction}${musicPanel}${p.status!=="PUBLISHED"?uploadControl(p.id,true,"instagram"):""}</div>`;
       }else{
         media=`<div class="media-box"><b>Media:</b> AI media is created automatically for new grounded drafts when a supported provider is available. Media is required before Instagram publishing.${gallery}${p.status!=="PUBLISHED"?uploadControl(p.id,false,"instagram"):""}</div>`;
       }
@@ -2928,6 +2929,46 @@ async function removeMediaAsset(postId,assetId){
   try{const j=await callTrustedMediaList({action:"remove_asset",post_id:postId,asset_id:assetId});alert(`✅ Media removed.${j.primary_changed?" The next available media is now primary.":""}`)}
   catch(e){alert("Media removal failed: "+(e?.message||String(e)))}
   finally{publishingIds.delete(postId);await renderPosts()}
+}
+
+async function browseInstagramMusic(postId,query=""){
+  if(publishingIds.has(postId))return;
+  publishingIds.add(postId);await renderPosts();
+  try{
+    const j=await callTrustedMediaList({action:"browse_instagram_audio",post_id:postId,search_query:String(query||"").trim()});
+    showInstagramMusicPicker(postId,j.audio||[],String(query||""));
+  }catch(e){alert("Instagram music could not be loaded: "+(e?.message||String(e)))}
+  finally{publishingIds.delete(postId);await renderPosts()}
+}
+
+function showInstagramMusicPicker(postId,tracks,query=""){
+  $("instagramMusicPicker")?.remove();
+  const modal=document.createElement("div");modal.id="instagramMusicPicker";
+  modal.style.cssText="position:fixed;inset:0;z-index:9999;background:rgba(15,23,42,.72);display:flex;align-items:center;justify-content:center;padding:18px";
+  const rows=(tracks||[]).map((t,i)=>{
+    const art=t.cover_artwork_thumbnail_uri?`<img src="${esc(t.cover_artwork_thumbnail_uri)}" alt="" style="width:56px;height:56px;object-fit:cover;border-radius:9px">`:"";
+    const preview=t.download_url?`<audio controls preload="none" src="${esc(t.download_url)}" style="width:210px;height:32px"></audio>`:"<small>Audio preview unavailable</small>";
+    return `<div style="display:grid;grid-template-columns:60px 1fr auto;gap:10px;align-items:center;border:1px solid #dbe2ea;border-radius:10px;padding:10px;margin:8px 0">${art}<div><b>${esc(t.title)}</b><br><small>${esc(t.display_artist||"Unknown artist")} • ${esc(Math.round(Number(t.duration_in_ms||0)/1000))} sec</small><br>${preview}</div><button class="primary" onclick="selectInstagramMusic('${esc(postId)}',${i})">Use music</button></div>`;
+  }).join("")||"<p>No available tracks matched this search. Try a different word.</p>";
+  window.__instagramMusicTracks=tracks||[];
+  modal.innerHTML=`<div class="card" style="width:min(760px,96vw);max-height:88vh;overflow:auto"><button class="muted" style="float:right" onclick="$('instagramMusicPicker').remove()">✕ Close</button><h2>Instagram Reel Music</h2><p><small>These tracks are supplied by Meta for your connected account. The Instagram app may contain additional music that is not licensed for API publishing.</small></p><div style="display:flex;gap:8px"><input id="instagramMusicSearch" value="${esc(query)}" placeholder="Search song, artist, mood…" style="flex:1"><button class="muted" onclick="const q=$('instagramMusicSearch').value;$('instagramMusicPicker').remove();browseInstagramMusic('${esc(postId)}',q)">Search</button><button class="muted" onclick="$('instagramMusicPicker').remove();browseInstagramMusic('${esc(postId)}','')">Available / Trending</button></div>${rows}<p><small>You can preview the track here. Meta attaches the selected music during publishing, so the combined Reel-and-music preview is not available before it goes live.</small></p></div>`;
+  document.body.appendChild(modal);
+}
+
+async function selectInstagramMusic(postId,index){
+  const t=(window.__instagramMusicTracks||[])[index];if(!t)return;
+  try{
+    await callTrustedMediaList({action:"select_instagram_audio",post_id:postId,audio_id:t.audio_id,title:t.title,display_artist:t.display_artist,audio_type:t.audio_type,audio_volume:80,original_audio_volume:1,selection_source:"meta_audio_catalogue"});
+    $("instagramMusicPicker")?.remove();
+    alert(`✅ Music selected: ${t.title}${t.display_artist?" — "+t.display_artist:""}. It will be attached when this Reel is published.`);
+    await renderPosts();
+  }catch(e){alert("Music selection failed: "+(e?.message||String(e)))}
+}
+
+async function clearInstagramMusic(postId){
+  if(!confirm("Remove the selected Instagram music from this Reel draft?"))return;
+  try{await callTrustedMediaList({action:"clear_instagram_audio",post_id:postId});await renderPosts()}
+  catch(e){alert("Music removal failed: "+(e?.message||String(e)))}
 }
 
 async function deletePost(id){
@@ -3075,7 +3116,7 @@ async function prepareInstagramReel(id){
     const {data:urlData}=sb.storage.from("social-media").getPublicUrl(storagePath),publicUrl=urlData?.publicUrl;if(!publicUrl)throw Error("Could not create the Reel media URL.");
     const register=await fetch(SUPABASE_URL+"/functions/v1/manual-media-register",{method:"POST",headers:{apikey:SUPABASE_KEY,Authorization:"Bearer "+session.access_token,"Content-Type":"application/json"},body:JSON.stringify({post_id:id,public_url:publicUrl,storage_path:storagePath,asset_type:"video",mode:"replace",preserve_source_images:true})});
     const raw=await register.text();let j={};try{j=JSON.parse(raw)}catch{}if(!register.ok||!j.success)throw Error(j.error||raw||"Could not register rendered Reel");
-    alert(`✅ Instagram Reel created successfully from all ${renderedCount} images. Review the MP4 before approval. Music remains separate until Meta Audio API eligibility is verified.`);
+    alert(`✅ Instagram Reel created successfully from all ${renderedCount} images. Review the MP4, then use Add music to select a Meta-authorized Instagram track.`);
   }catch(e){alert("Reel creation did not complete: "+(e?.message||String(e)));}
   finally{publishingIds.delete(id);await renderPosts();}
 }
