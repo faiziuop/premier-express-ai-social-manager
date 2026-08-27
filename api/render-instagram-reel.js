@@ -77,7 +77,7 @@ module.exports = async function handler(req, res) {
     }
     const perImage = seconds / inputs.length;
     const args = ["-hide_banner", "-loglevel", "error"];
-    for (const input of inputs) args.push("-loop", "1", "-t", String(perImage), "-i", input);
+    for (const input of inputs) args.push("-i", input);
     const chains = inputs.map((_, i) => `[${i}:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,zoompan=z='min(zoom+0.0007,1.08)':d=${Math.ceil(perImage * 30)}:s=1080x1920:fps=30,setsar=1[v${i}]`);
     const concatInputs = inputs.map((_, i) => `[v${i}]`).join("");
     args.push("-filter_complex", `${chains.join(";")};${concatInputs}concat=n=${inputs.length}:v=1:a=0,format=yuv420p[outv]`, "-map", "[outv]", "-an", "-c:v", "libx264", "-preset", "veryfast", "-crf", "28", "-movflags", "+faststart", "-t", String(seconds), path.join(workdir, "reel.mp4"));

@@ -2856,11 +2856,13 @@ async function renderPosts(){
     }
 
     const assets=mediaAssetMap.get(String(p.id))||[];
-    const galleryAssets=assets.filter(a=>a.public_url);
-    const gallery=galleryAssets.length?`<div class="media-gallery">${galleryAssets.map((a,i)=>{const isVideo=String(a.asset_type||"").toLowerCase().includes("video")||String(a.asset_type||"").toLowerCase().includes("reel");const preview=isVideo?`<video controls preload="metadata" src="${esc(a.public_url)}"></video>`:`<img src="${esc(a.public_url)}" alt="Media asset ${i+1}">`;const src=a.metadata?.source==="manual_upload"?"MANUAL":"AI";return `<div class="media-asset">${preview}<small>${esc(a.asset_role||a.asset_type||`Asset ${i+1}`)} <span class="media-source-badge">${src}</span></small><a href="${esc(a.public_url)}" target="_blank" rel="noopener">Open</a></div>`}).join("")}</div>`:"";
+    const galleryAssets=assets.filter(a=>a.public_url&&String(a.public_url)!==String(p.media_url||""));
+    const gallery=galleryAssets.length?`<div class="media-gallery">${galleryAssets.map((a,i)=>{const isVideo=String(a.asset_type||"").toLowerCase().includes("video")||String(a.asset_type||"").toLowerCase().includes("reel");const preview=isVideo?`<video controls preload="metadata" src="${esc(a.public_url)}"></video>`:`<img src="${esc(a.public_url)}" alt="Media asset ${i+1}">`;const src=a.metadata?.source==="manual_upload"?"MANUAL":"AI";const remove=p.status!=="PUBLISHED"&&a.id?`<button class="danger" ${busy?"disabled":""} onclick="removeMediaAsset('${esc(p.id)}','${esc(a.id)}')">🗑 Remove</button>`:"";return `<div class="media-asset">${remove}${preview}<small>${esc(a.asset_role||a.asset_type||`Asset ${i+1}`)} <span class="media-source-badge">${src}</span></small><a href="${esc(a.public_url)}" target="_blank" rel="noopener">Open</a></div>`}).join("")}</div>`:"";
     let media="";
     if(activePlatform==="instagram"){
       if(p.media_url){
+        const primaryAsset=assets.find(a=>String(a.public_url||"")===String(p.media_url));
+        const removePrimary=p.status!=="PUBLISHED"&&primaryAsset?.id?`<button class="danger" ${busy?"disabled":""} onclick="removeMediaAsset('${esc(p.id)}','${esc(primaryAsset.id)}')">🗑 Remove Current ${["video","reel"].includes(String(p.media_type||"").toLowerCase())?"Reel":"Image"}</button>`:"";
         const preview=["video","reel"].includes(String(p.media_type||"").toLowerCase())
           ? `<video controls preload="metadata" src="${esc(p.media_url)}"></video>`
           : `<img src="${esc(p.media_url)}" alt="Instagram primary media preview">`;
@@ -2869,7 +2871,7 @@ async function renderPosts(){
         const sourceImageCount=galleryAssets.filter(a=>String(a.asset_type||"").toLowerCase()==="image").length;
         const usableImageCount=hasReelVideo?sourceImageCount:reelImageCount;
         const reelAction=p.status!=="PUBLISHED"&&usableImageCount?`<div class="media-actions"><button class="primary" ${busy?"disabled":""} onclick="prepareInstagramReel('${esc(p.id)}')">🎬 ${hasReelVideo?"Regenerate":"Generate"} Reel from All ${esc(usableImageCount)} Image${usableImageCount===1?"":"s"}</button><small>${hasReelVideo?"The existing Reel will be replaced only after the new multi-image Reel passes verification.":"Finish uploading and replacing images first."} The agent re-reads every current source image, preserves upload order, and renders all of them into one 9:16 Reel.</small></div>`:"";
-        media=`<div class="media-box"><b>Primary media:</b> ${esc(p.media_type||"image")}${p.media_generation_status==="MANUAL_UPLOAD"?'<span class="media-source-badge">MANUAL</span>':'<span class="media-source-badge">AI / SYSTEM</span>'}<div class="media-preview">${preview}</div>${gallery}<div class="media-actions"><a href="${esc(p.media_url)}" target="_blank" rel="noopener">Open primary media</a></div>${reelAction}${p.status!=="PUBLISHED"?uploadControl(p.id,true,"instagram"):""}</div>`;
+        media=`<div class="media-box"><b>Primary media:</b> ${esc(p.media_type||"image")}${p.media_generation_status==="MANUAL_UPLOAD"?'<span class="media-source-badge">MANUAL</span>':'<span class="media-source-badge">AI / SYSTEM</span>'}<div class="media-actions">${removePrimary}</div><div class="media-preview">${preview}</div>${gallery}<div class="media-actions"><a href="${esc(p.media_url)}" target="_blank" rel="noopener">Open primary media</a></div>${reelAction}${p.status!=="PUBLISHED"?uploadControl(p.id,true,"instagram"):""}</div>`;
       }else{
         media=`<div class="media-box"><b>Media:</b> AI media is created automatically for new grounded drafts when a supported provider is available. Media is required before Instagram publishing.${gallery}${p.status!=="PUBLISHED"?uploadControl(p.id,false,"instagram"):""}</div>`;
       }
@@ -2919,6 +2921,13 @@ async function loadTrustedInstagramAssets(postIds){
 }
 async function loadTrustedReelImages(id){
   const j=await callTrustedMediaList({action:"list_reel_images",post_id:id});return [...new Set((j.image_urls||[]).filter(Boolean))];
+}
+async function removeMediaAsset(postId,assetId){
+  if(!confirm("Remove this media from the draft? The stored file will be retained for recovery and nothing published will be changed."))return;
+  publishingIds.add(postId);await renderPosts();
+  try{const j=await callTrustedMediaList({action:"remove_asset",post_id:postId,asset_id:assetId});alert(`✅ Media removed.${j.primary_changed?" The next available media is now primary.":""}`)}
+  catch(e){alert("Media removal failed: "+(e?.message||String(e)))}
+  finally{publishingIds.delete(postId);await renderPosts()}
 }
 
 async function deletePost(id){
