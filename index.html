@@ -2821,13 +2821,14 @@ async function renderPosts(){
     }
 
     if(activePlatform==="instagram"){
+      const instagramReelReady=["video","reel"].includes(String(p.media_type||"").toLowerCase());
       if(["PENDING_APPROVAL","EDIT_REQUESTED"].includes(p.status)){
-        actions = p.media_url
+        actions = p.media_url && instagramReelReady
           ? `<button class="primary" ${busy?"disabled":""} onclick="approveInstagramAndPublish('${esc(p.id)}')">${busy?"Publishing…":"✓ Approve &amp; Publish Instagram"}</button>`
           : `<button class="primary" ${busy?"disabled":""} onclick="approveInstagramDraft('${esc(p.id)}')">${busy?"Approving…":"✓ Approve Draft"}</button>`;
         actions += `<button class="muted" ${busy?"disabled":""} onclick="editPost('${esc(p.id)}')">✎ Edit</button>`+
                    `<button class="danger" ${busy?"disabled":""} onclick="rejectPost('${esc(p.id)}')">✕ Reject</button>`;
-      } else if(["APPROVED","READY_TO_PUBLISH"].includes(p.status) && p.media_url){
+      } else if(["APPROVED","READY_TO_PUBLISH"].includes(p.status) && p.media_url && instagramReelReady){
         actions = `<button class="primary" ${busy?"disabled":""} onclick="publishInstagram('${esc(p.id)}')">${busy?"Publishing…":"🚀 Publish Instagram"}</button>`;
       }
     }
@@ -2858,7 +2859,8 @@ async function renderPosts(){
         const preview=["video","reel"].includes(String(p.media_type||"").toLowerCase())
           ? `<video controls preload="metadata" src="${esc(p.media_url)}"></video>`
           : `<img src="${esc(p.media_url)}" alt="Instagram primary media preview">`;
-        media=`<div class="media-box"><b>Primary media:</b> ${esc(p.media_type||"image")}${p.media_generation_status==="MANUAL_UPLOAD"?'<span class="media-source-badge">MANUAL</span>':'<span class="media-source-badge">AI / SYSTEM</span>'}<div class="media-preview">${preview}</div>${gallery}<div class="media-actions"><a href="${esc(p.media_url)}" target="_blank" rel="noopener">Open primary media</a></div>${p.status!=="PUBLISHED"?uploadControl(p.id,true,"instagram"):""}</div>`;
+        const reelAction=!["video","reel"].includes(String(p.media_type||"").toLowerCase())&&p.status!=="PUBLISHED"?`<div class="media-actions"><button class="primary" ${busy?"disabled":""} onclick='prepareInstagramReel(${JSON.stringify(String(p.id))},${JSON.stringify(galleryAssets.filter(a=>String(a.asset_type||"").toLowerCase()==="image").map(a=>a.public_url))})'>🎬 Create Reel from Images</button><small>The selected primary and gallery images will be rendered as a 9:16 MP4. Music selection follows after Meta audio eligibility is verified.</small></div>`:"";
+        media=`<div class="media-box"><b>Primary media:</b> ${esc(p.media_type||"image")}${p.media_generation_status==="MANUAL_UPLOAD"?'<span class="media-source-badge">MANUAL</span>':'<span class="media-source-badge">AI / SYSTEM</span>'}<div class="media-preview">${preview}</div>${gallery}<div class="media-actions"><a href="${esc(p.media_url)}" target="_blank" rel="noopener">Open primary media</a></div>${reelAction}${p.status!=="PUBLISHED"?uploadControl(p.id,true,"instagram"):""}</div>`;
       }else{
         media=`<div class="media-box"><b>Media:</b> AI media is created automatically for new grounded drafts when a supported provider is available. Media is required before Instagram publishing.${gallery}${p.status!=="PUBLISHED"?uploadControl(p.id,false,"instagram"):""}</div>`;
       }
@@ -3012,6 +3014,29 @@ async function uploadMedia(id,platform,mode="replace"){
     alert(mode==="add"?"✅ Extra media added. Your current primary media was kept.":"✅ Primary media replaced. The agent will not overwrite your manual choice.");
   }catch(e){alert(e?.message||String(e));}
   finally{publishingIds.delete(id);await renderPosts();if($("growthMainPanel")?.classList.contains("active"))await buildGrowthCycle();}
+}
+
+async function prepareInstagramReel(id,galleryUrls=[]){
+  if(publishingIds.has(id))return;
+  publishingIds.add(id);await renderPosts();
+  try{
+    const {data:p,error}=await sb.from("content_posts").select("id,media_url,media_type,status").eq("id",id).single();
+    if(error||!p)throw Error(error?.message||"Post not found");
+    if(!p.media_url)throw Error("Upload or generate at least one image first.");
+    if(["video","reel"].includes(String(p.media_type||"").toLowerCase()))throw Error("This post already has a Reel-ready video.");
+    const imageUrls=[...new Set([p.media_url,...(galleryUrls||[])].filter(Boolean))].slice(0,6);
+    const {data:{session}}=await sb.auth.getSession();if(!session)throw Error("Your session expired. Please sign in again.");
+    const response=await fetch("/api/render-instagram-reel",{method:"POST",headers:{Authorization:"Bearer "+session.access_token,"x-supabase-apikey":SUPABASE_KEY,"Content-Type":"application/json"},body:JSON.stringify({image_urls:imageUrls,duration_seconds:Math.max(8,Math.min(18,imageUrls.length*3))})});
+    if(!response.ok){const raw=await response.text();let j={};try{j=JSON.parse(raw)}catch{}throw Error(j.error||raw||`Reel renderer failed with HTTP ${response.status}`)}
+    const blob=await response.blob();if(blob.type!=="video/mp4"||!blob.size)throw Error("Renderer did not return a valid MP4 Reel.");
+    const storagePath=`reels/${id}/${Date.now()}-instagram-reel.mp4`;
+    const {error:upErr}=await sb.storage.from("social-media").upload(storagePath,blob,{contentType:"video/mp4",upsert:false});if(upErr)throw Error("Reel upload failed: "+upErr.message);
+    const {data:urlData}=sb.storage.from("social-media").getPublicUrl(storagePath),publicUrl=urlData?.publicUrl;if(!publicUrl)throw Error("Could not create the Reel media URL.");
+    const register=await fetch(SUPABASE_URL+"/functions/v1/manual-media-register",{method:"POST",headers:{apikey:SUPABASE_KEY,Authorization:"Bearer "+session.access_token,"Content-Type":"application/json"},body:JSON.stringify({post_id:id,public_url:publicUrl,storage_path:storagePath,asset_type:"video",mode:"replace"})});
+    const raw=await register.text();let j={};try{j=JSON.parse(raw)}catch{}if(!register.ok||!j.success)throw Error(j.error||raw||"Could not register rendered Reel");
+    alert("✅ Instagram Reel created successfully. Review the MP4 before approval. Music remains separate until Meta Audio API eligibility is verified.");
+  }catch(e){alert("Reel creation did not complete: "+(e?.message||String(e)));}
+  finally{publishingIds.delete(id);await renderPosts();}
 }
 
 async function callInstagramPublisher(id){
