@@ -98,10 +98,12 @@ module.exports = async function handler(req, res) {
     let audioFilter = "";
     if (config.facebookMusic?.public_url) {
       const musicFile = path.join(workdir, "facebook-music.audio");
+      const normalizedMusic = path.join(workdir, "facebook-music-normalized.m4a");
       await downloadAudio(String(config.facebookMusic.public_url), musicFile);
-      args.push("-stream_loop", "-1", "-i", musicFile);
+      await runFfmpeg(["-hide_banner", "-loglevel", "error", "-i", musicFile, "-af", `aresample=48000:async=1:first_pts=0,aloop=loop=-1:size=2147483647:start=0,atrim=0:${seconds},apad=whole_dur=${seconds},asetpts=N/SR/TB`, "-c:a", "aac", "-b:a", "128k", "-ar", "48000", "-ac", "2", "-t", String(seconds), normalizedMusic]);
+      args.push("-i", normalizedMusic);
       const volume = Math.max(1, Math.min(100, Number(config.facebookMusic.volume || 25))) / 100;
-      audioFilter = `;[${inputs.length}:a]aresample=48000,aloop=loop=-1:size=2147483647:start=0,atrim=0:${seconds},asetpts=N/SR/TB,volume=${volume}[aout]`;
+      audioFilter = `;[${inputs.length}:a]atrim=0:${seconds},asetpts=N/SR/TB,volume=${volume}[aout]`;
       audioMap = "[aout]";
     } else {
       args.push("-f", "lavfi", "-t", String(seconds), "-i", "anullsrc=channel_layout=stereo:sample_rate=48000");
