@@ -933,6 +933,7 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
 
     <div class="workflow-tabs">
       <button class="workflow-tab active" id="queueTab" onclick="switchView('queue')">📝 Approval Queue</button>
+      <button class="workflow-tab" id="latestTab" onclick="switchView('latest')">✎ Latest Edited</button>
       <button class="workflow-tab" id="scheduledTab" onclick="switchView('scheduled')">📅 Scheduled</button>
       <button class="workflow-tab" id="historyTab" onclick="switchView('history')">🕘 Publish History</button>
       <button class="workflow-tab" id="deletedTab" onclick="switchView('deleted')">🗑 Deleted</button>
@@ -951,7 +952,7 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
         <div><label>Search drafts</label><input id="queueSearch" type="search" placeholder="Hook, product, audience…" oninput="queueOrganizerChanged()"></div>
         <div><label>Product</label><select id="queueProduct" onchange="queueOrganizerChanged()"><option value="ALL">All products</option></select></div>
         <div><label>Review priority</label><select id="queuePriority" onchange="queueOrganizerChanged()"><option value="ALL">All priorities</option><option value="HIGH">High first</option><option value="MEDIUM">Medium</option><option value="STANDARD">Standard</option><option value="DUPLICATE">High duplicate risk</option></select></div>
-        <div><label>Sort</label><select id="queueSort" onchange="queueOrganizerChanged()"><option value="PRIORITY">Best drafts first</option><option value="NEWEST">Newest first</option><option value="OLDEST">Oldest first</option><option value="PRODUCT">Product A–Z</option></select></div>
+        <div><label>Sort</label><select id="queueSort" onchange="queueOrganizerChanged()"><option value="PRIORITY">Best drafts first</option><option value="PRODUCT_READY">Product + Media Ready</option><option value="NEWEST">Newest first</option><option value="OLDEST">Oldest first</option><option value="PRODUCT">Product A–Z</option></select></div>
       </div>
       <div class="command-grid" style="grid-template-columns:1fr auto auto;align-items:end">
         <div id="queueOrganizerSummary" class="command-help">Ranking loads automatically for the Approval Queue.</div>
@@ -2692,6 +2693,7 @@ function switchPlatform(platform){
   $("instagramNotice").style.display=platform==="instagram"?"block":"none";
   activeView="queue";
   $("queueTab").classList.add("active");
+  $("latestTab").classList.remove("active");
   $("historyTab").classList.remove("active");
   $("scheduledTab").classList.remove("active");
   $("deletedTab").classList.remove("active");
@@ -2702,6 +2704,7 @@ function switchPlatform(platform){
 function switchView(view){
   activeView=view;
   $("queueTab").classList.toggle("active",view==="queue");
+  $("latestTab").classList.toggle("active",view==="latest");
   $("historyTab").classList.toggle("active",view==="history");
   $("scheduledTab").classList.toggle("active",view==="scheduled");
   $("deletedTab").classList.toggle("active",view==="deleted");
@@ -2759,7 +2762,8 @@ async function renderPosts(){
   const activeRows=allRows.filter(x=>!x.deleted_at);
   const queueStatuses=["PENDING_APPROVAL","EDIT_REQUESTED","APPROVED","READY_TO_PUBLISH"];
   const historyStatuses=["PUBLISHED","REJECTED","FAILED"];
-  let rows=activeView==="deleted"?allRows.filter(x=>!!x.deleted_at):activeRows.filter(x=>activeView==="queue"?queueStatuses.includes(x.status):activeView==="scheduled"?x.status==="SCHEDULED":historyStatuses.includes(x.status));
+  let rows=activeView==="deleted"?allRows.filter(x=>!!x.deleted_at):activeRows.filter(x=>activeView==="queue"?queueStatuses.includes(x.status):activeView==="latest"?queueStatuses.includes(x.status)&&!!x.user_last_edited_at:activeView==="scheduled"?x.status==="SCHEDULED":historyStatuses.includes(x.status));
+  if(activeView==="latest")rows.sort((a,b)=>new Date(b.user_last_edited_at).getTime()-new Date(a.user_last_edited_at).getTime());
   $("total").textContent=activeRows.length;
   $("pending").textContent=activeRows.filter(x=>["PENDING_APPROVAL","EDIT_REQUESTED"].includes(x.status)).length;
   $("approved").textContent=activeRows.filter(x=>x.status==="PUBLISHED").length;
@@ -2777,6 +2781,10 @@ async function renderPosts(){
     rows.sort((a,b)=>{
       if(sort==="NEWEST")return new Date(b.created_at).getTime()-new Date(a.created_at).getTime();
       if(sort==="OLDEST")return new Date(a.created_at).getTime()-new Date(b.created_at).getTime();
+      if(sort==="PRODUCT_READY"){
+        const ready=x=>x.media_url&&(String(x.media_readiness||"").toUpperCase()==="READY"||["image","video","reel"].includes(String(x.media_type||"").toLowerCase()))?1:0;
+        return ready(b)-ready(a)||String(a.matched_product||"Unassigned").localeCompare(String(b.matched_product||"Unassigned"))||new Date(b.updated_at||b.created_at).getTime()-new Date(a.updated_at||a.created_at).getTime();
+      }
       if(sort==="PRODUCT")return String(a.matched_product||"").localeCompare(String(b.matched_product||""))||new Date(b.created_at).getTime()-new Date(a.created_at).getTime();
       const ar=queueRankingMap.get(String(a.id)),br=queueRankingMap.get(String(b.id));
       const as=Number(ar?.priority_score??-1),bs=Number(br?.priority_score??-1);
@@ -2908,11 +2916,13 @@ async function renderPosts(){
     const deletedInfo=p.deleted_at?`<div class="deleted-note"><b>Deleted:</b> ${esc(new Date(p.deleted_at).toLocaleString())}</div>`:"";
     const scheduledInfo=p.scheduled_at?`<div class="scheduled-note">📅 Scheduled: ${esc(formatDubaiTime(p.scheduled_at))}</div>`:"";
     const publishedInfo=p.published_at?`<div class="history-note"><b>Published:</b> ${esc(new Date(p.published_at).toLocaleString())}${p.external_post_id?` • ID: ${esc(p.external_post_id)}`:""}</div>`:"";
+    const editLabels={caption_edited:"Caption edited",media_uploaded:"Media added",media_replaced:"Media replaced",media_removed:"Media removed",reel_regenerated:"Reel generated",instagram_music_selected:"Instagram music selected",instagram_music_removed:"Instagram music removed",facebook_music_selected:"Facebook music selected",facebook_music_removed:"Facebook music removed"};
+    const latestEditedInfo=p.user_last_edited_at?`<div class="history-note"><b>Latest manual change:</b> ${esc(editLabels[p.user_last_edit_type]||p.user_last_edit_type||"Draft updated")} • ${esc(new Date(p.user_last_edited_at).toLocaleString())}</div>`:"";
     const qr=queueRankingMap.get(String(p.id));
     const priorityBadge=activeView==="queue"&&qr?`<span class="queue-priority ${String(qr.review_tier||"STANDARD").toLowerCase()}">${esc(qr.review_tier||"STANDARD")} • ${esc(qr.priority_score??"—")}/100</span>${qr.duplicate_risk==="high"?`<span class="queue-priority duplicate">DUPLICATE RISK ${esc(qr.duplicate_similarity??0)}%</span>`:""}`:"";
     const rankNote=activeView==="queue"&&qr?`<div class="queue-rank-note"><b>Review rank #${esc(qr.queue_rank??"—")}</b> • Age ${esc(qr.age_days??0)} day(s)${qr.duplicate_with?` • Similar to Post ${esc(qr.duplicate_with.post_number??"—")}`:""}<br><small>Ranking is advisory only. Your existing approve/edit/reject/schedule controls are unchanged.</small></div>`:"";
-    return `<div class="card post"><span class="pill">${esc(p.status)}</span>${priorityBadge}<h2>${esc(p.post_number)}. ${esc(p.hook||p.objective||"Post")}</h2><small>${esc(activePlatform)} • ${esc(p.content_type||"")} • ${esc(p.content_date||"")}</small>${rankNote}${agentInfo}${media}<p class="caption">${esc(p.caption||"")}</p><p><b>CTA:</b> ${esc(p.cta||"")}<br><b>Visual direction:</b> ${esc(p.visual_direction||"")}</p>${publishError}${whatsappCtaState}${scheduledInfo}${publishedInfo}${deletedInfo}${actions}</div>`;
-  }).join("")||`<div class='card'><h3>${activeView==="queue"?"Queue is clear":activeView==="scheduled"?"No scheduled posts":activeView==="deleted"?"Deleted is empty":"No publish history yet"}</h3>${activeView==="queue"?"Generate new content or switch platform.":activeView==="scheduled"?"Schedule a post from the Approval Queue.":activeView==="deleted"?"Deleted drafts will appear here and can be restored.":"Published, rejected, and failed posts will appear here."}</div>`;
+    return `<div class="card post"><span class="pill">${esc(p.status)}</span>${priorityBadge}<h2>${esc(p.post_number)}. ${esc(p.hook||p.objective||"Post")}</h2><small>${esc(activePlatform)} • ${esc(p.content_type||"")} • ${esc(p.content_date||"")}</small>${latestEditedInfo}${rankNote}${agentInfo}${media}<p class="caption">${esc(p.caption||"")}</p><p><b>CTA:</b> ${esc(p.cta||"")}<br><b>Visual direction:</b> ${esc(p.visual_direction||"")}</p>${publishError}${whatsappCtaState}${scheduledInfo}${publishedInfo}${deletedInfo}${actions}</div>`;
+  }).join("")||`<div class='card'><h3>${activeView==="queue"?"Queue is clear":activeView==="latest"?"No manually edited drafts yet":activeView==="scheduled"?"No scheduled posts":activeView==="deleted"?"Deleted is empty":"No publish history yet"}</h3>${activeView==="queue"?"Generate new content or switch platform.":activeView==="latest"?"Edit a caption, add or remove media, choose music, or generate a Reel. The draft will appear here automatically.":activeView==="scheduled"?"Schedule a post from the Approval Queue.":activeView==="deleted"?"Deleted drafts will appear here and can be restored.":"Published, rejected, and failed posts will appear here."}</div>`;
 }
 
 async function callTrustedMediaList(payload){
@@ -3097,7 +3107,7 @@ async function generatePlatform(){
     const text=await r.text();let j={};try{j=JSON.parse(text)}catch{}
     if(!r.ok||!j.success)throw Error(j.error||text||("Generation failed with HTTP "+r.status));
     activeView="queue";
-    $("queueTab").classList.add("active");$("scheduledTab").classList.remove("active");$("historyTab").classList.remove("active");$("deletedTab").classList.remove("active");
+    $("queueTab").classList.add("active");$("latestTab").classList.remove("active");$("scheduledTab").classList.remove("active");$("historyTab").classList.remove("active");$("deletedTab").classList.remove("active");
     await renderPosts();
     alert(`✅ ${count} ${activePlatform} post${count===1?"":"s"} generated${sourceUrl?" from the supplied product link":""} and added to the Approval Queue.`);
   }catch(e){alert("Generation failed: "+(e?.message||String(e)))}
@@ -3295,7 +3305,7 @@ async function rejectPost(id){
     await renderPosts();
   }catch(e){alert("Reject failed: "+(e?.message||String(e)));}
 }
-async function editPost(id){const {data,error}=await sb.from("content_posts").select("caption").eq("id",id).single();if(error){alert(error.message);return;}const value=prompt("Edit caption:",data.caption||"");if(value===null)return;if(!value.includes("+971 56 202 6553")){alert("The WhatsApp number +971 56 202 6553 must remain in every post.");return;}const {error:e}=await sb.from("content_posts").update({caption:value,status:"EDIT_REQUESTED"}).eq("id",id);if(e){alert(e.message);return;}await sb.from("approval_events").insert({post_id:id,action:"EDIT",notes:`${activePlatform} caption edited`});await renderPosts();}
+async function editPost(id){const {data,error}=await sb.from("content_posts").select("caption").eq("id",id).single();if(error){alert(error.message);return;}const value=prompt("Edit caption:",data.caption||"");if(value===null)return;if(!value.includes("+971 56 202 6553")){alert("The WhatsApp number +971 56 202 6553 must remain in every post.");return;}const editedAt=new Date().toISOString();const {error:e}=await sb.from("content_posts").update({caption:value,status:"EDIT_REQUESTED",user_last_edited_at:editedAt,user_last_edit_type:"caption_edited",updated_at:editedAt}).eq("id",id);if(e){alert(e.message);return;}await sb.from("approval_events").insert({post_id:id,action:"EDIT",notes:`${activePlatform} caption edited`});await renderPosts();}
 
 
 
@@ -4219,7 +4229,7 @@ async function uploadGrowthMedia(id,platform,mode="replace"){
 async function growthEditPost(id){
   const row=growthCycleRows.find(x=>x.id===id);if(!row){alert("Could not resolve this post.");return;}
   const value=prompt("Edit the full post caption:",row.caption||"");if(value===null)return;if(!value.trim()){alert("Caption cannot be empty.");return;}
-  try{const nextStatus=["APPROVED","READY_TO_PUBLISH"].includes(String(row.status).toUpperCase())?row.status:"EDIT_REQUESTED";const {error}=await sb.from("content_posts").update({caption:value.trim(),status:nextStatus,updated_at:new Date().toISOString()}).eq("id",id);if(error)throw error;alert("✅ Post edited. Review it again before scheduling.");await buildGrowthCycle(false);}catch(e){alert("Could not edit post: "+(e?.message||String(e)));}
+  try{const nextStatus=["APPROVED","READY_TO_PUBLISH"].includes(String(row.status).toUpperCase())?row.status:"EDIT_REQUESTED",editedAt=new Date().toISOString();const {error}=await sb.from("content_posts").update({caption:value.trim(),status:nextStatus,user_last_edited_at:editedAt,user_last_edit_type:"caption_edited",updated_at:editedAt}).eq("id",id);if(error)throw error;alert("✅ Post edited. Review it again before scheduling.");await buildGrowthCycle(false);}catch(e){alert("Could not edit post: "+(e?.message||String(e)));}
 }
 async function growthApproveAndSchedule(id,plannedAt){
   try{
