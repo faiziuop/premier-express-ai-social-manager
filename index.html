@@ -154,7 +154,7 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
 
 /* TEST V3: unified social accounts + separate Facebook/Instagram main workspaces */
 .unified-social-card{border-left:4px solid #2563eb}
-.unified-social-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:12px}
+.unified-social-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-top:12px}
 .unified-social-item{border:1px solid #dbeafe;background:#fff;border-radius:12px;padding:12px;min-width:0}
 .unified-social-item .platform-name{display:flex;align-items:center;gap:7px;font-weight:800;margin-bottom:8px}
 .unified-social-status{font-size:12px;line-height:1.45;min-height:36px;color:#64748b}
@@ -201,7 +201,7 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
       <div class="platform-head">
         <div>
           <h2 style="margin:0">🌐 Social Accounts</h2>
-          <p style="margin:6px 0 0">Facebook, Instagram, LinkedIn and Google Business in one place. Open each platform's own workspace from here.</p>
+          <p style="margin:6px 0 0">Facebook, Instagram, LinkedIn, Google Business and Search Console in one place. Open each platform's workspace or reconnect it from here.</p>
         </div>
         <button class="muted" id="refreshSocialBtn" onclick="refreshUnifiedSocialAccounts()">↻ Check All Connections</button>
       </div>
@@ -240,6 +240,17 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
             <button class="primary" id="googleTopConnectBtn" onclick="connectGoogleBusinessFromTop()" disabled>🔗 Connect / Reconnect</button>
             <button class="muted" onclick="refreshGoogleTopStatus()">↻ Status</button>
             <button class="muted" onclick="switchMainTab('gbp')">🤖 Open Google Agent</button>
+          </div>
+        </div>
+
+        <div class="unified-social-item">
+          <div class="platform-name">🔎 Search Console</div>
+          <div id="searchConsoleTopStatus" class="unified-social-status not-connected">Checking connection…</div>
+          <div class="unified-social-actions">
+            <button class="primary" id="searchConsoleTopConnectBtn" onclick="connectSearchConsole()">🔗 Connect / Reconnect</button>
+            <button class="muted" onclick="refreshSearchConsoleTopStatus()">↻ Status</button>
+            <button class="muted" id="searchConsoleTopSyncBtn" onclick="syncSearchConsole()" disabled>↻ Sync</button>
+            <button class="muted" onclick="switchMainTab('website')">🌐 Open Website & SEO</button>
           </div>
         </div>
       </div>
@@ -5223,10 +5234,26 @@ function refreshGoogleTopStatus(){
 function connectGoogleBusinessFromTop(){
   connectGoogleBusiness();
 }
+async function refreshSearchConsoleTopStatus(){
+  const top=$("searchConsoleTopStatus"),connectBtn=$("searchConsoleTopConnectBtn"),syncBtn=$("searchConsoleTopSyncBtn");
+  if(top){top.textContent="Checking connection…";top.className="unified-social-status not-connected";}
+  try{
+    const j=await searchConsoleCall("status"),connections=j.connections||[],connection=connections.find(x=>String(x.site_url||"").includes("dubaipremiertourism.com"))||connections[0],expiresAt=connection?.token_expires_at?new Date(connection.token_expires_at).getTime():0,connected=connection?.connection_status==="connected"&&!connection?.last_error&&expiresAt>Date.now();
+    if(top){top.textContent=connected?`🟢 Connected • ${connection.site_url||"Search Console"}${j.summary?.rows?` • ${Number(j.summary.rows).toLocaleString()} rows`:""}`:connection?.last_error?`🔴 Reconnect required • ${connection.last_error}`:"Not connected";top.className="unified-social-status "+(connected?"connected":"not-connected");}
+    if(connectBtn)connectBtn.disabled=!j.configured;
+    if(syncBtn)syncBtn.disabled=!connected;
+    return j;
+  }catch(e){
+    if(top){top.textContent="Search Console status unavailable";top.className="unified-social-status not-connected";}
+    if(syncBtn)syncBtn.disabled=true;
+    return null;
+  }
+}
 async function refreshUnifiedSocialAccounts(){
   await loadSocialConnections();
   await refreshLinkedInTopStatus();
   refreshGoogleTopStatus();
+  await refreshSearchConsoleTopStatus();
 }
 
 function switchMainTab(tab){
