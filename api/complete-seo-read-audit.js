@@ -1,4 +1,24 @@
 const BASE = "https://dubaipremiertourism.com";
+const SUPABASE_URL = "https://ivtwkyfiagouazopttlc.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_w2Cn5cENECQqUUY3lAXH0w_GlSLz5iW";
+
+const CORRECTION_PROPOSALS = [
+  { type: "page", rest: "pages", id: 4387, path: "/", h1: "Dubai Tours, Desert Safaris and UAE Experiences" },
+  { type: "page", rest: "pages", id: 6134, path: "/abu-dhabi-activities/", h1: "Abu Dhabi Tours, Attractions and Experiences", meta: "Discover Abu Dhabi tours, city sightseeing, desert safaris, cruises and attractions with Premier Express Tourism. Compare experiences and plan your visit." },
+  { type: "page", rest: "pages", id: 5825, path: "/dubai-activities/", h1: "Dubai Tours, Attractions and Experiences", meta: "Explore Dubai city tours, desert safaris, cruises, attractions and private transfers. Find experiences and plan with Premier Express Tourism." },
+  { type: "page", rest: "pages", id: 7893, path: "/terms-and-conditions/", h1: "Premier Express Tourism Terms and Conditions" },
+  { type: "page", rest: "pages", id: 7829, path: "/return-policy/", h1: "Booking, Cancellation and Refund Policy" },
+  { type: "page", rest: "pages", id: 7284, path: "/our-services/", h1: "Dubai Tours, Transfers and Tourism Services" },
+  { type: "page", rest: "pages", id: 6214, path: "/about-us/", h1: "About Premier Express Tourism", meta: "Learn about Premier Express Tourism, our Dubai-based team and the tours, transfers and UAE experiences we arrange for individual and group travellers." },
+  { type: "page", rest: "pages", id: 414, path: "/contact-us/", h1: "Contact Premier Express Tourism" },
+  { type: "page", rest: "pages", id: 8857, path: "/privacy-policy-app/", h1: "Premier Express Tourism App Privacy Policy", meta: "Read how Premier Express Tourism collects, uses, protects and manages information when you access or use our mobile application and connected services." },
+  { type: "page", rest: "pages", id: 8871, path: "/terms-of-service-app/", h1: "Premier Express Tourism App Terms of Service", meta: "Review the terms governing access to and use of the Premier Express Tourism mobile application, including user responsibilities and service conditions." },
+  { type: "page", rest: "pages", id: 8877, path: "/user-data-deletion/", meta: "Learn how to request deletion of your Premier Express Tourism app account and associated user data, including the steps required to submit your request." },
+  { type: "product", rest: "product", id: 8808, path: "/product/dubai-to-saudi-arabia-transfer/", remove_empty_h1: true },
+  { type: "product", rest: "product", id: 8829, path: "/product/dubai-to-riyadh-airport-transfer/", remove_empty_h1: true },
+  { type: "product", rest: "product", id: 6755, path: "/product/louvre-abu-dhabi-tour-2/", remove_empty_h1: true },
+  { type: "product", rest: "product", id: 8841, path: "/product/dubai-airport-transfer/", remove_empty_h1: true }
+];
 
 function headers(res) {
   res.setHeader("Cache-Control", "no-store, max-age=0");
@@ -184,6 +204,94 @@ async function mapLimit(items, concurrency, worker) {
   return output;
 }
 
+async function requireAuthenticatedUser(req) {
+  const authorization = String(req.headers.authorization || "");
+  if (!/^Bearer\s+\S+$/i.test(authorization)) throw Object.assign(Error("AUTHENTICATION_REQUIRED"), { statusCode: 401 });
+  const response = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+    headers: { apikey: SUPABASE_ANON_KEY, Authorization: authorization },
+    signal: AbortSignal.timeout(10000)
+  });
+  if (!response.ok) throw Object.assign(Error("AUTHENTICATION_INVALID"), { statusCode: 401 });
+  const user = await response.json();
+  if (!user?.id) throw Object.assign(Error("AUTHENTICATION_INVALID"), { statusCode: 401 });
+  return user.id;
+}
+
+function headingEvidence(html) {
+  const elements = [...String(html || "").matchAll(/<h1\b[^>]*>([\s\S]*?)<\/h1>/gi)];
+  const nonempty = elements.filter(match => match[1].replace(/<[^>]*>/g, " ").replace(/&nbsp;|&#160;/gi, " ").trim()).length;
+  return { total: elements.length, nonempty, empty: elements.length - nonempty };
+}
+
+async function proposalDryRun(req, res) {
+  await requireAuthenticatedUser(req);
+  const items = await mapLimit(CORRECTION_PROPOSALS, 3, async proposal => {
+    const endpoint = `${BASE}/wp-json/wp/v2/${proposal.rest}/${proposal.id}?_fields=id,slug,status,modified_gmt,link,title,content,yoast_head_json`;
+    try {
+      const response = await fetch(endpoint, {
+        headers: { "user-agent": "PremierExpressReadOnlySEOAudit/1.0" },
+        signal: AbortSignal.timeout(10000)
+      });
+      if (!response.ok) throw Error(`WORDPRESS_READ_HTTP_${response.status}`);
+      const object = await response.json();
+      const rendered = object.content?.rendered || "";
+      const headings = headingEvidence(rendered);
+      const changes = [];
+      if (proposal.h1) changes.push({
+        field: "content",
+        operation: "ADD_VISIBLE_H1",
+        before: `${headings.nonempty} non-empty H1`,
+        proposed: proposal.h1,
+        exact_raw_patch_ready: false,
+        reason: "Authenticated WordPress editor-context raw content is required before an executable patch can be produced."
+      });
+      if (proposal.meta) changes.push({
+        field: "_yoast_wpseo_metadesc",
+        operation: "REPLACE_META_DESCRIPTION",
+        before: object.yoast_head_json?.description || "",
+        proposed: proposal.meta,
+        proposed_length: proposal.meta.length,
+        exact_field_value_ready: true
+      });
+      if (proposal.remove_empty_h1) changes.push({
+        field: "content",
+        operation: "REMOVE_EMPTY_H1_ONLY",
+        before: `${headings.empty} empty H1`,
+        proposed: "Remove the empty H1 element while preserving the visible product_title entry-title H1.",
+        exact_raw_patch_ready: false,
+        reason: "Authenticated WordPress editor-context raw content is required before an executable patch can be produced."
+      });
+      return {
+        success: true,
+        object: { type: proposal.type, id: object.id, slug: object.slug, path: proposal.path, status: object.status, modified_gmt: object.modified_gmt, title: object.title?.rendered || "" },
+        before: { h1_total: headings.total, h1_nonempty: headings.nonempty, h1_empty: headings.empty, meta_description: object.yoast_head_json?.description || "" },
+        changes
+      };
+    } catch (error) {
+      return { success: false, object: { type: proposal.type, id: proposal.id, path: proposal.path }, error: error?.message || String(error), changes: [] };
+    }
+  });
+  return res.status(200).json({
+    success: true,
+    mode: "AUTHENTICATED_ZERO_WRITE_PROPOSAL_DRY_RUN",
+    target: BASE,
+    authenticated: true,
+    writes: 0,
+    persistence: 0,
+    arbitrary_targets: false,
+    checked_at: new Date().toISOString(),
+    controls: { allowlisted_objects: 15, concurrency: 3, methods: ["GET"], wordpress_updates: false, yoast_updates: false, approval_endpoint: false, execute_endpoint: false },
+    summary: { objects_requested: 15, objects_read: items.filter(item => item.success).length, h1_additions: 10, meta_descriptions: 6, empty_h1_removals: 4, exact_content_patches_ready: 0 },
+    items,
+    human_approval_gate: {
+      reached: true,
+      execution_authorized: false,
+      blocker: "Explicit human approval plus authenticated WordPress editor-context before-state is required before any executable patch or write capability."
+    },
+    policy: { content_target: 100, publishing_allowed_min: 90, publishing_allowed_max: 100, blocked_below: 90, seo_required: 100 }
+  });
+}
+
 async function discoverCrawlUrls() {
   const robots = await read("/robots.txt", 30000, 20000);
   if (robots.status !== 200) throw Error("ROBOTS_UNAVAILABLE");
@@ -292,9 +400,10 @@ export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ success: false, error: "METHOD_NOT_ALLOWED" });
   if (!sameOrigin(req)) return res.status(403).json({ success: false, error: "SAME_ORIGIN_REQUIRED" });
   const action = req.body?.action;
-  if (!new Set(["technical_snapshot", "crawl_dry_run_batch"]).has(action)) return res.status(400).json({ success: false, error: "READ_ONLY_ACTION_REQUIRED" });
+  if (!new Set(["technical_snapshot", "crawl_dry_run_batch", "proposal_dry_run"]).has(action)) return res.status(400).json({ success: false, error: "READ_ONLY_ACTION_REQUIRED" });
   try {
     if (action === "crawl_dry_run_batch") return await crawlDryRunBatch(req, res);
+    if (action === "proposal_dry_run") return await proposalDryRun(req, res);
     const [home, robots, sitemap] = await Promise.all([read("/"), read("/robots.txt", 20000), read("/sitemap_index.xml", 100000)]);
     const html = home.text;
     const images = [...html.matchAll(/<img\b[^>]*>/gi)].map(x => x[0]);
@@ -344,6 +453,6 @@ export default async function handler(req, res) {
     };
     return res.status(200).json(result);
   } catch (error) {
-    return res.status(502).json({ success: false, error: "READ_ONLY_AUDIT_FAILED", detail: error?.message || String(error), writes: 0 });
+    return res.status(error?.statusCode || 502).json({ success: false, error: error?.message || "READ_ONLY_AUDIT_FAILED", writes: 0, persistence: 0 });
   }
 }
