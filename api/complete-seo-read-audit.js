@@ -224,6 +224,11 @@ async function auditCrawlPage(url) {
     const response = await boundedReadUrl(url);
     const html = /text\/html/i.test(response.content_type) ? response.text : "";
     const images = [...html.matchAll(/<img\b[^>]*>/gi)].map(match => match[0]);
+    const h1Elements = [...html.matchAll(/<h1\b[^>]*>([\s\S]*?)<\/h1>/gi)];
+    const nonemptyH1Count = h1Elements.filter(match => match[1].replace(/<[^>]*>/g, " ").replace(/&nbsp;|&#160;/gi, " ").trim()).length;
+    const emptyH1Count = h1Elements.length - nonemptyH1Count;
+    const imagesMissingAltAttribute = images.filter(tag => !/\balt\s*=\s*["'][^"']*["']/i.test(tag)).length;
+    const imagesEmptyAlt = images.filter(tag => /\balt\s*=\s*["']\s*["']/i.test(tag)).length;
     const links = [...html.matchAll(/<a\b[^>]+href=["']([^"']+)["']/gi)].map(match => match[1]);
     const internalLinks = links.filter(link => { try { return new URL(link, response.final_url).hostname === "dubaipremiertourism.com"; } catch { return false; } }).length;
     const metaRobots = first(html, /<meta[^>]+name=["']robots["'][^>]+content=["']([^"']*)["'][^>]*>/i) || first(html, /<meta[^>]+content=["']([^"']*)["'][^>]+name=["']robots["'][^>]*>/i);
@@ -242,12 +247,16 @@ async function auditCrawlPage(url) {
       title_length: title.length,
       meta_description_length: metaDescription.length,
       canonical,
-      h1_count: count(html, /<h1\b/gi),
+      h1_count: h1Elements.length,
+      h1_nonempty_count: nonemptyH1Count,
+      empty_h1_count: emptyH1Count,
       h2_count: count(html, /<h2\b/gi),
       structured_data_blocks: count(html, /<script[^>]+type=["']application\/ld\+json["']/gi),
       internal_link_count: internalLinks,
       image_count: images.length,
-      images_missing_alt: images.filter(tag => !/\balt\s*=\s*["'][^"']+["']/i.test(tag)).length,
+      images_missing_alt: imagesMissingAltAttribute,
+      images_missing_alt_attribute: imagesMissingAltAttribute,
+      images_empty_alt: imagesEmptyAlt,
       error: ""
     };
   } catch (error) {
