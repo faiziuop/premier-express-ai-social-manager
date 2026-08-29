@@ -13,11 +13,11 @@ function sameOrigin(req) {
   try { return new URL(origin).host === req.headers.host; } catch { return false; }
 }
 
-async function read(path, limit = 800000) {
+async function read(path, limit = 800000, timeoutMs = 10000) {
   const response = await fetch(BASE + path, {
     redirect: "follow",
     headers: { "user-agent": "PremierExpressReadOnlySEOAudit/1.0" },
-    signal: AbortSignal.timeout(10000)
+    signal: AbortSignal.timeout(timeoutMs)
   });
   const text = (await response.text()).slice(0, limit);
   return {
@@ -95,12 +95,197 @@ function schemaTypes(source) {
   return [...types].sort((a, b) => a.localeCompare(b));
 }
 
+function validTarget(url) {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "https:" && parsed.hostname === "dubaipremiertourism.com";
+  } catch { return false; }
+}
+
+function excludedPath(pathname) {
+  return /\/(?:wp-admin|wp-login|my-account|cart|checkout)(?:\/|$)/i.test(pathname);
+}
+
+function decodeXml(value) {
+  return String(value || "").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+}
+
+function xmlLocations(source) {
+  return [...String(source || "").matchAll(/<loc>\s*([\s\S]*?)\s*<\/loc>/gi)].map(match => decodeXml(match[1].trim()));
+}
+
+function normalizePublicUrl(value) {
+  try {
+    const url = new URL(value);
+    if (!validTarget(url) || url.search || excludedPath(url.pathname)) return "";
+    url.hash = "";
+    return url.href;
+  } catch { return ""; }
+}
+
+function robotsRuleMatches(path, pattern) {
+  if (!pattern) return false;
+  const anchored = pattern.endsWith("$");
+  const raw = anchored ? pattern.slice(0, -1) : pattern;
+  const expression = raw.split("*").map(part => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join(".*");
+  try { return new RegExp(`^${expression}${anchored ? "$" : ""}`).test(path); } catch { return false; }
+}
+
+function robotsAllows(source, url) {
+  const groups = robotsGroups(source);
+  const named = groups.filter(group => group.agents.includes("premierexpressreadonlyseoaudit"));
+  const applicable = named.length ? named : groups.filter(group => group.agents.includes("*"));
+  const path = new URL(url).pathname;
+  const matches = applicable.flatMap(group => group.rules).filter(rule => rule.value && robotsRuleMatches(path, rule.value));
+  if (!matches.length) return true;
+  matches.sort((a, b) => b.value.length - a.value.length || (a.key === "allow" ? -1 : 1));
+  return matches[0].key === "allow";
+}
+
+async function boundedReadUrl(initialUrl, limit = 350000, timeoutMs = 10000) {
+  let current = initialUrl;
+  const redirects = [];
+  for (let hop = 0; hop <= 5; hop += 1) {
+    if (!validTarget(current)) throw Error("TARGET_OUTSIDE_ALLOWLIST");
+    const response = await fetch(current, {
+      redirect: "manual",
+      headers: { "user-agent": "PremierExpressReadOnlySEOAudit/1.0" },
+      signal: AbortSignal.timeout(timeoutMs)
+    });
+    if (response.status >= 300 && response.status < 400 && response.headers.get("location")) {
+      const next = new URL(response.headers.get("location"), current).href;
+      if (!validTarget(next)) throw Error("REDIRECT_OUTSIDE_ALLOWLIST");
+      redirects.push({ status: response.status, from: current, to: next });
+      current = next;
+      continue;
+    }
+    return {
+      status: response.status,
+      final_url: current,
+      content_type: response.headers.get("content-type") || "",
+      x_robots_tag: response.headers.get("x-robots-tag") || "",
+      redirects,
+      text: (await response.text()).slice(0, limit)
+    };
+  }
+  throw Error("TOO_MANY_REDIRECTS");
+}
+
+async function mapLimit(items, concurrency, worker) {
+  const output = new Array(items.length);
+  let cursor = 0;
+  async function runner() {
+    while (cursor < items.length) {
+      const index = cursor++;
+      output[index] = await worker(items[index], index);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, runner));
+  return output;
+}
+
+async function discoverCrawlUrls() {
+  const robots = await read("/robots.txt", 30000, 20000);
+  if (robots.status !== 200) throw Error("ROBOTS_UNAVAILABLE");
+  const declared = [...robots.text.matchAll(/^\s*sitemap\s*:\s*(\S+)\s*$/gim)].map(match => match[1]).filter(validTarget);
+  const queue = declared.length ? declared.slice(0, 20) : [`${BASE}/sitemap_index.xml`];
+  const seenSitemaps = new Set();
+  const urls = [];
+  const seenUrls = new Set();
+  while (queue.length && seenSitemaps.size < 30 && urls.length < 250) {
+    const batch = queue.splice(0, 3).filter(url => !seenSitemaps.has(url));
+    batch.forEach(url => seenSitemaps.add(url));
+    const documents = await mapLimit(batch, 3, async url => {
+      try { return { url, response: await boundedReadUrl(url, 600000, 20000), error: "" }; }
+      catch (error) { return { url, response: null, error: error?.message || String(error) }; }
+    });
+    for (const document of documents) {
+      if (!document.response || document.response.status !== 200) continue;
+      const locations = xmlLocations(document.response.text);
+      if (/<sitemapindex\b/i.test(document.response.text)) {
+        for (const location of locations) if (validTarget(location) && !seenSitemaps.has(location) && queue.length < 30) queue.push(location);
+      } else {
+        for (const location of locations) {
+          const normalized = normalizePublicUrl(location);
+          if (!normalized || seenUrls.has(normalized) || !robotsAllows(robots.text, normalized)) continue;
+          seenUrls.add(normalized);
+          urls.push(normalized);
+          if (urls.length >= 250) break;
+        }
+      }
+    }
+  }
+  if (!urls.length) throw Error("SITEMAP_DISCOVERY_EMPTY");
+  return { urls, robots_status: robots.status, sitemap_documents: seenSitemaps.size };
+}
+
+async function auditCrawlPage(url) {
+  try {
+    const response = await boundedReadUrl(url);
+    const html = /text\/html/i.test(response.content_type) ? response.text : "";
+    const images = [...html.matchAll(/<img\b[^>]*>/gi)].map(match => match[0]);
+    const links = [...html.matchAll(/<a\b[^>]+href=["']([^"']+)["']/gi)].map(match => match[1]);
+    const internalLinks = links.filter(link => { try { return new URL(link, response.final_url).hostname === "dubaipremiertourism.com"; } catch { return false; } }).length;
+    const metaRobots = first(html, /<meta[^>]+name=["']robots["'][^>]+content=["']([^"']*)["'][^>]*>/i) || first(html, /<meta[^>]+content=["']([^"']*)["'][^>]+name=["']robots["'][^>]*>/i);
+    const title = first(html, /<title[^>]*>([\s\S]*?)<\/title>/i).replace(/\s+/g, " ");
+    const metaDescription = first(html, /<meta[^>]+name=["']description["'][^>]+content=["']([^"']*)["'][^>]*>/i) || first(html, /<meta[^>]+content=["']([^"']*)["'][^>]+name=["']description["'][^>]*>/i);
+    const canonical = first(html, /<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']+)["'][^>]*>/i) || first(html, /<link[^>]+href=["']([^"']+)["'][^>]+rel=["']canonical["'][^>]*>/i);
+    const noindex = /\bnoindex\b/i.test(`${response.x_robots_tag} ${metaRobots}`);
+    return {
+      url,
+      status: response.status,
+      final_url: response.final_url,
+      redirect_count: response.redirects.length,
+      content_type: response.content_type,
+      indexable_observation: response.status >= 200 && response.status < 300 && !noindex,
+      title,
+      title_length: title.length,
+      meta_description_length: metaDescription.length,
+      canonical,
+      h1_count: count(html, /<h1\b/gi),
+      h2_count: count(html, /<h2\b/gi),
+      structured_data_blocks: count(html, /<script[^>]+type=["']application\/ld\+json["']/gi),
+      internal_link_count: internalLinks,
+      image_count: images.length,
+      images_missing_alt: images.filter(tag => !/\balt\s*=\s*["'][^"']+["']/i.test(tag)).length,
+      error: ""
+    };
+  } catch (error) {
+    return { url, status: 0, final_url: url, redirect_count: 0, indexable_observation: false, error: error?.message || String(error) };
+  }
+}
+
+async function crawlDryRunBatch(req, res) {
+  if (!req.headers.origin) return res.status(403).json({ success: false, error: "BROWSER_ORIGIN_REQUIRED", writes: 0 });
+  const offset = Number(req.body?.offset);
+  if (!Number.isInteger(offset) || offset < 0 || offset >= 250) return res.status(400).json({ success: false, error: "INVALID_BATCH_OFFSET", writes: 0 });
+  const discovery = await discoverCrawlUrls();
+  const batchUrls = discovery.urls.slice(offset, Math.min(offset + 10, 250));
+  const pages = await mapLimit(batchUrls, 3, auditCrawlPage);
+  const nextOffset = offset + pages.length;
+  return res.status(200).json({
+    success: true,
+    mode: "READ_ONLY_SITEWIDE_CRAWL_DRY_RUN",
+    target: BASE,
+    writes: 0,
+    persistence: 0,
+    checked_at: new Date().toISOString(),
+    controls: { max_urls: 250, batch_size: 10, concurrency: 3, methods: ["GET"], sitemap_only: true },
+    discovery: { eligible_urls_capped: discovery.urls.length, robots_status: discovery.robots_status, sitemap_documents: discovery.sitemap_documents },
+    batch: { offset, count: pages.length, next_offset: nextOffset, done: nextOffset >= discovery.urls.length || nextOffset >= 250 },
+    pages,
+    limitations: ["No JavaScript rendering", "No Core Web Vitals call", "No browser interaction", "No durable storage", "No numerical SEO score"]
+  });
+}
+
 export default async function handler(req, res) {
   headers(res);
   if (req.method !== "POST") return res.status(405).json({ success: false, error: "METHOD_NOT_ALLOWED" });
   if (!sameOrigin(req)) return res.status(403).json({ success: false, error: "SAME_ORIGIN_REQUIRED" });
-  if (req.body?.action !== "technical_snapshot") return res.status(400).json({ success: false, error: "READ_ONLY_ACTION_REQUIRED" });
+  const action = req.body?.action;
+  if (!new Set(["technical_snapshot", "crawl_dry_run_batch"]).has(action)) return res.status(400).json({ success: false, error: "READ_ONLY_ACTION_REQUIRED" });
   try {
+    if (action === "crawl_dry_run_batch") return await crawlDryRunBatch(req, res);
     const [home, robots, sitemap] = await Promise.all([read("/"), read("/robots.txt", 20000), read("/sitemap_index.xml", 100000)]);
     const html = home.text;
     const images = [...html.matchAll(/<img\b[^>]*>/gi)].map(x => x[0]);
