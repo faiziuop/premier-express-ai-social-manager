@@ -33,6 +33,68 @@ async function read(path, limit = 800000) {
 function count(source, pattern) { return (source.match(pattern) || []).length; }
 function first(source, pattern) { return source.match(pattern)?.[1]?.trim() || ""; }
 
+function robotsGroups(source) {
+  const groups = [];
+  let agents = [];
+  let rules = [];
+  const flush = () => {
+    if (agents.length) groups.push({ agents: [...agents], rules: [...rules] });
+    agents = [];
+    rules = [];
+  };
+  for (const raw of String(source || "").split(/\r?\n/)) {
+    const line = raw.replace(/#.*$/, "").trim();
+    if (!line) {
+      if (rules.length) flush();
+      continue;
+    }
+    const match = line.match(/^([a-z-]+)\s*:\s*(.*)$/i);
+    if (!match) continue;
+    const key = match[1].toLowerCase();
+    const value = match[2].trim();
+    if (key === "user-agent") {
+      if (rules.length) flush();
+      agents.push(value.toLowerCase());
+    } else if (agents.length && (key === "allow" || key === "disallow")) {
+      rules.push({ key, value });
+    }
+  }
+  flush();
+  return groups;
+}
+
+function botDirectiveEvidence(source) {
+  const groups = robotsGroups(source);
+  return ["GPTBot", "ChatGPT-User", "Google-Extended", "ClaudeBot", "PerplexityBot"].map(bot => {
+    const exact = groups.filter(group => group.agents.includes(bot.toLowerCase()));
+    const applicable = exact.length ? exact : groups.filter(group => group.agents.includes("*"));
+    const explicitlyBlocked = applicable.some(group => group.rules.some(rule => rule.key === "disallow" && rule.value === "/"));
+    return {
+      bot,
+      status: explicitlyBlocked ? "explicitly_blocked" : "not_explicitly_blocked",
+      source_group: exact.length ? "specific" : "wildcard_or_none"
+    };
+  });
+}
+
+function schemaTypes(source) {
+  const types = new Set();
+  const blocks = [...String(source || "").matchAll(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)];
+  const visit = value => {
+    if (Array.isArray(value)) return value.forEach(visit);
+    if (!value || typeof value !== "object") return;
+    const type = value["@type"];
+    (Array.isArray(type) ? type : [type]).filter(Boolean).forEach(item => types.add(String(item)));
+    Object.values(value).forEach(visit);
+  };
+  for (const block of blocks) {
+    try { visit(JSON.parse(block[1])); } catch {
+      for (const match of block[1].matchAll(/["']@type["']\s*:\s*["']([^"']+)["']/gi)) types.add(match[1]);
+    }
+  }
+  return [...types].sort((a, b) => a.localeCompare(b));
+}
+
 export default async function handler(req, res) {
   headers(res);
   if (req.method !== "POST") return res.status(405).json({ success: false, error: "METHOD_NOT_ALLOWED" });
@@ -43,6 +105,7 @@ export default async function handler(req, res) {
     const html = home.text;
     const images = [...html.matchAll(/<img\b[^>]*>/gi)].map(x => x[0]);
     const lazyImages = images.filter(x => /loading\s*=\s*["']lazy["']/i.test(x)).length;
+    const entityTypes = schemaTypes(html);
     const result = {
       success: true,
       mode: "READ_ONLY_TECHNICAL_SNAPSHOT",
@@ -73,6 +136,15 @@ export default async function handler(req, res) {
         button_count: count(html, /<button\b/gi),
         nav_count: count(html, /<nav\b/gi),
         lang_declared: /<html[^>]+lang=["'][^"']+["']/i.test(html)
+      },
+      ai_readiness: {
+        robots_directives: botDirectiveEvidence(robots.text),
+        schema_types: entityTypes,
+        organization_type_present: entityTypes.some(type => /^(Organization|LocalBusiness|TravelAgency)$/i.test(type)),
+        brand_name_present: /Premier\s+Express\s+Tourism/i.test(html),
+        answer_tests_run: 0,
+        citations_measured: false,
+        interpretation: "Crawler directives and entity markup are readiness signals only; they do not prove crawling, answer inclusion, ranking, or citation."
       },
       limitations: ["No Core Web Vitals field data", "No JavaScript-rendered interaction test", "Homepage snapshot only", "No change or write capability"]
     };
