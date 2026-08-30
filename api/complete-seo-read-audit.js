@@ -2,6 +2,22 @@ const BASE = "https://dubaipremiertourism.com";
 const SUPABASE_URL = "https://ivtwkyfiagouazopttlc.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_w2Cn5cENECQqUUY3lAXH0w_GlSLz5iW";
 
+function wordpressEditorAuthorization() {
+  const username = process.env.WORDPRESS_USERNAME || process.env.WP_APP_USERNAME || "";
+  const password = process.env.WORDPRESS_APP_PASSWORD || process.env.WP_APP_PASSWORD || "";
+  return username && password ? `Basic ${Buffer.from(`${username}:${password}`).toString("base64")}` : "";
+}
+
+function contentFingerprint(value) {
+  let hash = 2166136261;
+  for (const char of String(value || "")) { hash ^= char.charCodeAt(0); hash = Math.imul(hash, 16777619); }
+  return `fnv1a32:${(hash >>> 0).toString(16).padStart(8, "0")}:${String(value || "").length}`;
+}
+
+function escapeHtml(value) {
+  return String(value || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
 const CORRECTION_PROPOSALS = [
   { type: "page", rest: "pages", id: 4387, path: "/", h1: "Dubai Tours, Desert Safaris and UAE Experiences" },
   { type: "page", rest: "pages", id: 6134, path: "/abu-dhabi-activities/", h1: "Abu Dhabi Tours, Attractions and Experiences", meta: "Discover Abu Dhabi tours, city sightseeing, desert safaris, cruises and attractions with Premier Express Tourism. Compare experiences and plan your visit." },
@@ -292,6 +308,62 @@ async function proposalDryRun(req, res) {
   });
 }
 
+
+async function prepareExecutionStage(req, res) {
+  await requireAuthenticatedUser(req);
+  const editorAuthorization = wordpressEditorAuthorization();
+  if (!editorAuthorization) return res.status(503).json({
+    success: false, error: "WORDPRESS_EDITOR_CREDENTIALS_NOT_CONFIGURED", mode: "AUTHENTICATED_EDITOR_CONTEXT_PREPARATION",
+    writes: 0, persistence: 0,
+    controls: { methods: ["GET"], wordpress_updates: false, yoast_updates: false, approval_endpoint: false, execute_endpoint: false },
+    blocker: "Configure a least-privilege WordPress application-password credential in server-side environment variables before editor-context capture can run."
+  });
+  const items = await mapLimit(CORRECTION_PROPOSALS, 3, async proposal => {
+    const endpoint = BASE + "/wp-json/wp/v2/" + proposal.rest + "/" + proposal.id + "?context=edit&_fields=id,slug,status,modified_gmt,link,title,content,meta";
+    try {
+      const response = await fetch(endpoint, { headers: { authorization: editorAuthorization, "user-agent": "PremierExpressReadOnlySEOAudit/1.0" }, signal: AbortSignal.timeout(10000) });
+      if (!response.ok) throw Error("WORDPRESS_EDITOR_READ_HTTP_" + response.status);
+      const object = await response.json();
+      const rawContent = typeof object.content?.raw === "string" ? object.content.raw : "";
+      if (!rawContent && (proposal.h1 || proposal.remove_empty_h1)) throw Error("EDITOR_RAW_CONTENT_UNAVAILABLE");
+      const operations = [];
+      let proposedContent = rawContent;
+      if (proposal.h1) {
+        if (headingEvidence(rawContent).nonempty !== 0) throw Error("H1_PRECONDITION_CHANGED");
+        proposedContent = "<h1>" + escapeHtml(proposal.h1) + "</h1>\\n" + proposedContent;
+        operations.push({ field: "content.raw", operation: "ADD_VISIBLE_H1", exact_patch_ready: true, proposed: proposal.h1 });
+      }
+      if (proposal.remove_empty_h1) {
+        const beforeEmpty = headingEvidence(rawContent).empty;
+        if (beforeEmpty !== 1) throw Error("EMPTY_H1_PRECONDITION_" + beforeEmpty);
+        proposedContent = proposedContent.replace(/<h1\\b[^>]*>(?:\\s|&nbsp;|&#160;)*<\\/h1>/i, "");
+        operations.push({ field: "content.raw", operation: "REMOVE_EMPTY_H1_ONLY", exact_patch_ready: true });
+      }
+      if (proposal.meta) operations.push({ field: "_yoast_wpseo_metadesc", operation: "REPLACE_META_DESCRIPTION", exact_field_value_ready: true, proposed: proposal.meta, editor_before_value_available: Object.prototype.hasOwnProperty.call(object.meta || {}, "_yoast_wpseo_metadesc") });
+      return {
+        success: true,
+        object: { type: proposal.type, id: object.id, path: proposal.path, slug: object.slug, status: object.status, modified_gmt: object.modified_gmt },
+        concurrency_guard: { modified_gmt: object.modified_gmt, must_match_before_execution: true },
+        before_state: { content_raw: rawContent, content_fingerprint: contentFingerprint(rawContent), meta: object.meta || {} },
+        proposed_state: { content_raw: proposedContent, content_fingerprint: contentFingerprint(proposedContent), yoast_meta_description: proposal.meta || null },
+        rollback: { content_raw: rawContent, meta: object.meta || {}, prepared: true },
+        operations, review_required: true
+      };
+    } catch (error) {
+      return { success: false, object: { type: proposal.type, id: proposal.id, path: proposal.path }, error: error?.message || String(error), operations: [] };
+    }
+  });
+  const readyItems = items.filter(item => item.success);
+  return res.status(200).json({
+    success: true, mode: "AUTHENTICATED_EDITOR_CONTEXT_PREPARATION", target: BASE, authenticated: true, writes: 0, persistence: 0, checked_at: new Date().toISOString(),
+    controls: { allowlisted_objects: 15, concurrency: 3, methods: ["GET"], wordpress_updates: false, yoast_updates: false, approval_endpoint: false, execute_endpoint: false, response_storage: "browser_session_only" },
+    summary: { objects_requested: 15, objects_prepared: readyItems.length, operations_prepared: readyItems.reduce((sum,item)=>sum+item.operations.length,0), rollback_payloads_prepared: readyItems.length, failures: items.length-readyItems.length },
+    items,
+    human_approval_gate: { reached: true, execution_authorized: false, blocker: "Exact item-level human execution approval is required. This endpoint cannot execute changes." },
+    policy: { content_target: 100, publishing_allowed_min: 90, publishing_allowed_max: 100, blocked_below: 90, seo_required: 100 }
+  });
+}
+
 async function discoverCrawlUrls() {
   const robots = await read("/robots.txt", 30000, 20000);
   if (robots.status !== 200) throw Error("ROBOTS_UNAVAILABLE");
@@ -400,10 +472,11 @@ export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ success: false, error: "METHOD_NOT_ALLOWED" });
   if (!sameOrigin(req)) return res.status(403).json({ success: false, error: "SAME_ORIGIN_REQUIRED" });
   const action = req.body?.action;
-  if (!new Set(["technical_snapshot", "crawl_dry_run_batch", "proposal_dry_run"]).has(action)) return res.status(400).json({ success: false, error: "READ_ONLY_ACTION_REQUIRED" });
+  if (!new Set(["technical_snapshot", "crawl_dry_run_batch", "proposal_dry_run", "execution_stage_prepare"]).has(action)) return res.status(400).json({ success: false, error: "READ_ONLY_ACTION_REQUIRED" });
   try {
     if (action === "crawl_dry_run_batch") return await crawlDryRunBatch(req, res);
     if (action === "proposal_dry_run") return await proposalDryRun(req, res);
+    if (action === "execution_stage_prepare") return await prepareExecutionStage(req, res);
     const [home, robots, sitemap] = await Promise.all([read("/"), read("/robots.txt", 20000), read("/sitemap_index.xml", 100000)]);
     const html = home.text;
     const images = [...html.matchAll(/<img\b[^>]*>/gi)].map(x => x[0]);
