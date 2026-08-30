@@ -364,6 +364,59 @@ async function prepareExecutionStage(req, res) {
   });
 }
 
+
+async function finalExecutionPreflight(req, res) {
+  await requireAuthenticatedUser(req);
+  const editorAuthorization = wordpressEditorAuthorization();
+  if (!editorAuthorization) return res.status(503).json({ success: false, error: "WORDPRESS_EDITOR_CREDENTIALS_NOT_CONFIGURED", writes: 0, persistence: 0 });
+  const items = await mapLimit(CORRECTION_PROPOSALS, 3, async proposal => {
+    try {
+      const editorUrl = BASE + "/wp-json/wp/v2/" + proposal.rest + "/" + proposal.id + "?context=edit&_fields=id,slug,status,modified_gmt,content,meta";
+      const publicUrl = BASE + "/wp-json/wp/v2/" + proposal.rest + "/" + proposal.id + "?_fields=id,yoast_head_json";
+      const [editorResponse, publicResponse] = await Promise.all([
+        fetch(editorUrl, { headers: { authorization: editorAuthorization, "user-agent": "PremierExpressReadOnlySEOAudit/1.0" }, signal: AbortSignal.timeout(10000) }),
+        fetch(publicUrl, { headers: { "user-agent": "PremierExpressReadOnlySEOAudit/1.0" }, signal: AbortSignal.timeout(10000) })
+      ]);
+      if (!editorResponse.ok) throw Error("WORDPRESS_EDITOR_READ_HTTP_" + editorResponse.status);
+      if (!publicResponse.ok) throw Error("WORDPRESS_PUBLIC_READ_HTTP_" + publicResponse.status);
+      const object = await editorResponse.json();
+      const publicObject = await publicResponse.json();
+      const rawContent = typeof object.content?.raw === "string" ? object.content.raw : "";
+      const headings = headingEvidence(rawContent);
+      const checks = [];
+      checks.push({ key: "status_preserved", passed: Boolean(object.status), evidence: object.status || "unavailable" });
+      checks.push({ key: "modified_guard", passed: Boolean(object.modified_gmt), evidence: object.modified_gmt || "unavailable" });
+      if (proposal.h1) checks.push({ key: "h1_precondition", passed: headings.nonempty === 0, evidence: headings.nonempty + " non-empty H1 in raw content" });
+      if (proposal.remove_empty_h1) checks.push({ key: "empty_h1_precondition", passed: headings.empty === 1, evidence: headings.empty + " empty H1 in raw content" });
+      if (proposal.meta) checks.push({ key: "meta_contract", passed: proposal.meta.length >= 120 && proposal.meta.length <= 160, evidence: proposal.meta.length + " characters; current rendered value captured" });
+      checks.push({ key: "rollback_content", passed: typeof object.content?.raw === "string", evidence: contentFingerprint(rawContent) });
+      const ready = checks.every(check => check.passed);
+      return {
+        success: true, ready,
+        object: { type: proposal.type, id: object.id, path: proposal.path, status: object.status, modified_gmt: object.modified_gmt },
+        before_state: { content_fingerprint: contentFingerprint(rawContent), rendered_meta_description: publicObject.yoast_head_json?.description || "" },
+        operations: Number(Boolean(proposal.h1)) + Number(Boolean(proposal.meta)) + Number(Boolean(proposal.remove_empty_h1)),
+        checks,
+        rollback_ready: ready
+      };
+    } catch (error) {
+      return { success: false, ready: false, object: { type: proposal.type, id: proposal.id, path: proposal.path }, error: error?.message || String(error), operations: 0, checks: [], rollback_ready: false };
+    }
+  });
+  const readyItems = items.filter(item => item.success && item.ready);
+  const operationsReady = readyItems.reduce((sum, item) => sum + item.operations, 0);
+  const blockers = items.flatMap(item => item.success ? item.checks.filter(check => !check.passed).map(check => item.object.path + ": " + check.key) : [item.object.path + ": " + item.error]);
+  return res.status(200).json({
+    success: true, mode: "BATCH_C_FINAL_EXECUTION_PREFLIGHT", target: BASE, writes: 0, persistence: 0, checked_at: new Date().toISOString(),
+    controls: { allowlisted_objects: 15, methods: ["GET"], concurrency: 3, wordpress_updates: false, yoast_updates: false, approval_endpoint: false, execute_endpoint: false, status_changes: false, publishing: false },
+    summary: { objects_ready: readyItems.length, operations_ready: operationsReady, rollback_payloads_ready: readyItems.filter(item => item.rollback_ready).length, blockers: blockers.length },
+    items, blockers,
+    execution_contract: { order: "one object at a time", concurrency: 1, recheck_modified_gmt: true, preserve_status: true, rollback_on_verification_failure: true, stop_on_first_failure: true, publish_transition_allowed: false },
+    final_human_approval: { reached: blockers.length === 0 && readyItems.length === 15 && operationsReady === 20, execution_authorized: false, required_scope: "Exact Batch C execution of 20 approved operations across the 15 allowlisted objects only; no status transition or product publishing." },
+    policy: { content_target: 100, publishing_allowed_min: 90, publishing_allowed_max: 100, blocked_below: 90, seo_required: 100 }
+  });
+}
+
 async function discoverCrawlUrls() {
   const robots = await read("/robots.txt", 30000, 20000);
   if (robots.status !== 200) throw Error("ROBOTS_UNAVAILABLE");
@@ -472,11 +525,12 @@ export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ success: false, error: "METHOD_NOT_ALLOWED" });
   if (!sameOrigin(req)) return res.status(403).json({ success: false, error: "SAME_ORIGIN_REQUIRED" });
   const action = req.body?.action;
-  if (!new Set(["technical_snapshot", "crawl_dry_run_batch", "proposal_dry_run", "execution_stage_prepare"]).has(action)) return res.status(400).json({ success: false, error: "READ_ONLY_ACTION_REQUIRED" });
+  if (!new Set(["technical_snapshot", "crawl_dry_run_batch", "proposal_dry_run", "execution_stage_prepare", "execution_final_preflight"]).has(action)) return res.status(400).json({ success: false, error: "READ_ONLY_ACTION_REQUIRED" });
   try {
     if (action === "crawl_dry_run_batch") return await crawlDryRunBatch(req, res);
     if (action === "proposal_dry_run") return await proposalDryRun(req, res);
     if (action === "execution_stage_prepare") return await prepareExecutionStage(req, res);
+    if (action === "execution_final_preflight") return await finalExecutionPreflight(req, res);
     const [home, robots, sitemap] = await Promise.all([read("/"), read("/robots.txt", 20000), read("/sitemap_index.xml", 100000)]);
     const html = home.text;
     const images = [...html.matchAll(/<img\b[^>]*>/gi)].map(x => x[0]);
