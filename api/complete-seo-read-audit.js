@@ -330,13 +330,13 @@ async function prepareExecutionStage(req, res) {
       let proposedContent = rawContent;
       if (proposal.h1) {
         if (headingEvidence(rawContent).nonempty !== 0) throw Error("H1_PRECONDITION_CHANGED");
-        proposedContent = "<h1>" + escapeHtml(proposal.h1) + "</h1>\\n" + proposedContent;
+        proposedContent = "<h1>" + escapeHtml(proposal.h1) + "</h1>\n" + proposedContent;
         operations.push({ field: "content.raw", operation: "ADD_VISIBLE_H1", exact_patch_ready: true, proposed: proposal.h1 });
       }
       if (proposal.remove_empty_h1) {
         const beforeEmpty = headingEvidence(rawContent).empty;
         if (beforeEmpty !== 1) throw Error("EMPTY_H1_PRECONDITION_" + beforeEmpty);
-        proposedContent = proposedContent.replace(/<h1\\b[^>]*>(?:\\s|&nbsp;|&#160;)*<\\/h1>/i, "");
+        proposedContent = proposedContent.replace(/<h1\b[^>]*>(?:\s|&nbsp;|&#160;)*<\/h1>/i, "");
         operations.push({ field: "content.raw", operation: "REMOVE_EMPTY_H1_ONLY", exact_patch_ready: true });
       }
       if (proposal.meta) operations.push({ field: "_yoast_wpseo_metadesc", operation: "REPLACE_META_DESCRIPTION", exact_field_value_ready: true, proposed: proposal.meta, editor_before_value_available: Object.prototype.hasOwnProperty.call(object.meta || {}, "_yoast_wpseo_metadesc") });
