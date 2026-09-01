@@ -180,7 +180,7 @@ function normalizeDraft(draft,related,category){
  }
  let relatedSection=draft.sections.find(section=>/related|similar|fleet options|recommended services|more experiences/i.test(String(section.heading||"")));
  if(!relatedSection){relatedSection={level:"H2",heading:"Related Dubai Experiences"};draft.sections.push(relatedSection);}
- if(Array.isArray(related)&&related.length){relatedSection.heading="Related Dubai Experiences";relatedSection.bullets=related;delete relatedSection.content;}
+ if(Array.isArray(related)&&related.length){relatedSection.heading="Related Dubai Experiences";relatedSection.bullets=related;relatedSection.items=related.map(item=>({level:"H3",question:String(item?.text||"").split(/\s+[–—]\s+/)[0].trim(),answer:String(item?.url||"").trim()})).filter(item=>item.question&&item.answer);delete relatedSection.content;}
  if(category==="vehicles"){
   let capacity=draft.sections.find(section=>/vehicle capacity|passenger capacity|capacity and suitability/i.test(String(section.heading||"")));
   if(!capacity){capacity={level:"H2",heading:"Vehicle Capacity and Suitability",bullets:["Passenger numbers and luggage requirements are reviewed before confirmation so the appropriate vehicle arrangement can be checked."]};draft.sections.splice(Math.min(4,draft.sections.length),0,capacity);}
@@ -247,7 +247,7 @@ function keywordHeadingErrors(draft,yoastPlan){
 function scoreDraftReadiness(draft,category,yoastPlan){
  const sections=Array.isArray(draft?.sections)?draft.sections:[],heads=sections.map(section=>String(section.heading||"").toLowerCase()),plan=yoastPlan||draft?.yoast_plan||{};
  const faq=sections.find(section=>isFaqHeading(section.heading)),whyIndex=sections.findIndex(section=>/why choose/i.test(String(section.heading||""))),relatedIndex=sections.findIndex(section=>/related|similar|fleet options|recommended services|more experiences/i.test(String(section.heading||"")));
- const related=relatedIndex>=0?sections[relatedIndex]:null,links=Array.isArray(related?.bullets)?related.bullets.filter(item=>item&&typeof item==="object"&&String(item.url||"").startsWith("https://dubaipremiertourism.com/product/")):[];
+ const related=relatedIndex>=0?sections[relatedIndex]:null,links=Array.isArray(related?.bullets)?related.bullets.filter(item=>item&&typeof item==="object"&&String(item.url||"").startsWith("https://dubaipremiertourism.com/product/")):[],relatedItems=Array.isArray(related?.items)?related.items.filter(item=>String(item?.question||"").trim()&&String(item?.answer||"").startsWith("https://dubaipremiertourism.com/product/")):[];
  const nested=sections.flatMap(section=>[...(Array.isArray(section.subsections)?section.subsections:[]),...(Array.isArray(section.items)?section.items:[])]),keywordErrors=keywordHeadingErrors(draft,plan),headingCoverage=keywordHeadingCoverage(draft,plan);
  const summaryWords=wordCount(draft?.ai_search_summary),entityFacts=Array.isArray(draft?.entity_facts)?draft.entity_facts.filter(Boolean):[],overview=sections.find(section=>/overview/i.test(String(section.heading||""))),overviewText=String(overview?.content||"").trim().toLowerCase(),summaryText=String(draft?.ai_search_summary||"").trim().toLowerCase();
  const research=draft?.research_contract||{},researchSignals=Number(research.gsc_queries||0)+Number(research.google_suggestions||0)+Number(research.competitor_topics||0)+Number(research.first_party_catalog_topics||0)+Number(research.first_party_source_terms||0);
@@ -260,7 +260,7 @@ function scoreDraftReadiness(draft,category,yoastPlan){
   ["category_structure",(CATEGORY_SECTIONS[category]||[]).every(required=>heads.some(heading=>heading.includes(required.toLowerCase()))),10],
   ["faqs",Array.isArray(faq?.items)&&faq.items.length===5,10],
   ["why_choose",whyIndex>=0&&Array.isArray(sections[whyIndex]?.bullets)&&sections[whyIndex].bullets.length>=5&&sections[whyIndex].bullets.length<=6,10],
-  ["related_placement",relatedIndex===whyIndex+1&&links.length>=5&&links.length<=6,10],
+  ["related_placement",relatedIndex===whyIndex+1&&links.length>=5&&links.length<=6&&relatedItems.length===links.length&&relatedItems.every((item,index)=>String(item.answer)===String(links[index].url)),10],
   ["preservation_and_research",Array.isArray(draft?.preservation_ledger)&&draft.preservation_ledger.length>0&&research.completed===true&&researchSignals>0,10]
  ];
  const seoChecks=[
@@ -292,6 +292,7 @@ function validateDraft(draft,category,baseline,yoastPlan){
  for(const [label,aliases] of COMMON_SECTION_GROUPS)if(!heads.some(x=>aliases.some(alias=>x.includes(alias))))errors.push("Missing section purpose: "+label);
  const highlightSections=heads.filter(h=>h.includes("highlight")&&!h.includes("inclusion")&&!h.includes("exclusion")),inclusionSections=heads.filter(h=>h.includes("inclusion")&&!h.includes("exclusion")),exclusionSections=heads.filter(h=>h.includes("exclusion")&&!h.includes("inclusion"));if(!highlightSections.length||!inclusionSections.length||!exclusionSections.length)errors.push("Use three separate H2 sections: Highlights, Inclusions, and Exclusions");if(!heads.some(h=>/timings?/i.test(h)&&/durations?/i.test(h)))errors.push("Use an explicit H2 named Timings and Duration");if(!heads.some(h=>/booking/i.test(h)&&/(cancellation|refund|policy)/i.test(h)))errors.push("Use an explicit H2 for Booking, Cancellation and Refund Policy");if(!heads.some(h=>/(important information|visitor guidance|safety information|eligibility|what to wear)/i.test(h)))errors.push("Use an explicit H2 for Important Information, Safety Information, or Visitor Guidance");
  for(const h of CATEGORY_SECTIONS[category]||[])if(!heads.some(x=>x.includes(h.toLowerCase())))errors.push("Missing category section: "+h);
+ const relatedSection=sections.find(s=>/related|similar|fleet options|recommended services|more experiences/i.test(String(s.heading||""))),relatedBullets=Array.isArray(relatedSection?.bullets)?relatedSection.bullets.filter(item=>item&&typeof item==="object"&&String(item.url||"").startsWith("https://dubaipremiertourism.com/product/")):[],relatedItems=Array.isArray(relatedSection?.items)?relatedSection.items:[];if(relatedBullets.length<5||relatedBullets.length>6)errors.push("Related Experiences requires five or six linked bullet products");if(relatedItems.length!==relatedBullets.length||relatedItems.some((item,index)=>String(item?.answer||"")!==String(relatedBullets[index]?.url||"")))errors.push("Every Related Experiences bullet link requires a matching H3 heading and quoted product link in the same order");
  const faq=sections.find(s=>isFaqHeading(s.heading));
  if(!faq||!Array.isArray(faq.items)||faq.items.length!==5)errors.push("Exactly five useful FAQs required");
  const why=sections.find(s=>String(s.heading||"").toLowerCase().includes("why choose"));
