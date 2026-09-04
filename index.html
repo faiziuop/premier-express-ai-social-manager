@@ -888,9 +888,9 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
           </div>
           <div>
             <div class="finance-form"><h3>Create supplier</h3><input id="finSupName" placeholder="Supplier name"><input id="finSupCategory" placeholder="Category e.g. Safari / Yacht / Transport"><input id="finSupPhone" placeholder="Phone"><button class="muted" onclick="createFinanceSupplier()">＋ Add Supplier</button></div>
-            <div class="finance-form"><h3>Create booking</h3><input id="finService" placeholder="Service name"><input id="finTravel" type="date"><input id="finGuests" type="number" min="1" placeholder="Guests"><input id="finSale" type="number" min="0" step="0.01" placeholder="Sale value AED"><select id="finSupplierSelect"><option value="">No supplier</option></select><input id="finSupplierCost" type="number" min="0" step="0.01" placeholder="Supplier cost"><input id="finAdditionalCost" type="number" min="0" step="0.01" placeholder="Additional cost"><button class="primary" onclick="createFinanceBooking()">＋ Create Booking</button></div>
-            <div class="finance-form"><h3>Record payment</h3><select id="finPaymentBooking"><option value="">Select booking</option></select><input id="finPaymentAmount" type="number" min="0.01" step="0.01" placeholder="Amount received"><input id="finPaymentMethod" placeholder="Method e.g. Card / Bank / Cash"><button class="muted" onclick="recordFinancePayment()">Record Payment</button></div>
-            <div class="finance-form"><h3>Record expense</h3><input id="finExpenseCategory" placeholder="Category"><input id="finExpenseDescription" placeholder="Description"><input id="finExpenseAmount" type="number" min="0.01" step="0.01" placeholder="Amount AED"><button class="muted" onclick="recordFinanceExpense()">Record Expense</button></div>
+            <div class="finance-form"><h3>Create booking</h3><p class="command-help">Bookings can only be created from a human-confirmed, qualified lead. Open Interaction & Leads, qualify the lead, then choose Create Booking on that lead.</p><button class="muted" onclick="switchMainTab('interactions')">Open Qualified Leads</button></div>
+            <div class="finance-form"><h3>Record verified payment</h3><select id="finPaymentBooking"><option value="">Select booking</option></select><input id="finPaymentAmount" type="number" min="0.01" step="0.01" placeholder="Amount received"><input id="finPaymentMethod" placeholder="Method e.g. Card / Bank / Cash"><input id="finPaymentEvidence" placeholder="Required evidence reference / receipt ID"><button class="muted" onclick="recordFinancePayment()">Record Verified Payment</button></div>
+            <div class="finance-form"><h3>Record booking expense</h3><select id="finExpenseBooking"><option value="">Select booking</option></select><input id="finExpenseCategory" placeholder="Category"><input id="finExpenseDescription" placeholder="Description"><input id="finExpenseAmount" type="number" min="0.01" step="0.01" placeholder="Amount AED"><button class="muted" onclick="recordFinanceExpense()">Record Verified Expense</button></div>
           </div>
         </div>
 
@@ -1647,7 +1647,6 @@ async function callLeadAttributionBroker(operation,payload={}){
   });
   const text=await r.text();let j={};try{j=JSON.parse(text)}catch{}
   if(!r.ok||!j.success)throw Error(j.error||text||("Governed lead attribution failed with HTTP "+r.status));
-  if(j.governance_decision!=="ALLOW_HUMAN_GOVERNED")throw Error("Lead-attribution governance did not grant the human execution permit.");
   return j;
 }
 
@@ -1665,7 +1664,7 @@ async function recordWhatsAppLead(){
     $("leadCustomerName").value="";
     $("leadCustomerContact").value="";
     $("leadNotes").value="";
-    $("leadMessage").textContent="✅ Lead attribution verified against a real published source post and recorded through governance.";
+    $("leadMessage").textContent="✅ Lead candidate linked to the published post. Confirm it in the Interaction & Lead Pipeline before qualification.";
     await loadLeadAttributions();await loadLeadPipeline();await refreshCampaignPerformance();
   }catch(e){$("leadMessage").textContent="Could not record lead: "+(e?.message||String(e));}
 }
@@ -4512,7 +4511,7 @@ async function interactionInboxCall(action,payload={}){
   const r=await fetch(SUPABASE_URL+"/functions/v1/interaction-inbox-v1",{
     method:"POST",
     headers:{apikey:SUPABASE_KEY,Authorization:"Bearer "+session.access_token,"Content-Type":"application/json"},
-    body:JSON.stringify({action,...payload})
+    body:JSON.stringify({action,human_execute:action!=="list",...payload})
   });
   const raw=await r.text();let j={};try{j=JSON.parse(raw)}catch{}
   if(!r.ok||!j.success)throw Error(j.error||raw||("Interaction inbox failed with HTTP "+r.status));
@@ -4626,18 +4625,28 @@ function renderLeadLifecycle(leads,summary=null){
   $("lcNew").textContent=s.new??0;$("lcContacted").textContent=s.contacted??0;$("lcQualified").textContent=s.qualified??0;$("lcBooked").textContent=s.booked??0;$("lcLost").textContent=s.lost??0;$("lcRevenue").textContent="AED "+Number(s.revenue||0).toLocaleString();
   $("interactionLeadList").innerHTML=leads.map(l=>{
     const st=l.lifecycle_status||"NEW";
-    return `<div class="lead-mini"><div><b>${esc(l.customer_name||"Social lead")}</b> <span class="interaction-badge">${esc(st)}</span> <span class="interaction-badge">${esc(l.temperature||"GENERAL")}</span></div><small>${esc(String(l.source_platform||"").toUpperCase())} • ${l.created_at?esc(new Date(l.created_at).toLocaleString()):"—"}</small><p style="margin:8px 0"><b>Service:</b> ${esc(l.requested_service||"—")}<br><b>Contact:</b> ${esc(l.contact||"—")}${l.travel_date?`<br><b>Travel:</b> ${esc(l.travel_date)}`:""}${l.guest_count?` • ${esc(l.guest_count)} guest(s)`:""}${st==="BOOKED"?`<br><b>Booking:</b> ${esc(l.currency||"AED")} ${Number(l.booking_value||0).toLocaleString()}`:""}${st==="LOST"&&l.loss_reason?`<br><b>Lost reason:</b> ${esc(l.loss_reason)}`:""}</p><div class="command-help">${esc(l.message||"")}</div>${renderLeadFollowupBox(l)}<div class="lead-actions">${st==="NEW"?`<button class="muted" onclick="updateLeadLifecycle('${esc(l.id)}','contacted')">Contacted</button>`:""}${["NEW","CONTACTED"].includes(st)?`<button class="muted" onclick="updateLeadLifecycle('${esc(l.id)}','qualified')">Qualified</button>`:""}${st!=="BOOKED"?`<button class="primary" onclick="bookLead('${esc(l.id)}')">✓ Booked</button>`:""}${!["BOOKED","LOST"].includes(st)?`<button class="muted" onclick="loseLead('${esc(l.id)}')">Lost</button>`:""}${st==="LOST"?`<button class="muted" onclick="updateLeadLifecycle('${esc(l.id)}','reopen')">Reopen</button>`:""}</div></div>`
+    const confirmed=l.confirmation_status==="CONFIRMED";
+    return `<div class="lead-mini"><div><b>${esc(l.customer_name||"Social lead")}</b> <span class="interaction-badge">${esc(l.confirmation_status||"PENDING_CONFIRMATION")}</span> <span class="interaction-badge">${esc(st)}</span> <span class="interaction-badge">${esc(l.temperature||"GENERAL")}</span></div><small>${esc(String(l.source_platform||"").toUpperCase())} • ${l.created_at?esc(new Date(l.created_at).toLocaleString()):"—"}${l.tracking_code?` • ${esc(l.tracking_code)}`:""}</small><p style="margin:8px 0"><b>Service:</b> ${esc(l.requested_service||"—")}<br><b>Contact:</b> ${esc(l.contact||"—")}${l.travel_date?`<br><b>Travel:</b> ${esc(l.travel_date)}`:""}${l.guest_count?` • ${esc(l.guest_count)} guest(s)`:""}${st==="BOOKED"?`<br><b>Booking:</b> ${esc(l.currency||"AED")} ${Number(l.booking_value||0).toLocaleString()}`:""}${st==="LOST"&&l.loss_reason?`<br><b>Lost reason:</b> ${esc(l.loss_reason)}`:""}</p><div class="command-help">${esc(l.message||"")}</div>${confirmed?renderLeadFollowupBox(l):'<div class="followup-box"><b>Human confirmation required.</b> Review the genuine enquiry before lifecycle actions or follow-ups.</div>'}<div class="lead-actions">${!confirmed&&l.confirmation_status!=="REJECTED"?`<button class="primary" onclick="confirmLead('${esc(l.id)}')">✓ Confirm Lead</button><button class="muted" onclick="rejectLead('${esc(l.id)}')">Reject</button>`:""}${confirmed&&st==="NEW"?`<button class="muted" onclick="updateLeadLifecycle('${esc(l.id)}','contacted')">Contacted</button>`:""}${confirmed&&["NEW","CONTACTED"].includes(st)?`<button class="muted" onclick="updateLeadLifecycle('${esc(l.id)}','qualified')">Qualified</button>`:""}${confirmed&&st==="QUALIFIED"?`<button class="primary" onclick="bookLead('${esc(l.id)}')">Create Booking</button>`:""}${confirmed&&!["BOOKED","LOST"].includes(st)?`<button class="muted" onclick="loseLead('${esc(l.id)}')">Lost</button>`:""}${confirmed&&st==="LOST"?`<button class="muted" onclick="updateLeadLifecycle('${esc(l.id)}','reopen')">Reopen</button>`:""}</div></div>`
   }).join("")||`<div class="lead-mini"><b>No social leads yet.</b><p>Convert a genuine booking enquiry from the interaction inbox when one appears.</p></div>`;
 }
 
 async function updateLeadLifecycle(id,action){
-  try{const j=await leadLifecycleCall(action,{lead_id:id});interactionInboxData.leads=j.leads||[];renderLeadLifecycle(interactionInboxData.leads,j.summary||{});}catch(e){alert(e?.message||String(e))}
+  try{await leadLifecycleCall(action,{lead_id:id});await loadLeadLifecycle();}catch(e){alert(e?.message||String(e))}
+}
+async function confirmLead(id){
+  if(!confirm("Confirm this is a genuine customer enquiry and create its verified post/campaign attribution?"))return;
+  try{await leadLifecycleCall("confirm",{lead_id:id});await loadLeadLifecycle();alert("✅ Lead confirmed and attribution locked.")}catch(e){alert(e?.message||String(e))}
+}
+async function rejectLead(id){
+  const reason=prompt("Why is this candidate not a genuine lead?");if(!reason?.trim())return;
+  try{await callLeadAttributionBroker("reject_lead",{lead_id:id,reason:reason.trim()});await loadLeadLifecycle()}catch(e){alert(e?.message||String(e))}
 }
 async function bookLead(id){
   const v=prompt("Enter confirmed booking value in AED:");
   if(v===null)return;
   const n=Number(v);if(!Number.isFinite(n)||n<0){alert("Enter a valid booking value.");return}
-  try{const j=await leadLifecycleCall("booked",{lead_id:id,booking_value:n,currency:"AED"});interactionInboxData.leads=j.leads||[];renderLeadLifecycle(interactionInboxData.leads,j.summary||{});alert("✅ Lead marked BOOKED and revenue attributed to the source post.");}catch(e){alert(e?.message||String(e))}
+  if(!confirm("Create a human-confirmed booking for this qualified lead? Revenue remains unverified until a payment with evidence is recorded and costs are verified."))return;
+  try{await leadLifecycleCall("booked",{lead_id:id,sale_value:n,currency:"AED"});await loadLeadLifecycle();await loadFinanceHub();alert("✅ Booking created. Record payment evidence and verify costs to complete commercial attribution.");}catch(e){alert(e?.message||String(e))}
 }
 async function loseLead(id){
   const reason=prompt("Why was this lead lost?");
@@ -4988,7 +4997,7 @@ function renderGbpDrafts(){
 async function generateGbpDrafts(){
   try{const {data:{session}}=await sb.auth.getSession();if(!session)throw Error("Your session expired.");const r=await fetch(SUPABASE_URL+"/functions/v1/gbp-content-agent-v1",{method:"POST",headers:{apikey:SUPABASE_KEY,Authorization:"Bearer "+session.access_token,"Content-Type":"application/json"},body:JSON.stringify({action:"generate"})});const raw=await r.text();let j={};try{j=JSON.parse(raw)}catch{};if(!r.ok||!j.success)throw Error(j.error||raw);await loadGbpDrafts();alert(`✅ Created ${j.created||0} Google Business Profile drafts. Publishing remains disabled.`)}catch(e){alert(e?.message||String(e))}
 }
-async function callGoogleBusinessAction(action,payload={}){const {data:{session}}=await sb.auth.getSession();if(!session)throw Error("Your session expired.");const r=await fetch(SUPABASE_URL+"/functions/v1/gbp-content-agent-v1",{method:"POST",headers:{apikey:SUPABASE_KEY,Authorization:"Bearer "+session.access_token,"Content-Type":"application/json"},body:JSON.stringify({action,...payload})});const raw=await r.text();let j={};try{j=JSON.parse(raw)}catch{}if(!r.ok||!j.success)throw Error(j.error||raw);return j}
+async function callGoogleBusinessAction(action,payload={}){const {data:{session}}=await sb.auth.getSession();if(!session)throw Error("Your session expired.");const r=await fetch(SUPABASE_URL+"/functions/v1/gbp-content-agent-v1",{method:"POST",headers:{apikey:SUPABASE_KEY,Authorization:"Bearer "+session.access_token,"Content-Type":"application/json"},body:JSON.stringify({action,human_execute:action!=="list",...payload})});const raw=await r.text();let j={};try{j=JSON.parse(raw)}catch{}if(!r.ok||!j.success)throw Error(j.error||raw);return j}
 async function approveGbpDraft(id){try{await callGoogleBusinessAction("approve",{draft_id:id,human_execute:true});await loadGbpDrafts()}catch(e){alert(e?.message||String(e))}}
 async function publishGbpDraft(id){if(!confirm("Publish this human-approved post to the connected Premier Express Google Business Profile?"))return;try{await callGoogleBusinessAction("publish",{draft_id:id,human_execute:true});await loadGbpDrafts();alert("✅ Google Business Profile post published and verified by the API response.")}catch(e){alert("Google publishing stopped: "+(e?.message||String(e)))}}
 async function syncGoogleReviews(){const box=$("gbpOperationsResult");try{if(box)box.textContent="Synchronizing Google reviews…";const j=await callGoogleBusinessAction("reviews");if(box)box.innerHTML=`<b>Reviews synchronized:</b> ${esc(j.reviews?.length||0)} • <b>Total:</b> ${esc(j.total_review_count??"—")} • <b>Average rating:</b> ${esc(j.average_rating??"—")}`;}catch(e){if(box)box.textContent="Review sync stopped: "+(e?.message||String(e))}}
@@ -5008,13 +5017,13 @@ function money(n){return "AED "+Number(n||0).toLocaleString(undefined,{maximumFr
 function renderFinanceHub(){
   const s=financeHubData.summary||{};$("finBookings").textContent=s.bookings||0;$("finSales").textContent=money(s.sales);$("finSupplier").textContent=money(s.supplier_cost);$("finGross").textContent=money(s.gross_profit);$("finExpenses").textContent=money(s.operating_expenses);$("finNet").textContent=money(s.net_contribution);$("finReceived").textContent=money(s.payments_received);$("finOutstanding").textContent=money(s.outstanding);
   $("financeBookingRows").innerHTML=(financeHubData.bookings||[]).map(b=>`<tr><td>${esc(b.booking_reference||"—")}</td><td>${esc(b.service_name||"—")}</td><td>${esc(b.travel_date||"—")}</td><td>${money(b.sale_value)}</td><td>${money(Number(b.supplier_cost||0)+Number(b.additional_cost||0))}</td><td>${money(b.gross_profit)}</td><td>${Number(b.margin_percent||0).toFixed(1)}%</td><td>${esc(b.payment_status||"UNPAID")}</td></tr>`).join("")||`<tr><td colspan="8">No bookings yet.</td></tr>`;
-  const sup=`<option value="">No supplier</option>`+(financeHubData.suppliers||[]).map(x=>`<option value="${esc(x.id)}">${esc(x.name)}</option>`).join("");$("finSupplierSelect").innerHTML=sup;
-  $("finPaymentBooking").innerHTML=`<option value="">Select booking</option>`+(financeHubData.bookings||[]).map(x=>`<option value="${esc(x.id)}">${esc(x.booking_reference||"Booking")} — ${esc(x.service_name||"")}</option>`).join("");
+  const bookingOptions=`<option value="">Select booking</option>`+(financeHubData.bookings||[]).map(x=>`<option value="${esc(x.id)}">${esc(x.booking_reference||"Booking")} — ${esc(x.service_name||"")}</option>`).join("");
+  $("finPaymentBooking").innerHTML=bookingOptions;$("finExpenseBooking").innerHTML=bookingOptions;
 }
 async function createFinanceSupplier(){try{const name=$("finSupName").value.trim();if(!name)return alert("Supplier name required.");financeHubData=await financeCall("create_supplier",{name,category:$("finSupCategory").value.trim(),phone:$("finSupPhone").value.trim()});renderFinanceHub();$("finSupName").value="";$("finSupCategory").value="";$("finSupPhone").value=""}catch(e){alert(e?.message||String(e))}}
 async function createFinanceBooking(){try{const service_name=$("finService").value.trim(),sale=Number($("finSale").value||0);if(!service_name)return alert("Service name required.");financeHubData=await financeCall("create_booking",{service_name,travel_date:$("finTravel").value||null,guest_count:$("finGuests").value||null,sale_value:sale,supplier_id:$("finSupplierSelect").value||null,supplier_cost:Number($("finSupplierCost").value||0),additional_cost:Number($("finAdditionalCost").value||0),currency:"AED"});await loadFinanceHub();alert("✅ Booking created.")}catch(e){alert(e?.message||String(e))}}
-async function recordFinancePayment(){try{const booking_id=$("finPaymentBooking").value,amount=Number($("finPaymentAmount").value||0);if(!booking_id||amount<=0)return alert("Select a booking and enter a positive amount.");await financeCall("record_payment",{booking_id,amount,currency:"AED",payment_method:$("finPaymentMethod").value.trim()});await loadFinanceHub();alert("✅ Payment recorded.")}catch(e){alert(e?.message||String(e))}}
-async function recordFinanceExpense(){try{const category=$("finExpenseCategory").value.trim(),description=$("finExpenseDescription").value.trim(),amount=Number($("finExpenseAmount").value||0);if(!category||!description||amount<=0)return alert("Category, description and positive amount required.");await financeCall("record_expense",{category,description,amount,currency:"AED"});await loadFinanceHub();alert("✅ Expense recorded.")}catch(e){alert(e?.message||String(e))}}
+async function recordFinancePayment(){try{const booking_id=$("finPaymentBooking").value,amount=Number($("finPaymentAmount").value||0),evidence_reference=$("finPaymentEvidence").value.trim();if(!booking_id||amount<=0||!evidence_reference)return alert("Select a booking, enter a positive amount, and provide a receipt/evidence reference.");if(!confirm("Confirm this payment was genuinely received and the evidence reference is correct?"))return;await financeCall("record_payment",{booking_id,amount,currency:"AED",payment_method:$("finPaymentMethod").value.trim(),evidence_reference});await loadFinanceHub();alert("✅ Verified payment recorded. Verify booking costs to complete the commercial outcome.")}catch(e){alert(e?.message||String(e))}}
+async function recordFinanceExpense(){try{const booking_id=$("finExpenseBooking").value,category=$("finExpenseCategory").value.trim(),description=$("finExpenseDescription").value.trim(),amount=Number($("finExpenseAmount").value||0);if(!booking_id||!category||!description||amount<=0)return alert("Booking, category, description and positive amount required.");if(!confirm("Confirm this is a genuine cost for the selected booking?"))return;await financeCall("record_expense",{booking_id,category,description,amount,currency:"AED"});await loadFinanceHub();alert("✅ Verified booking expense recorded. Re-verify total costs before commercial learning.")}catch(e){alert(e?.message||String(e))}}
 
 async function saveInteractionReply(id){
   try{const txt=$("reply-"+id)?.value?.trim();if(!txt){alert("Reply cannot be empty.");return}interactionInboxData=await interactionInboxCall("edit_reply",{interaction_id:id,suggested_reply:txt});renderInteractionInbox();alert("✅ Reply draft saved. Nothing was sent.");}catch(e){alert(e?.message||String(e))}
