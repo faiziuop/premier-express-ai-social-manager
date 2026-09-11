@@ -172,11 +172,14 @@ async function loadSeoControl(){
     else{$("authority").textContent="SEO control error: "+e.message}
   }finally{seoLoading=false;scheduleSeoRefresh()}
 }
+function applySeoStatus(j){const states=new Map((j.proposal_states||[]).map(x=>[String(x.id),x]));seoData.proposals=(seoData.proposals||[]).map(p=>states.has(String(p.id))?{...p,...states.get(String(p.id))}:p);seoData.summary={...seoData.summary,...(j.summary||{})};seoData.phases=j.phases||seoData.phases;const s=seoData.summary||{};$("sPending").textContent=s.pending_proposals||0;$("sApproved").textContent=s.approved_proposals||0;$("sMeasuring").textContent=s.measuring||0;$("sCompleted").textContent=s.completed||0;renderProposals();if($("proposalLiveCheck"))$("proposalLiveCheck").textContent="Compact status checked "+new Date().toLocaleTimeString()}
+async function refreshSeoStatus(ids=[]){if(document.hidden)return;try{const j=await callSeo("seo_control_status",ids.length?{proposal_ids:ids}:{});applySeoStatus(j)}catch(e){if($("proposalLiveCheck"))$("proposalLiveCheck").textContent="Status check paused: "+e.message}}
 function scheduleSeoRefresh(){
-  clearTimeout(seoRefreshTimer);
-  const preparing=(seoData.proposals||[]).some(p=>p.status==="APPROVED"&&!p.execution?.dry_run_passed);
-  seoRefreshTimer=setTimeout(loadSeoControl,preparing?4000:30000)
+  clearTimeout(seoRefreshTimer);if(document.hidden)return;
+  const preparing=(seoData.proposals||[]).filter(p=>p.status==="APPROVED"&&!p.execution?.dry_run_passed).map(p=>p.id);
+  seoRefreshTimer=setTimeout(async()=>{await refreshSeoStatus(preparing.slice(0,1));scheduleSeoRefresh()},preparing.length?5000:60000)
 }
+document.addEventListener("visibilitychange",()=>{clearTimeout(seoRefreshTimer);if(!document.hidden){refreshSeoStatus().finally(scheduleSeoRefresh)}});
 function populateTypes(){const s=$("type"),cur=s.value||"ALL",types=[...new Set((seoData.opportunities||[]).map(x=>x.opportunity_type).filter(Boolean))].sort();s.innerHTML='<option value="ALL">All types</option>'+types.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join("");if([...s.options].some(o=>o.value===cur))s.value=cur}
 function valList(v){if(Array.isArray(v))return v;if(v&&typeof v==="object")return Object.values(v);return v?[String(v)]:[]}
 function firstValue(...values){return values.find(v=>v!==undefined&&v!==null&&String(v).trim()!=="")}
@@ -285,7 +288,7 @@ async function captureBeforeState(id){
   if(!confirm("Capture the current live Yoast title, meta, focus keyphrase, focus synonyms, related keyphrases and related synonyms as the rollback-safe before-state? This does NOT change WordPress."))return;
   try{
     const j=await callWpGoverned("capture_seo_before_state",{proposal_id:id});
-    await loadSeoControl();
+    await refreshSeoStatus([id]);
     alert("✅ Live before-state captured. WordPress was NOT changed.")
   }catch(e){alert("Before-state capture failed: "+e.message)}
 }
@@ -293,7 +296,7 @@ async function runApprovedDryRun(id){
   if(!confirm("Run the approved SEO change in dry-run mode? No WordPress field will be changed."))return;
   try{
     const j=await callWpGoverned("dry_run_approved_seo",{proposal_id:id});
-    await loadSeoControl();
+    await refreshSeoStatus([id]);
     alert("✅ Dry run passed. No WordPress change was made.")
   }catch(e){alert("Dry run failed: "+e.message)}
 }
@@ -309,16 +312,16 @@ async function executeApprovedSeo(id){
     if(!dry?.success||!dry?.execution_token)throw Error("Final dry-run did not return a valid execution token.");
     const result=await callWpGoverned("execute_approved_seo",{proposal_id:id,execution_token:dry.execution_token});
     if(!result?.success||!result?.verified)throw Error(result?.error||"WordPress write was not verified.");
-    await loadSeoControl();
+    await refreshSeoStatus([id]);
     alert("✅ LIVE SEO UPDATE VERIFIED\n\nWordPress changed only the six approved Yoast SEO fields. Search Console measurement has started.");
   }catch(e){
-    await loadSeoControl();
+    await refreshSeoStatus([id]);
     alert("Live SEO execution stopped/failed: "+(e?.message||String(e))+"\n\nCheck Execution Details before retrying. The rollback snapshot remains preserved.");
   }
 }
 
-async function approveProposal(id){const p=(seoData.proposals||[]).find(x=>x.id===id);if(!p||!keyphraseReview(p).approvalReady)return alert("Approval is locked until the live Yoast comparison and complete keyphrase architecture are ready.");if(!confirm("Approve this reviewed SEO proposal? The agent will automatically capture the rollback state and run the safe dry test. WordPress will NOT be changed until you press the final Execute button."))return;try{await callSeo("approve_seo_proposal",{proposal_id:id});await loadSeoControl();alert("✅ Proposal approved. The agent has started the protected middle steps automatically. WordPress was NOT changed.")}catch(e){alert("Approval failed: "+e.message)}}
-async function rejectProposal(id){if(!confirm("Reject this SEO proposal?"))return;try{await callSeo("reject_seo_proposal",{proposal_id:id});await loadSeoControl();alert("Proposal rejected.")}catch(e){alert("Reject failed: "+e.message)}}
+async function approveProposal(id){const p=(seoData.proposals||[]).find(x=>x.id===id);if(!p||!keyphraseReview(p).approvalReady)return alert("Approval is locked until the live Yoast comparison and complete keyphrase architecture are ready.");if(!confirm("Approve this reviewed SEO proposal? The agent will automatically capture the rollback state and run the safe dry test. WordPress will NOT be changed until you press the final Execute button."))return;try{await callSeo("approve_seo_proposal",{proposal_id:id});await refreshSeoStatus([id]);scheduleSeoRefresh();alert("✅ Proposal approved. The agent has started the protected middle steps automatically. WordPress was NOT changed.")}catch(e){alert("Approval failed: "+e.message)}}
+async function rejectProposal(id){if(!confirm("Reject this SEO proposal?"))return;try{await callSeo("reject_seo_proposal",{proposal_id:id});await refreshSeoStatus([id]);alert("Proposal rejected.")}catch(e){alert("Reject failed: "+e.message)}}
 function filtered(){const q=$("q").value.trim().toLowerCase(),pri=$("priority").value,typ=$("type").value,sort=$("sort").value;let rows=[...(seoData.opportunities||[])];if(pri!=="ALL")rows=rows.filter(x=>String(x.priority).toUpperCase()===pri);if(typ!=="ALL")rows=rows.filter(x=>x.opportunity_type===typ);if(q)rows=rows.filter(x=>[x.page,x.query,x.opportunity_type,JSON.stringify(x.reasons),JSON.stringify(x.recommended_actions)].join(" ").toLowerCase().includes(q));if(sort==="impressions")rows.sort((a,b)=>Number(b.impressions||0)-Number(a.impressions||0));else if(sort==="position")rows.sort((a,b)=>Number(a.position||999)-Number(b.position||999));else if(sort==="clicks")rows.sort((a,b)=>Number(b.clicks||0)-Number(a.clicks||0));else rows.sort((a,b)=>Number(b.opportunity_score||0)-Number(a.opportunity_score||0));return rows}
 function renderOpps(){const all=filtered(),max=Math.max(1,Math.ceil(all.length/pageSize));page=Math.min(page,max);const start=(page-1)*pageSize,rows=all.slice(start,start+pageSize);$("opportunityGrid").innerHTML=rows.map(x=>`<div class="item"><div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start"><div><b>${esc(x.query||"SEO opportunity")}</b><div class="tags"><span class="tag">${esc(String(x.priority||"LOW").toUpperCase())}</span><span class="tag">${esc(x.opportunity_type||"OPPORTUNITY")}</span></div></div><div class="score">${esc(Number(x.opportunity_score||0).toFixed(0))}</div></div><p class="note"><a href="${esc(x.page)}" target="_blank" rel="noopener">${esc(x.page)}</a></p><div class="flow"><b>Search evidence:</b> ${Number(x.impressions||0).toLocaleString()} impressions • ${Number(x.clicks||0).toLocaleString()} clicks • CTR ${(Number(x.ctr||0)*100).toFixed(2)}% • Position ${Number(x.position||0).toFixed(2)}<br><b>Technical score:</b> ${esc(x.technical_score??"—")}</div>${valList(x.reasons).length?`<div class="flow"><b>Why this matters:</b><ul>${valList(x.reasons).map(v=>`<li>${esc(typeof v==="string"?v:JSON.stringify(v))}</li>`).join("")}</ul></div>`:""}${valList(x.recommended_actions).length?`<div class="flow"><b>Recommended actions:</b><ol>${valList(x.recommended_actions).map(v=>`<li>${esc(typeof v==="string"?v:JSON.stringify(v))}</li>`).join("")}</ol></div>`:""}</div>`).join("")||'<div class="flow">No opportunities match these filters.</div>';$("pageInfo").textContent=`Showing ${all.length?start+1:0}–${Math.min(start+pageSize,all.length)} of ${all.length} • Page ${page}/${max}`;$("prev").disabled=page<=1;$("next").disabled=page>=max}
 function movePage(d){const max=Math.max(1,Math.ceil(filtered().length/pageSize));page=Math.max(1,Math.min(max,page+d));renderOpps();window.scrollTo({top:document.querySelector(".toolbar").offsetTop-20,behavior:"smooth"})}
