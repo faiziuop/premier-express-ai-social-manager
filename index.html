@@ -1630,7 +1630,7 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
 const SUPABASE_URL="https://ivtwkyfiagouazopttlc.supabase.co";
 const SUPABASE_KEY="sb_publishable_w2Cn5cENECQqUUY3lAXH0w_GlSLz5iW";
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{auth:{autoRefreshToken:true,persistSession:true,detectSessionInUrl:true}});
-let realtimeChannel=null,appStarting=false,activePlatform="facebook",activeView="queue";
+let realtimeChannel=null,appStarting=false,activePlatform="facebook",activeView="queue";const socialPostFields="id,post_number,primary_platform,status,hook,caption,cta,hashtags,matched_product,matched_product_name,media_url,media_type,media_generation_status,visual_direction,content_date,content_type,objective,audience_location,audience_segment,traveller_stage,content_pillar,source_url,research_context,generation_source,agent_confidence,intelligence_score,deleted_at,created_at,updated_at,user_last_edited_at,user_last_edit_type,scheduled_at,published_at,last_publish_attempt_at,publish_attempts,publish_error,external_post_id,whatsapp_tracking_code,whatsapp_tracking_url,whatsapp_cta_status,whatsapp_cta_error,whatsapp_cta_verified_at,instagram_audio_id,instagram_audio_title,instagram_audio_artist,instagram_audio_volume,facebook_music_id,facebook_music_title,facebook_music_artist,facebook_music_volume,facebook_music_rendered_id";const socialPostCache=new Map();const socialPostCacheReady=new Set();
 const publishingIds=new Set();
 const $=id=>document.getElementById(id);
 function esc(v){return String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c]));}
@@ -2712,7 +2712,7 @@ function switchPlatform(platform){
   $("historyTab").classList.remove("active");
   $("scheduledTab").classList.remove("active");
   $("deletedTab").classList.remove("active");
-  renderPosts();
+  renderPosts(false);subscribeRealtime();
 }
 
 
@@ -2723,7 +2723,7 @@ function switchView(view){
   $("historyTab").classList.toggle("active",view==="history");
   $("scheduledTab").classList.toggle("active",view==="scheduled");
   $("deletedTab").classList.toggle("active",view==="deleted");
-  renderPosts();
+  renderPosts(false);
 }
 
 let queueRankingMap=new Map();
@@ -2733,13 +2733,13 @@ let queueVisibleCount=0;
 
 function queueOrganizerChanged(){
   queueCurrentPage=1;
-  renderPosts();
+  renderPosts(false);
 }
 function queuePageMove(delta){
   const size=Math.max(1,Number($("queuePageSize")?.value||30));
   const maxPage=Math.max(1,Math.ceil(queueVisibleCount/size));
   queueCurrentPage=Math.max(1,Math.min(maxPage,queueCurrentPage+delta));
-  renderPosts();
+  renderPosts(false);
 }
 function queuePopulateProducts(rows){
   const sel=$("queueProduct");if(!sel)return;
@@ -2770,10 +2770,9 @@ async function refreshQueueRanking(silent=false){
     if(btn){btn.disabled=false;btn.textContent=old;}
   }
 }
-async function renderPosts(){
-  const {data,error}=await sb.from("content_posts").select("*").eq("primary_platform",activePlatform).order("created_at",{ascending:false}).limit(500);
-  if(error){$("posts").innerHTML="<div class='card'><b>Database error</b><pre>"+esc(JSON.stringify(error,null,2))+"</pre></div>";return;}
-  const allRows=data||[];
+async function renderPosts(force=true){
+  let allRows=socialPostCache.get(activePlatform)||[];
+  if(force||!socialPostCacheReady.has(activePlatform)){const {data,error}=await sb.from("content_posts").select(socialPostFields).eq("primary_platform",activePlatform).order("created_at",{ascending:false}).limit(500);if(error){$("posts").innerHTML="<div class='card'><b>Database error</b><pre>"+esc(JSON.stringify(error,null,2))+"</pre></div>";return;}allRows=data||[];socialPostCache.set(activePlatform,allRows);socialPostCacheReady.add(activePlatform)}
   const activeRows=allRows.filter(x=>!x.deleted_at);
   const queueStatuses=["PENDING_APPROVAL","EDIT_REQUESTED","APPROVED","READY_TO_PUBLISH"];
   const historyStatuses=["PUBLISHED","REJECTED","FAILED"];
@@ -5376,7 +5375,8 @@ async function loadSocialAccountOperations(){
 }
 
 async function loadSocialConnections(){const fb=$("facebookStatus"),ig=$("instagramStatus");const {data,error}=await sb.from("social_connections").select("platform,account_name,connection_status,last_error").in("platform",["facebook","instagram"]);if(error){fb.textContent=ig.textContent="Connection status unavailable";return;}const rows=data||[];for(const [platform,el] of [["facebook",fb],["instagram",ig]]){const r=rows.find(x=>x.platform===platform);if(r?.connection_status==="connected"){el.textContent="🟢 Connected"+(r.account_name?" — "+r.account_name:"");el.className="connected";}else if(r?.connection_status==="error"){el.textContent="🔴 Reconnect required"+(r.last_error?" — "+r.last_error:"");el.className="not-connected";}else{el.textContent="Not connected";el.className="not-connected";}}}
-async function subscribeRealtime(){if(realtimeChannel)await sb.removeChannel(realtimeChannel);realtimeChannel=sb.channel("premier-platform-tabs-live").on("postgres_changes",{event:"*",schema:"public",table:"content_posts"},()=>renderPosts()).on("postgres_changes",{event:"*",schema:"public",table:"social_connections"},()=>loadSocialConnections()).subscribe(status=>{$("realtimeStatus").textContent=status==="SUBSCRIBED"?"● Live updates connected":status==="CHANNEL_ERROR"?"Live connection error — retrying…":"Live status: "+status;});}
+function applyRealtimePostChange(payload){const row=payload.new&&Object.keys(payload.new).length?payload.new:payload.old||{};if(String(row.primary_platform||"")!==activePlatform)return;let rows=[...(socialPostCache.get(activePlatform)||[])],index=rows.findIndex(x=>String(x.id)===String(row.id));if(payload.eventType==="DELETE"){if(index>=0)rows.splice(index,1)}else if(index>=0)rows[index]={...rows[index],...row};else rows.unshift(row);rows.sort((a,b)=>new Date(b.created_at||0)-new Date(a.created_at||0));socialPostCache.set(activePlatform,rows.slice(0,500));socialPostCacheReady.add(activePlatform);renderPosts(false)}
+async function subscribeRealtime(){if(realtimeChannel)await sb.removeChannel(realtimeChannel);const platform=activePlatform;realtimeChannel=sb.channel("premier-platform-tabs-live-"+platform).on("postgres_changes",{event:"*",schema:"public",table:"content_posts",filter:"primary_platform=eq."+platform},applyRealtimePostChange).on("postgres_changes",{event:"*",schema:"public",table:"social_connections"},payload=>{const row=payload.new||payload.old||{};if(["facebook","instagram"].includes(String(row.platform||"")))loadSocialConnections()}).subscribe(status=>{$("realtimeStatus").textContent=status==="SUBSCRIBED"?"● Live updates connected":status==="CHANNEL_ERROR"?"Live connection error — retrying…":"Live status: "+status;});}
 async function enterApp(){if(appStarting)return;appStarting=true;try{$("authCard").style.display="none";$("app").style.display="block";$("toolbar").style.display="block";await renderPosts();await refreshUnifiedSocialAccounts();await loadAgentControl();await loadIntelligenceBrief();await subscribeRealtime();}finally{appStarting=false;}}
 async function leaveApp(){if(realtimeChannel){await sb.removeChannel(realtimeChannel);realtimeChannel=null;}$("app").style.display="none";$("toolbar").style.display="none";$("authCard").style.display="block";}
 async function logout(){await sb.auth.signOut();await leaveApp();$("authMsg").textContent="Signed out.";}
