@@ -1629,7 +1629,23 @@ input{width:100%;padding:11px;border:1px solid #ccd1d9;border-radius:8px;margin:
 <script>
 const SUPABASE_URL="https://ivtwkyfiagouazopttlc.supabase.co";
 const SUPABASE_KEY="sb_publishable_w2Cn5cENECQqUUY3lAXH0w_GlSLz5iW";
-const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{auth:{autoRefreshToken:true,persistSession:true,detectSessionInUrl:true}});
+const nativeFetch=window.fetch.bind(window);
+async function retryPostgrestFutureIat(input,init){
+  const target=typeof input==="string"?input:(input&&input.url)||String(input);
+  const method=String((init&&init.method)||(input&&input.method)||"GET").toUpperCase();
+  const run=()=>nativeFetch(input instanceof Request?input.clone():input,init);
+  let response=await run();
+  if(!target.includes("/rest/v1/")||method==="OPTIONS")return response;
+  for(let attempt=0;attempt<3&&response.status===401;attempt++){
+    let body=null;
+    try{body=await response.clone().json()}catch{}
+    if(body?.code!=="PGRST303"&&!String(body?.message||"").includes("JWT issued at future"))break;
+    await new Promise(resolve=>setTimeout(resolve,300*(2**attempt)+Math.floor(Math.random()*250)));
+    response=await run();
+  }
+  return response;
+}
+const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{auth:{autoRefreshToken:true,persistSession:true,detectSessionInUrl:true},global:{fetch:retryPostgrestFutureIat}});
 let realtimeChannel=null,appStarting=false,activePlatform="facebook",activeView="queue";const socialPostFields="id,post_number,primary_platform,status,hook,caption,cta,hashtags,matched_product,matched_product_name,media_url,media_type,media_generation_status,visual_direction,content_date,content_type,objective,audience_location,audience_segment,traveller_stage,content_pillar,source_url,research_context,generation_source,agent_confidence,intelligence_score,deleted_at,created_at,updated_at,user_last_edited_at,user_last_edit_type,scheduled_at,published_at,last_publish_attempt_at,publish_attempts,publish_error,external_post_id,whatsapp_tracking_code,whatsapp_tracking_url,whatsapp_cta_status,whatsapp_cta_error,whatsapp_cta_verified_at,instagram_audio_id,instagram_audio_title,instagram_audio_artist,instagram_audio_volume,facebook_music_id,facebook_music_title,facebook_music_artist,facebook_music_volume,facebook_music_rendered_id";const socialPostCache=new Map();const socialPostCacheReady=new Set();
 const publishingIds=new Set();
 const $=id=>document.getElementById(id);
@@ -2772,7 +2788,7 @@ async function refreshQueueRanking(silent=false){
 }
 async function renderPosts(force=true){
   let allRows=socialPostCache.get(activePlatform)||[];
-  if(force||!socialPostCacheReady.has(activePlatform)){const {data,error}=await sb.from("content_posts").select(socialPostFields).eq("primary_platform",activePlatform).order("created_at",{ascending:false}).limit(500);if(error){$("posts").innerHTML="<div class='card'><b>Database error</b><pre>"+esc(JSON.stringify(error,null,2))+"</pre></div>";return;}allRows=data||[];socialPostCache.set(activePlatform,allRows);socialPostCacheReady.add(activePlatform)}
+  if(force||!socialPostCacheReady.has(activePlatform)){const {data,error}=await sb.from("content_posts").select(socialPostFields).eq("primary_platform",activePlatform).order("created_at",{ascending:false}).limit(500);if(error){for(const id of ["total","pending","approved"]){const el=$(id);if(el)el.textContent="—";}$("posts").innerHTML="<div class='card'><b>Database temporarily unavailable</b><p>Database counts are hidden until the authenticated request succeeds. The system retried the specific JWT timestamp failure automatically; no post data was changed by this read.</p><pre>"+esc(JSON.stringify(error,null,2))+"</pre></div>";return;}allRows=data||[];socialPostCache.set(activePlatform,allRows);socialPostCacheReady.add(activePlatform)}
   const activeRows=allRows.filter(x=>!x.deleted_at);
   const queueStatuses=["PENDING_APPROVAL","EDIT_REQUESTED","APPROVED","READY_TO_PUBLISH"];
   const historyStatuses=["PUBLISHED","REJECTED","FAILED"];
