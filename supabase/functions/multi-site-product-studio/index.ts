@@ -64,7 +64,7 @@ function evaluateDraft(d:any,siteKey:string){
  const contentChecks=[
   {name:"short_description_70_110_words",pass:shortWords>=70&&shortWords<=110},
   {name:"product_body_at_least_1000_words",pass:words>=1000},
-  {name:"service_specific_sections",pass:sectionHits>=sectionPatterns.length-1},
+  {name:"service_specific_sections",pass:sectionHits===sectionPatterns.length},
   {name:"faq_minimum",pass:faqCount>=(siteKey==="safari"?7:6)},
   {name:"unique_semantic_headings",pass:heads.length>=8&&uniqueHeads.size===heads.length},
   {name:"focus_phrase_in_body_and_heading",pass:inBody&&inHeading}
