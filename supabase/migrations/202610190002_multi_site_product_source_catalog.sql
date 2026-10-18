@@ -30,3 +30,9 @@ create policy "Authenticated users can read multi-site product sources"
   on public.multi_site_product_sources for select to authenticated using (true);
 revoke all on public.multi_site_product_sources from anon;
 grant select on public.multi_site_product_sources to authenticated;
+
+alter table public.multi_site_product_drafts add column if not exists source_product_id bigint;
+alter table public.multi_site_product_drafts add column if not exists source_product_url text not null default '';
+create unique index if not exists multi_site_product_drafts_source_unique_idx
+  on public.multi_site_product_drafts(site_key, source_product_id)
+  where source_product_id is not null;
