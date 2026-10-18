@@ -49,7 +49,7 @@ async function syncCatalog(db:any,siteKey:string){
  return {site_key:siteKey,matched_products:rows.length,categories_checked:selectedCats.map((c:any)=>c.name),synced_at:now};
 }
 function evaluateDraft(d:any,siteKey:string){
- const html=String(d.content_html||""),body=strip(html),short=strip(String(d.short_description||""));
+ const html=String(d.content_html||""),body=strip(html,50000),short=strip(String(d.short_description||""),12000);
  const words=body.split(/\s+/).filter(Boolean).length,shortWords=short.split(/\s+/).filter(Boolean).length;
  const heads=[...html.matchAll(/<h([23])\b[^>]*>([\s\S]*?)<\/h\1>/gi)].map((m:any)=>strip(m[2]).toLowerCase());
  const uniqueHeads=new Set(heads);
@@ -60,7 +60,7 @@ function evaluateDraft(d:any,siteKey:string){
  const sectionPatterns=siteKey==="transport"
   ?[/service overview|vehicle overview|transport overview/i,/passenger.*luggage|luggage.*passenger/i,/airport.*pickup|pickup.*airport/i,/corporate|executive transportation/i,/hourly.*chauffeur|full.day.*booking/i,/private journey|hotel transfer|event transfer/i,/booking options|recurring corporate/i,/highlights/i,/inclusions/i,/exclusions|additional charges/i,/timings|duration|availability/i,/why choose premier express/i,/quote request|how to book|how to request/i,/frequently asked|\bfaqs?\b/i]
   :[/safari overview/i,/itinerary|what to expect/i,/highlights/i,/activities|camp experience/i,/food|refreshments|dining/i,/transfer|pickup information/i,/inclusions/i,/exclusions|optional add.ons/i,/timings|duration/i,/safety|eligibility|visitor information/i,/booking.*cancellation|refund policy/i,/why choose premier express/i,/how to book|booking steps/i,/frequently asked|\bfaqs?\b/i];
- const sectionHits=sectionPatterns.filter(re=>re.test(heads.join(" | ")+" | "+body.slice(0,5000))).length;
+ const sectionHits=sectionPatterns.filter(re=>re.test(heads.join(" | "))).length;
  const contentChecks=[
   {name:"short_description_70_110_words",pass:shortWords>=70&&shortWords<=110},
   {name:"product_body_at_least_1000_words",pass:words>=1000},
