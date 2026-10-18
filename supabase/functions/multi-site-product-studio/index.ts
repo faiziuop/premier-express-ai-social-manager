@@ -108,13 +108,14 @@ Deno.serve(async(req:Request)=>{
    const key=Deno.env.get("GEMINI_API_KEY");
    if(!key)return reply(503,{success:false,error:"GEMINI_API_KEY is missing from Supabase Edge Function secrets. No product was created."});
    const model=Deno.env.get("MULTI_SITE_PRODUCT_MODEL")||"gemini-2.5-flash";
-   const {data:rows,error}=await db.from("multi_site_product_sources").select("*").eq("site_key",siteKey).is("linked_draft_id",null).order("source_title",{ascending:true}).limit(3);
+   const {data:rows,error}=await db.from("multi_site_product_sources").select("*").eq("site_key",siteKey).is("linked_draft_id",null).lt("generation_attempts",3).order("source_title",{ascending:true}).limit(3);
    if(error)return reply(500,{success:false,error:"Could not load source products: "+error.message});
    if(!rows?.length)return reply(200,{success:true,generated_count:0,failed_count:0,has_more:false,message:"All currently synced source products already have drafts.",live_published:false,wordpress_write_performed:false});
    const generated:any[]=[],failed:any[]=[];
    for(const p of rows){
+    await db.from("multi_site_product_sources").update({generation_attempts:(p.generation_attempts||0)+1,last_generation_attempt_at:new Date().toISOString(),last_generation_error:"",updated_at:new Date().toISOString()}).eq("id",p.id);
     try{generated.push(await makeDraft(db,key,siteKey,site,p,model,key,userData.user.id));}
-    catch(e){failed.push({source_title:p.source_title,error:e instanceof Error?e.message:"Unknown generation error"});}
+    catch(e){const message=e instanceof Error?e.message:"Unknown generation error";await db.from("multi_site_product_sources").update({last_generation_error:txt(message,1000),updated_at:new Date().toISOString()}).eq("id",p.id);failed.push({source_title:p.source_title,error:message});}
    }
    const {count:remaining}=await db.from("multi_site_product_sources").select("id",{count:"exact",head:true}).eq("site_key",siteKey).is("linked_draft_id",null);
    return reply(200,{success:true,generated_count:generated.length,failed_count:failed.length,generated,failed,remaining:remaining??0,has_more:(remaining??0)>0,live_published:false,wordpress_write_performed:false,publication_authorized:false});
