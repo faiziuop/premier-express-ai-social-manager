@@ -27,14 +27,21 @@ async function syncCatalog(db:any,siteKey:string){
  const terms=siteKey==="transport"?["airport transfer","chauffeur service","bus rental Dubai","luxury fleet private transfers"]:["desert safari Dubai","morning desert safari","evening desert safari","dune buggy Dubai"];
  for(const term of terms.slice(0,4)) await readPage(api+"/products?search="+encodeURIComponent(term)+"&per_page=100&page=1");
  const now=new Date().toISOString();
- const rows=[...products.values()].map((p:any)=>({
-  site_key:siteKey,source_product_id:Number(p.id),source_title:txt(p.name,250),source_slug:txt(p.slug,250),source_url:txt(p.permalink,1000),
-  source_description:strip(String(p.description||"")),source_short_description:strip(String(p.short_description||"")),
-  source_price_reference:p.prices?.price?String(p.prices.price)+(p.prices.currency_code?" "+p.prices.currency_code:""):"",
-  source_categories:Array.isArray(p.categories)?p.categories.map((c:any)=>({id:c.id,name:c.name,slug:c.slug})):[],
-  source_image_url:txt(p.images?.[0]?.src,1000),source_data:{type:p.type||"",prices:p.prices||{},attributes:p.attributes||[],categories:p.categories||[]},
-  last_synced_at:now,updated_at:now
- }));
+ const productIds=[...products.values()].map((p:any)=>Number(p.id));
+ const existingRows=productIds.length?(await db.from("multi_site_product_sources").select("source_product_id,linked_draft_id,generation_attempts,last_generation_error,last_generation_attempt_at,created_at").eq("site_key",siteKey).in("source_product_id",productIds)).data||[]:[];
+ const existing=new Map<number,any>(existingRows.map((x:any)=>[Number(x.source_product_id),x]));
+ const rows=[...products.values()].map((p:any)=>{
+  const prior=existing.get(Number(p.id));
+  return {
+   site_key:siteKey,source_product_id:Number(p.id),source_title:txt(p.name,250),source_slug:txt(p.slug,250),source_url:txt(p.permalink,1000),
+   source_description:strip(String(p.description||"")),source_short_description:strip(String(p.short_description||"")),
+   source_price_reference:p.prices?.price?String(p.prices.price)+(p.prices.currency_code?" "+p.prices.currency_code:""):"",
+   source_categories:Array.isArray(p.categories)?p.categories.map((c:any)=>({id:c.id,name:c.name,slug:c.slug})):[],
+   source_image_url:txt(p.images?.[0]?.src,1000),source_data:{type:p.type||"",prices:p.prices||{},attributes:p.attributes||[],categories:p.categories||[]},
+   linked_draft_id:prior?.linked_draft_id||null,generation_attempts:prior?.generation_attempts||0,last_generation_error:prior?.last_generation_error||"",last_generation_attempt_at:prior?.last_generation_attempt_at||null,created_at:prior?.created_at||now,
+   last_synced_at:now,updated_at:now
+  };
+ });
  for(let i=0;i<rows.length;i+=50){
   const {error}=await db.from("multi_site_product_sources").upsert(rows.slice(i,i+50),{onConflict:"site_key,source_product_id",ignoreDuplicates:false});
   if(error)throw new Error("Catalog save failed: "+error.message);
