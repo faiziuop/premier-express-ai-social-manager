@@ -170,7 +170,7 @@ Deno.serve(async(req:Request)=>{
    const key=Deno.env.get("GEMINI_API_KEY");
    if(!key)return reply(503,{success:false,error:"GEMINI_API_KEY is missing from Supabase Edge Function secrets. No product was created."});
    const model=Deno.env.get("MULTI_SITE_PRODUCT_MODEL")||"gemini-2.5-flash";
-   const {data:rows,error}=await db.from("multi_site_product_sources").select("*").eq("site_key",siteKey).is("linked_draft_id",null).lt("generation_attempts",3).order("source_title",{ascending:true}).limit(3);
+   const {data:rows,error}=await db.from("multi_site_product_sources").select("*").eq("site_key",siteKey).is("linked_draft_id",null).lt("generation_attempts",3).order("source_title",{ascending:true}).limit(1);
    if(error)return reply(500,{success:false,error:"Could not load source products: "+error.message});
    if(!rows?.length)return reply(200,{success:true,generated_count:0,failed_count:0,has_more:false,message:"All currently synced source products already have drafts.",live_published:false,wordpress_write_performed:false});
    const generated:any[]=[],failed:any[]=[];
