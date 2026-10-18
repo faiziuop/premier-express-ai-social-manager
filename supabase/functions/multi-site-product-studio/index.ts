@@ -48,6 +48,46 @@ async function syncCatalog(db:any,siteKey:string){
  }
  return {site_key:siteKey,matched_products:rows.length,categories_checked:selectedCats.map((c:any)=>c.name),synced_at:now};
 }
+function evaluateDraft(d:any,siteKey:string){
+ const html=String(d.content_html||""),body=strip(html),short=strip(String(d.short_description||""));
+ const words=body.split(/\s+/).filter(Boolean).length,shortWords=short.split(/\s+/).filter(Boolean).length;
+ const heads=[...html.matchAll(/<h([23])\b[^>]*>([\s\S]*?)<\/h\1>/gi)].map((m:any)=>strip(m[2]).toLowerCase());
+ const uniqueHeads=new Set(heads);
+ const faqCount=Array.isArray(d.faq_json)?d.faq_json.length:0;
+ const focus=txt(d.focus_keyphrase||"",180).toLowerCase();
+ const inBody=!!focus&&body.toLowerCase().includes(focus);
+ const inHeading=!!focus&&heads.some(h=>h.includes(focus));
+ const sectionPatterns=siteKey==="transport"
+  ?[/service overview|vehicle overview|transport overview/i,/passenger.*luggage|luggage.*passenger/i,/airport.*pickup|pickup.*airport/i,/corporate|executive transportation/i,/hourly.*chauffeur|full.day.*booking/i,/private journey|hotel transfer|event transfer/i,/booking options|recurring corporate/i,/highlights/i,/inclusions/i,/exclusions|additional charges/i,/timings|duration|availability/i,/why choose premier express/i,/quote request|how to book|how to request/i,/frequently asked|\bfaqs?\b/i]
+  :[/safari overview/i,/itinerary|what to expect/i,/highlights/i,/activities|camp experience/i,/food|refreshments|dining/i,/transfer|pickup information/i,/inclusions/i,/exclusions|optional add.ons/i,/timings|duration/i,/safety|eligibility|visitor information/i,/booking.*cancellation|refund policy/i,/why choose premier express/i,/how to book|booking steps/i,/frequently asked|\bfaqs?\b/i];
+ const sectionHits=sectionPatterns.filter(re=>re.test(heads.join(" | ")+" | "+body.slice(0,5000))).length;
+ const contentChecks=[
+  {name:"short_description_70_110_words",pass:shortWords>=70&&shortWords<=110},
+  {name:"product_body_at_least_1000_words",pass:words>=1000},
+  {name:"service_specific_sections",pass:sectionHits>=sectionPatterns.length-1},
+  {name:"faq_minimum",pass:faqCount>=(siteKey==="safari"?7:6)},
+  {name:"unique_semantic_headings",pass:heads.length>=8&&uniqueHeads.size===heads.length},
+  {name:"focus_phrase_in_body_and_heading",pass:inBody&&inHeading}
+ ];
+ const contentWeights=[10,12,42,10,10,16];
+ let contentScore=contentChecks.reduce((sum,x,i)=>sum+(x.pass?contentWeights[i]:0),0);
+ const title=txt(d.seo_title||"",180),meta=txt(d.meta_description||"",300);
+ const synonyms=arr(d.focus_synonyms),related=arr(d.related_keyphrases),relatedSyn=Array.isArray(d.related_keyphrase_synonyms)?d.related_keyphrase_synonyms:[];
+ const seoChecks=[
+  {name:"seo_title_45_60_chars",pass:title.length>=45&&title.length<=60},
+  {name:"meta_description_120_155_chars",pass:meta.length>=120&&meta.length<=155},
+  {name:"focus_phrase_in_title",pass:!!focus&&title.toLowerCase().includes(focus)},
+  {name:"focus_phrase_in_meta",pass:!!focus&&meta.toLowerCase().includes(focus)},
+  {name:"focus_phrase_in_short_description",pass:!!focus&&short.toLowerCase().includes(focus)},
+  {name:"focus_phrase_in_heading",pass:inHeading},
+  {name:"four_focus_synonyms",pass:synonyms.length>=4},
+  {name:"four_related_keyphrases",pass:related.length>=4},
+  {name:"four_related_phrases_with_four_synonyms_each",pass:relatedSyn.length>=4&&relatedSyn.slice(0,4).every((x:any)=>Array.isArray(x.synonyms)&&x.synonyms.length>=4)}
+ ];
+ const seoWeights=[10,10,15,15,10,10,10,10,10];
+ const seoScore=seoChecks.reduce((sum,x,i)=>sum+(x.pass?seoWeights[i]:0),0);
+ return {content_score:contentScore,seo_score:seoScore,word_count:words,short_description_word_count:shortWords,faq_count:faqCount,section_hits:sectionHits,section_total:sectionPatterns.length,content_checks:contentChecks,seo_checks:seoChecks,content_failures:contentChecks.filter(x=>!x.pass).map(x=>x.name),seo_failures:seoChecks.filter(x=>!x.pass).map(x=>x.name)};
+}
 async function makeDraft(db:any,key:string,siteKey:string,site:string,p:any,model:string,apiKey:string,userId:string){
  const facts=JSON.stringify({
   source_title:p.source_title,source_url:p.source_url,source_description:strip(p.source_description||""),source_short_description:strip(p.source_short_description||""),
@@ -66,10 +106,20 @@ async function makeDraft(db:any,key:string,siteKey:string,site:string,p:any,mode
  });
  const g=await response.json().catch(()=>({}));
  if(!response.ok)throw new Error("AI research/generation failed for "+p.source_title+" (HTTP "+response.status+"): "+txt(g?.error?.message,220));
- const candidate=g?.candidates?.[0]||{};
- const raw=candidate?.content?.parts?.map((part:any)=>part.text||"").join("")||"";
+ let candidate=g?.candidates?.[0]||{};
+ let raw=candidate?.content?.parts?.map((part:any)=>part.text||"").join("")||"";
  let d:any;try{d=JSON.parse(raw)}catch{throw new Error("AI returned an invalid structured draft for "+p.source_title);}
  if(!d.seo_title||!d.meta_description||!d.short_description||!d.content_html)throw new Error("AI omitted required SEO/content fields for "+p.source_title);
+ let quality=evaluateDraft(d,siteKey);
+ if(quality.content_score<90||quality.seo_score!==100){
+  const repairPrompt="Improve this product draft to pass the supplied deterministic quality checks. Keep the same product and source facts. Do not invent any missing facts; preserve factual_gaps. Write original content and repair every failed content/SEO check. Content must score at least 90/100 and SEO exactly 100/100. Keep short description 70-110 words, required service-specific headings, sufficient FAQs, natural focus phrase placement, four focus synonyms, four related keyphrases, and at least four synonyms for each of the first four related phrases. SEO title 45-60 characters; meta description 120-155 characters. Return the complete same JSON fields, not commentary.\nSITE TYPE: "+siteKey+"\nFAILED CHECKS: "+JSON.stringify(quality)+"\nDRAFT JSON: "+JSON.stringify(d);
+  const repairedResponse=await fetch("https://generativelanguage.googleapis.com/v1beta/models/"+model+":generateContent?key="+apiKey,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({contents:[{role:"user",parts:[{text:repairPrompt}]}],generationConfig:{responseMimeType:"application/json",temperature:0.2,maxOutputTokens:8500}})});
+  const repairedJson=await repairedResponse.json().catch(()=>({}));
+  if(repairedResponse.ok){
+   const repairedRaw=repairedJson?.candidates?.[0]?.content?.parts?.map((part:any)=>part.text||"").join("")||"";
+   try{const repaired=JSON.parse(repairedRaw);d={...d,...repaired,research_sources:repaired.research_sources||d.research_sources,research_notes:repaired.research_notes||d.research_notes,product_differentiators:repaired.product_differentiators||d.product_differentiators};quality=evaluateDraft(d,siteKey);candidate=repairedJson?.candidates?.[0]||candidate;}catch{/* Keep the first complete draft and its honest score. */}
+  }
+ }
  const gaps=Array.isArray(d.factual_gaps)?d.factual_gaps:[];
  const researchSources=Array.isArray(d.research_sources)?d.research_sources:[];
  const {data,error}=await db.from("multi_site_product_drafts").insert({
@@ -80,9 +130,9 @@ async function makeDraft(db:any,key:string,siteKey:string,site:string,p:any,mode
   seo_title:txt(d.seo_title,180),meta_description:txt(d.meta_description,300),focus_synonyms:arr(d.focus_synonyms),
   related_keyphrase_synonyms:Array.isArray(d.related_keyphrase_synonyms)?d.related_keyphrase_synonyms:[],
   short_description:txt(d.short_description,12000),content_html:txt(d.content_html,50000),faq_json:Array.isArray(d.faq_json)?d.faq_json:[],
-  status:gaps.length?"NEEDS_FACTS":"DRAFT_REVIEW",duplicate_check_status:"NOT_RUN",publication_authorized:false,generation_model:model,
-  review_notes:JSON.stringify({source_product_id:p.source_product_id,source_product_url:p.source_url,factual_gaps:gaps,content_outline:d.content_outline||[],research_notes:d.research_notes||[],research_sources:researchSources,product_differentiators:d.product_differentiators||[],grounding_queries:candidate.groundingMetadata?.webSearchQueries||[],grounding_chunks:candidate.groundingMetadata?.groundingChunks||[],duplicate_check:"NOT_RUN",plagiarism_check:"NOT_RUN",publishing:"DISABLED_UNTIL_SEPARATE_WORDPRESS_CONNECTION_AND_GATES_ARE_CONFIGURED"})
- }).select("id,product_title,status,seo_title,meta_description,created_at").single();
+  status:gaps.length?"NEEDS_FACTS":"DRAFT_REVIEW",content_score:quality.content_score,seo_score:quality.seo_score,duplicate_check_status:"NOT_RUN",publication_authorized:false,generation_model:model,
+  review_notes:JSON.stringify({source_product_id:p.source_product_id,source_product_url:p.source_url,factual_gaps:gaps,quality_scores:{content_score:quality.content_score,seo_score:quality.seo_score},quality_checklist:quality,content_outline:d.content_outline||[],research_notes:d.research_notes||[],research_sources:researchSources,product_differentiators:d.product_differentiators||[],grounding_queries:candidate.groundingMetadata?.webSearchQueries||[],grounding_chunks:candidate.groundingMetadata?.groundingChunks||[],duplicate_check:"NOT_RUN",plagiarism_check:"NOT_RUN",publishing:"DISABLED_UNTIL_SEPARATE_WORDPRESS_CONNECTION_AND_GATES_ARE_CONFIGURED"})
+ }).select("id,product_title,status,seo_title,meta_description,content_score,seo_score,created_at").single();
  if(error)throw new Error("Draft save failed for "+p.source_title+": "+error.message);
  const {error:linkError}=await db.from("multi_site_product_sources").update({linked_draft_id:data.id,updated_at:new Date().toISOString()}).eq("id",p.id);
  if(linkError)throw new Error("Draft created but source link could not be updated for "+p.source_title+": "+linkError.message);
