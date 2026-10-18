@@ -35,7 +35,7 @@ async function syncCatalog(db:any,siteKey:string){
   return {
    site_key:siteKey,source_product_id:Number(p.id),source_title:txt(p.name,250),source_slug:txt(p.slug,250),source_url:txt(p.permalink,1000),
    source_description:strip(String(p.description||"")),source_short_description:strip(String(p.short_description||"")),
-   source_price_reference:p.prices?.price?String(p.prices.price)+(p.prices.currency_code?" "+p.prices.currency_code:""):"",
+   source_price_reference:p.prices?.price!==undefined?((Number(p.prices.price)/Math.pow(10,Number(p.prices.currency_minor_unit??2))).toFixed(Number(p.prices.currency_minor_unit??2))+(p.prices.currency_code?" "+p.prices.currency_code:"")):"",
    source_categories:Array.isArray(p.categories)?p.categories.map((c:any)=>({id:c.id,name:c.name,slug:c.slug})):[],
    source_image_url:txt(p.images?.[0]?.src,1000),source_data:{type:p.type||"",prices:p.prices||{},attributes:p.attributes||[],categories:p.categories||[]},
    linked_draft_id:prior?.linked_draft_id||null,generation_attempts:prior?.generation_attempts||0,last_generation_error:prior?.last_generation_error||"",last_generation_attempt_at:prior?.last_generation_attempt_at||null,created_at:prior?.created_at||now,
