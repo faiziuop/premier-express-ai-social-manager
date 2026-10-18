@@ -104,6 +104,11 @@ Deno.serve(async(req:Request)=>{
    const {count:pending}=await db.from("multi_site_product_sources").select("id",{count:"exact",head:true}).eq("site_key",siteKey).is("linked_draft_id",null);
    return reply(200,{success:true,catalog:result,total_catalog_products:count??result.matched_products,awaiting_draft_generation:pending??result.matched_products,source_website:"https://dubaipremiertourism.com",live_published:false});
   }
+  if(action==="retry_failed"){
+   const {data,error}=await db.from("multi_site_product_sources").update({generation_attempts:0,last_generation_error:"",updated_at:new Date().toISOString()}).eq("site_key",siteKey).is("linked_draft_id",null).gte("generation_attempts",3).select("id");
+   if(error)return reply(500,{success:false,error:"Could not reset failed catalog items: "+error.message});
+   return reply(200,{success:true,retry_items_reset:data?.length||0,live_published:false});
+  }
   if(action==="generate_catalog_batch"){
    const key=Deno.env.get("GEMINI_API_KEY");
    if(!key)return reply(503,{success:false,error:"GEMINI_API_KEY is missing from Supabase Edge Function secrets. No product was created."});
