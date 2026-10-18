@@ -73,7 +73,7 @@ async function makeDraft(db:any,key:string,siteKey:string,site:string,p:any,mode
  const gaps=Array.isArray(d.factual_gaps)?d.factual_gaps:[];
  const researchSources=Array.isArray(d.research_sources)?d.research_sources:[];
  const {data,error}=await db.from("multi_site_product_drafts").insert({
-  created_by:userId,site_key:siteKey,target_site:site,product_title:p.source_title,product_type:siteKey==="transport"?"Transport / chauffeur product":"Desert safari experience",
+  created_by:userId,site_key:siteKey,target_site:site,source_product_id:p.source_product_id,source_product_url:p.source_url,product_title:p.source_title,product_type:siteKey==="transport"?"Transport / chauffeur product":"Desert safari experience",
   focus_keyphrase:txt(d.focus_keyphrase||p.source_title,180),related_keyphrases:arr(d.related_keyphrases),
   verified_facts:"Source product URL: "+p.source_url+"\nSource product details (reference only): "+facts,
   audience:"Inferred from product category; human reviewer to confirm.",notes:"AUTOMATED CATALOG DRAFT. Research-first, original writing. Source product ID: "+p.source_product_id+". Source URL: "+p.source_url,
@@ -125,6 +125,8 @@ Deno.serve(async(req:Request)=>{
    if(!rows?.length)return reply(200,{success:true,generated_count:0,failed_count:0,has_more:false,message:"All currently synced source products already have drafts.",live_published:false,wordpress_write_performed:false});
    const generated:any[]=[],failed:any[]=[];
    for(const p of rows){
+    const {data:existingDraft}=await db.from("multi_site_product_drafts").select("id,product_title,status,seo_title,meta_description,created_at").eq("site_key",siteKey).eq("source_product_id",p.source_product_id).maybeSingle();
+    if(existingDraft){await db.from("multi_site_product_sources").update({linked_draft_id:existingDraft.id,updated_at:new Date().toISOString()}).eq("id",p.id);generated.push({draft:existingDraft,source_title:p.source_title,source_url:p.source_url,already_existed:true});continue;}
     await db.from("multi_site_product_sources").update({generation_attempts:(p.generation_attempts||0)+1,last_generation_attempt_at:new Date().toISOString(),last_generation_error:"",updated_at:new Date().toISOString()}).eq("id",p.id);
     try{generated.push(await makeDraft(db,key,siteKey,site,p,model,key,userData.user.id));}
     catch(e){const message=e instanceof Error?e.message:"Unknown generation error";await db.from("multi_site_product_sources").update({last_generation_error:txt(message,1000),updated_at:new Date().toISOString()}).eq("id",p.id);failed.push({source_title:p.source_title,error:message});}
