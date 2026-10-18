@@ -5,7 +5,7 @@ const reply=(status:number,body:Record<string,unknown>)=>new Response(JSON.strin
 const sites={transport:"https://transport.dubaipremiertourism.com",safari:"https://safari.dubaipremiertourism.com"} as const;
 const txt=(v:unknown,n=12000)=>String(v??"").trim().slice(0,n);
 const arr=(v:unknown)=>Array.isArray(v)?v.map(x=>txt(x,180)).filter(Boolean).slice(0,20):[];
-const strip=(s:string)=>s.replace(/<script[\s\S]*?<\/script>/gi," ").replace(/<style[\s\S]*?<\/style>/gi," ").replace(/<[^>]+>/g," ").replace(/&nbsp;/g," ").replace(/&amp;/g,"&").replace(/\s+/g," ").trim().slice(0,6500);
+const strip=(s:string,max=6500)=>s.replace(/<script[\\s\\S]*?<\\/script>/gi," ").replace(/<style[\\s\\S]*?<\\/style>/gi," ").replace(/<[^>]+>/g," ").replace(/&nbsp;/g," ").replace(/&amp;/g,"&").replace(/\\s+/g," ").trim().slice(0,max);
 const relevant=(siteKey:string,p:any)=>{
  const name=String(p.name||"").toLowerCase(),cats=(p.categories||[]).map((c:any)=>String(c.name||"").toLowerCase()+" "+String(c.slug||"").toLowerCase()).join(" ");
  if(siteKey==="safari") return /desert safari|morning safari|evening safari|overnight safari|desert adventure|dune buggy|quad bike|quad biking|camel trek|red dunes/.test(name+" "+cats) && !/al ain zoo|safari suv|safari truck|zoo/.test(name);
