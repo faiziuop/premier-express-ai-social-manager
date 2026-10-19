@@ -159,8 +159,8 @@ export default async function handler(req:any,res:any){
  if(req.method==="OPTIONS"){for(const [k,v] of Object.entries(cors))res.setHeader(k,v);res.statusCode=204;return res.end();}
  if(req.method!=="POST")return reply(res,405,{success:false,error:"POST required"});
  try{
-  const url=process.env.SUPABASE_URL,anon=process.env.SUPABASE_ANON_KEY,service=process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if(!url||!anon||!service)return reply(res,503,{success:false,error:"Product studio backend configuration is incomplete."});
+  const url=process.env.SUPABASE_URL,anon=process.env.SUPABASE_ANON_KEY;
+  if(!url||!anon)return reply(res,503,{success:false,error:"Product studio Supabase URL/public key configuration is incomplete."});
   const auth=String(req.headers?.authorization||req.headers?.Authorization||"");
   if(!auth.startsWith("Bearer "))return reply(res,401,{success:false,error:"Sign in to the Main Agent first."});
   const userClient=createClient(url,anon,{global:{headers:{Authorization:auth}},auth:{persistSession:false,autoRefreshToken:false}});
