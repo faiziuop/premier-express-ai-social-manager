@@ -155,9 +155,9 @@ async function makeDraft(db:any,key:string,siteKey:string,site:string,p:any,mode
 export default async function handler(req:any,res:any){
  const origin=String(req.headers?.origin||"");
  const allowedOrigins=new Set(["https://dubaipremiertourism.com","https://www.dubaipremiertourism.com","https://transport.dubaipremiertourism.com","https://safari.dubaipremiertourism.com","https://premier-express-ai-social-manager.vercel.app"]);
- if(origin&&!allowedOrigins.has(origin))return reply(res,res,403,{success:false,error:"Origin is not allowed."});
+ if(origin&&!allowedOrigins.has(origin))return reply(res,403,{success:false,error:"Origin is not allowed."});
  if(req.method==="OPTIONS")return res.status(204).set(cors).end();
- if(req.method!=="POST")return reply(res,res,405,{success:false,error:"POST required"});
+ if(req.method!=="POST")return reply(res,405,{success:false,error:"POST required"});
  try{
   const url=process.env.SUPABASE_URL,anon=process.env.SUPABASE_ANON_KEY,service=process.env.SUPABASE_SERVICE_ROLE_KEY;
   if(!url||!anon||!service)return reply(res,503,{success:false,error:"Product studio backend configuration is incomplete."});
