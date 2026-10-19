@@ -12,41 +12,56 @@ const relevant=(siteKey:string,p:any)=>{
  return /chauffeur|airport transfer|private transfer|luxury transportation|transportation dubai|car rental|vehicle rental|bus rental|van rental|fleet|limousine|executive travel|intercity transfer|cross.border transfer|sprinter|coaster|hiace|land cruiser|g.?63|s.?500|es 350|yukon|escalade|v.class|carnival/.test(name+" "+cats) && !/desert safari|dune buggy/.test(name);
 };
 async function syncCatalog(db:any,siteKey:string){
- const api="https://dubaipremiertourism.com/wp-json/wc/store/v1";
- const catRes=await fetch(api+"/products/categories?per_page=100",{headers:{"Accept":"application/json"}});
- if(!catRes.ok) throw new Error("Main website product categories could not be read (HTTP "+catRes.status+").");
- const cats=await catRes.json();
- const catPattern=siteKey==="transport"?/luxury fleet|private transfers|transport|chauffeur|luxury cars|sedan|van|bus|vip suv|fleet/i:/desert safari|desert adventure|dune buggy|quad bike/i;
- const selectedCats=(Array.isArray(cats)?cats:[]).filter((c:any)=>catPattern.test(String(c.name||"")+" "+String(c.slug||""))).slice(0,8);
- const products=new Map<number,any>();
- const readPage=async(url:string)=>{const r=await fetch(url,{headers:{"Accept":"application/json"}});if(!r.ok)return;const data=await r.json();if(Array.isArray(data))for(const p of data)if(p&&p.id&&relevant(siteKey,p))products.set(Number(p.id),p);};
- if(selectedCats.length){
-  const ids=selectedCats.map((c:any)=>c.id).filter(Boolean).join(",");
-  await readPage(api+"/products?category="+encodeURIComponent(ids)+"&per_page=100&page=1");
- }
- const terms=siteKey==="transport"?["airport transfer","chauffeur service","bus rental Dubai","luxury fleet private transfers"]:["desert safari Dubai","morning desert safari","evening desert safari","dune buggy Dubai"];
- for(const term of terms.slice(0,4)) await readPage(api+"/products?search="+encodeURIComponent(term)+"&per_page=100&page=1");
- const now=new Date().toISOString();
- const productIds=[...products.values()].map((p:any)=>Number(p.id));
- const existingRows=productIds.length?(await db.from("multi_site_product_sources").select("source_product_id,linked_draft_id,generation_attempts,last_generation_error,last_generation_attempt_at,created_at").eq("site_key",siteKey).in("source_product_id",productIds)).data||[]:[];
- const existing=new Map<number,any>(existingRows.map((x:any)=>[Number(x.source_product_id),x]));
- const rows=[...products.values()].map((p:any)=>{
-  const prior=existing.get(Number(p.id));
-  return {
-   site_key:siteKey,source_product_id:Number(p.id),source_title:txt(p.name,250),source_slug:txt(p.slug,250),source_url:txt(p.permalink,1000),
-   source_description:strip(String(p.description||"")),source_short_description:strip(String(p.short_description||"")),
-   source_price_reference:p.prices?.price!==undefined?((Number(p.prices.price)/Math.pow(10,Number(p.prices.currency_minor_unit??2))).toFixed(Number(p.prices.currency_minor_unit??2))+(p.prices.currency_code?" "+p.prices.currency_code:"")):"",
-   source_categories:Array.isArray(p.categories)?p.categories.map((c:any)=>({id:c.id,name:c.name,slug:c.slug})):[],
-   source_image_url:txt(p.images?.[0]?.src,1000),source_data:{type:p.type||"",prices:p.prices||{},attributes:p.attributes||[],categories:p.categories||[]},
-   linked_draft_id:prior?.linked_draft_id||null,generation_attempts:prior?.generation_attempts||0,last_generation_error:prior?.last_generation_error||"",last_generation_attempt_at:prior?.last_generation_attempt_at||null,created_at:prior?.created_at||now,
-   last_synced_at:now,updated_at:now
+  const api="https://dubaipremiertourism.com/wp-json/wc/store/v1";
+  const maxPages=20;
+  const readAllPages=async(label:string,urlForPage:(page:number)=>string)=>{
+    const all:any[]=[];
+    for(let page=1;page<=maxPages;page++){
+      const r=await fetch(urlForPage(page),{headers:{"Accept":"application/json"}});
+      if(!r.ok)throw new Error(label+" could not be read completely (HTTP "+r.status+", page "+page+").");
+      const data=await r.json();
+      if(!Array.isArray(data))throw new Error(label+" returned an unexpected response on page "+page+".");
+      all.push(...data);
+      if(data.length<100)return all;
+    }
+    throw new Error(label+" exceeded the safe pagination limit of "+maxPages+" pages; sync stopped rather than claiming an incomplete catalogue is complete.");
   };
- });
- for(let i=0;i<rows.length;i+=50){
-  const {error}=await db.from("multi_site_product_sources").upsert(rows.slice(i,i+50),{onConflict:"site_key,source_product_id",ignoreDuplicates:false});
-  if(error)throw new Error("Catalog save failed: "+error.message);
- }
- return {site_key:siteKey,matched_products:rows.length,categories_checked:selectedCats.map((c:any)=>c.name),synced_at:now};
+  const cats=await readAllPages("Main website product categories",page=>api+"/products/categories?per_page=100&page="+page);
+  const catPattern=siteKey==="transport"?/luxury fleet|private transfers|transport|chauffeur|luxury cars|sedan|van|bus|vip suv|fleet/i:/desert safari|desert adventure|dune buggy|quad bike|quad biking/i;
+  const selectedCats=cats.filter((c:any)=>catPattern.test(String(c.name||"")+" "+String(c.slug||"")));
+  const products=new Map<number,any>();
+  const addRelevant=(items:any[])=>{for(const p of items)if(p&&p.id&&relevant(siteKey,p))products.set(Number(p.id),p);};
+  if(selectedCats.length){
+    const ids=selectedCats.map((c:any)=>c.id).filter(Boolean).join(",");
+    const categoryProducts=await readAllPages("Categorized source products",page=>api+"/products?category="+encodeURIComponent(ids)+"&per_page=100&page="+page);
+    addRelevant(categoryProducts);
+  }
+  const terms=siteKey==="transport"?["airport transfer","chauffeur service","bus rental Dubai","luxury fleet private transfers"]:["desert safari Dubai","morning desert safari","evening desert safari","dune buggy Dubai"];
+  for(const term of terms){
+    const searchProducts=await readAllPages("Source product search for "+term,page=>api+"/products?search="+encodeURIComponent(term)+"&per_page=100&page="+page);
+    addRelevant(searchProducts);
+  }
+  const now=new Date().toISOString();
+  const productIds=[...products.values()].map((p:any)=>Number(p.id));
+  const existingRows=productIds.length?(await db.from("multi_site_product_sources").select("source_product_id,linked_draft_id,generation_attempts,last_generation_error,last_generation_attempt_at,created_at").eq("site_key",siteKey).in("source_product_id",productIds)).data||[]:[];
+  const existing=new Map<number,any>(existingRows.map((x:any)=>[Number(x.source_product_id),x]));
+  const rows=[...products.values()].map((p:any)=>{
+    const prior=existing.get(Number(p.id));
+    return {
+      site_key:siteKey,source_product_id:Number(p.id),source_title:txt(p.name,250),source_slug:txt(p.slug,250),source_url:txt(p.permalink,1000),
+      source_description:strip(String(p.description||"")),source_short_description:strip(String(p.short_description||"")),
+      source_price_reference:p.prices?.price!==undefined?((Number(p.prices.price)/Math.pow(10,Number(p.prices.currency_minor_unit??2))).toFixed(Number(p.prices.currency_minor_unit??2))+(p.prices.currency_code?" "+p.prices.currency_code:"")):"",
+      source_categories:Array.isArray(p.categories)?p.categories.map((c:any)=>({id:c.id,name:c.name,slug:c.slug})):[],
+      source_image_url:txt(p.images?.[0]?.src,1000),source_data:{type:p.type||"",prices:p.prices||{},attributes:p.attributes||[],categories:p.categories||[]},
+      linked_draft_id:prior?.linked_draft_id||null,generation_attempts:prior?.generation_attempts||0,last_generation_error:prior?.last_generation_error||"",last_generation_attempt_at:prior?.last_generation_attempt_at||null,created_at:prior?.created_at||now,
+      last_synced_at:now,updated_at:now
+    };
+  });
+  for(let i=0;i<rows.length;i+=50){
+    const {error}=await db.from("multi_site_product_sources").upsert(rows.slice(i,i+50),{onConflict:"site_key,source_product_id",ignoreDuplicates:false});
+    if(error)throw new Error("Catalog save failed: "+error.message);
+  }
+  return {site_key:siteKey,matched_products:rows.length,categories_checked:selectedCats.map((c:any)=>c.name),synced_at:now,pagination_complete:true};
 }
 function evaluateDraft(d:any,siteKey:string){
  const html=String(d.content_html||""),body=strip(html,50000),short=strip(String(d.short_description||""),12000);
