@@ -10,7 +10,7 @@ const relevant=(siteKey:string,p:any)=>{
  if(siteKey==="safari") return /desert safari|morning safari|evening safari|overnight safari|desert adventure|dune buggy|quad bike|quad biking|camel trek|red dunes/.test(name+" "+cats) && !/al ain zoo|safari suv|safari truck|zoo/.test(name);
  return /chauffeur|airport transfer|private transfer|luxury transportation|transportation dubai|car rental|vehicle rental|bus rental|van rental|fleet|limousine|executive travel|intercity transfer|cross.border transfer|sprinter|coaster|hiace|land cruiser|g.?63|s.?500|es 350|yukon|escalade|v.class|carnival/.test(name+" "+cats) && !/desert safari|dune buggy/.test(name);
 };
-async function syncCatalog(db:any,siteKey:string){
+async function syncCatalog(db:any,siteKey:string,userId:string){
   const api="https://dubaipremiertourism.com/wp-json/wc/store/v1";
   const maxPages=20;
   const readAllPages=async(label:string,urlForPage:(page:number)=>string)=>{
@@ -42,12 +42,12 @@ async function syncCatalog(db:any,siteKey:string){
   }
   const now=new Date().toISOString();
   const productIds=[...products.values()].map((p:any)=>Number(p.id));
-  const existingRows=productIds.length?(await db.from("multi_site_product_sources").select("source_product_id,linked_draft_id,generation_attempts,last_generation_error,last_generation_attempt_at,created_at").eq("site_key",siteKey).in("source_product_id",productIds)).data||[]:[];
+  const existingRows=productIds.length?(await db.from("multi_site_product_sources").select("source_product_id,linked_draft_id,generation_attempts,last_generation_error,last_generation_attempt_at,created_at").eq("site_key",siteKey).eq("created_by",userId).in("source_product_id",productIds)).data||[]:[];
   const existing=new Map<number,any>(existingRows.map((x:any)=>[Number(x.source_product_id),x]));
   const rows=[...products.values()].map((p:any)=>{
     const prior=existing.get(Number(p.id));
     return {
-      site_key:siteKey,source_product_id:Number(p.id),source_title:txt(p.name,250),source_slug:txt(p.slug,250),source_url:txt(p.permalink,1000),
+      site_key:siteKey,created_by:userId,source_product_id:Number(p.id),source_title:txt(p.name,250),source_slug:txt(p.slug,250),source_url:txt(p.permalink,1000),
       source_description:strip(String(p.description||"")),source_short_description:strip(String(p.short_description||"")),
       source_price_reference:p.prices?.price!==undefined?((Number(p.prices.price)/Math.pow(10,Number(p.prices.currency_minor_unit??2))).toFixed(Number(p.prices.currency_minor_unit??2))+(p.prices.currency_code?" "+p.prices.currency_code:"")):"",
       source_categories:Array.isArray(p.categories)?p.categories.map((c:any)=>({id:c.id,name:c.name,slug:c.slug})):[],
@@ -57,7 +57,7 @@ async function syncCatalog(db:any,siteKey:string){
     };
   });
   for(let i=0;i<rows.length;i+=50){
-    const {error}=await db.from("multi_site_product_sources").upsert(rows.slice(i,i+50),{onConflict:"site_key,source_product_id",ignoreDuplicates:false});
+    const {error}=await db.from("multi_site_product_sources").upsert(rows.slice(i,i+50),{onConflict:"site_key,source_product_id,created_by",ignoreDuplicates:false});
     if(error)throw new Error("Catalog save failed: "+error.message);
   }
   return {site_key:siteKey,matched_products:rows.length,categories_checked:selectedCats.map((c:any)=>c.name),synced_at:now,pagination_complete:true};
@@ -102,7 +102,7 @@ function evaluateDraft(d:any,siteKey:string){
  const seoScore=seoChecks.reduce((sum,x,i)=>sum+(x.pass?seoWeights[i]:0),0);
  return {content_score:contentScore,seo_score:seoScore,word_count:words,short_description_word_count:shortWords,faq_count:faqCount,section_hits:sectionHits,section_total:sectionPatterns.length,content_checks:contentChecks,seo_checks:seoChecks,content_failures:contentChecks.filter(x=>!x.pass).map(x=>x.name),seo_failures:seoChecks.filter(x=>!x.pass).map(x=>x.name)};
 }
-async function makeDraft(db:any,key:string,siteKey:string,site:string,p:any,model:string,apiKey:string,userId:string){
+async function makeDraft(db:any,siteKey:string,site:string,p:any,model:string,apiKey:string,userId:string){
  const facts=JSON.stringify({
   source_title:p.source_title,source_url:p.source_url,source_description:strip(p.source_description||""),source_short_description:strip(p.source_short_description||""),
   source_price_reference_for_internal_reference_only:p.source_price_reference,source_categories:p.source_categories,source_attributes:p.source_data?.attributes||[]
@@ -171,9 +171,9 @@ export default async function handler(req:any,res:any){
   if(!(siteKey in sites))return reply(res,400,{success:false,error:"Choose a supported website."});
   const site=sites[siteKey];
   if(body.target_site&&txt(body.target_site,200)!==site)return reply(res,400,{success:false,error:"Target website does not match the selected studio."});
-  const db=createClient(url,service,{auth:{persistSession:false,autoRefreshToken:false}});
+  const db=userClient;
   if(action==="sync_catalog"){
-   const result=await syncCatalog(db,siteKey);
+   const result=await syncCatalog(db,siteKey,userData.user.id);
    const {count}=await db.from("multi_site_product_sources").select("id",{count:"exact",head:true}).eq("site_key",siteKey);
    const {count:pending}=await db.from("multi_site_product_sources").select("id",{count:"exact",head:true}).eq("site_key",siteKey).is("linked_draft_id",null);
    return reply(res,200,{success:true,catalog:result,total_catalog_products:count??result.matched_products,awaiting_draft_generation:pending??result.matched_products,source_website:"https://dubaipremiertourism.com",live_published:false});
@@ -195,7 +195,7 @@ export default async function handler(req:any,res:any){
     const {data:existingDraft}=await db.from("multi_site_product_drafts").select("id,product_title,status,seo_title,meta_description,created_at").eq("site_key",siteKey).eq("source_product_id",p.source_product_id).maybeSingle();
     if(existingDraft){await db.from("multi_site_product_sources").update({linked_draft_id:existingDraft.id,updated_at:new Date().toISOString()}).eq("id",p.id);generated.push({draft:existingDraft,source_title:p.source_title,source_url:p.source_url,already_existed:true});continue;}
     await db.from("multi_site_product_sources").update({generation_attempts:(p.generation_attempts||0)+1,last_generation_attempt_at:new Date().toISOString(),last_generation_error:"",updated_at:new Date().toISOString()}).eq("id",p.id);
-    try{generated.push(await makeDraft(db,key,siteKey,site,p,model,key,userData.user.id));}
+    try{generated.push(await makeDraft(db,siteKey,site,p,model,key,userData.user.id));}
     catch(e){const message=e instanceof Error?e.message:"Unknown generation error";await db.from("multi_site_product_sources").update({last_generation_error:txt(message,1000),updated_at:new Date().toISOString()}).eq("id",p.id);failed.push({source_title:p.source_title,error:message});}
    }
    const {count:remaining}=await db.from("multi_site_product_sources").select("id",{count:"exact",head:true}).eq("site_key",siteKey).is("linked_draft_id",null);
