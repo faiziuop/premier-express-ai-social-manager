@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 const cors={"Access-Control-Allow-Origin":"*","Access-Control-Allow-Headers":"authorization, apikey, content-type","Access-Control-Allow-Methods":"POST, OPTIONS","Content-Type":"application/json"};
-const reply=(res:any,status:number,body:Record<string,unknown>)=>res.status(status).json(body);
+const reply=(res:any,status:number,body:Record<string,unknown>)=>res.status(status).set(cors).json(body);
 const sites={transport:"https://transport.dubaipremiertourism.com",safari:"https://safari.dubaipremiertourism.com"} as const;
 const txt=(v:unknown,n=12000)=>String(v??"").trim().slice(0,n);
 const arr=(v:unknown)=>Array.isArray(v)?v.map(x=>txt(x,180)).filter(Boolean).slice(0,20):[];
@@ -155,41 +155,41 @@ async function makeDraft(db:any,key:string,siteKey:string,site:string,p:any,mode
 export default async function handler(req:any,res:any){
  const origin=String(req.headers?.origin||"");
  const allowedOrigins=new Set(["https://dubaipremiertourism.com","https://www.dubaipremiertourism.com","https://transport.dubaipremiertourism.com","https://safari.dubaipremiertourism.com","https://premier-express-ai-social-manager.vercel.app"]);
- if(origin&&!allowedOrigins.has(origin))return reply(res,403,{success:false,error:"Origin is not allowed."});
+ if(origin&&!allowedOrigins.has(origin))return reply(res,res,403,{success:false,error:"Origin is not allowed."});
  if(req.method==="OPTIONS")return res.status(204).set(cors).end();
- if(req.method!=="POST")return reply(res,405,{success:false,error:"POST required"});
+ if(req.method!=="POST")return reply(res,res,405,{success:false,error:"POST required"});
  try{
   const url=process.env.SUPABASE_URL,anon=process.env.SUPABASE_ANON_KEY,service=process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if(!url||!anon||!service)return reply(503,{success:false,error:"Product studio backend configuration is incomplete."});
-  const auth=req.headers.get("Authorization")||"";
-  if(!auth.startsWith("Bearer "))return reply(401,{success:false,error:"Sign in to the Main Agent first."});
+  if(!url||!anon||!service)return reply(res,503,{success:false,error:"Product studio backend configuration is incomplete."});
+  const auth=String(req.headers?.authorization||req.headers?.Authorization||"");
+  if(!auth.startsWith("Bearer "))return reply(res,401,{success:false,error:"Sign in to the Main Agent first."});
   const userClient=createClient(url,anon,{global:{headers:{Authorization:auth}},auth:{persistSession:false,autoRefreshToken:false}});
   const {data:userData,error:authError}=await userClient.auth.getUser();
-  if(authError||!userData.user)return reply(401,{success:false,error:"Your session is invalid or expired. Sign in again."});
+  if(authError||!userData.user)return reply(res,401,{success:false,error:"Your session is invalid or expired. Sign in again."});
   const body=typeof req.body==="string"?JSON.parse(req.body):(req.body||{}),action=txt(body.action,40);
   const siteKey=txt(body.site_key,20) as keyof typeof sites;
-  if(!(siteKey in sites))return reply(400,{success:false,error:"Choose a supported website."});
+  if(!(siteKey in sites))return reply(res,400,{success:false,error:"Choose a supported website."});
   const site=sites[siteKey];
-  if(body.target_site&&txt(body.target_site,200)!==site)return reply(400,{success:false,error:"Target website does not match the selected studio."});
+  if(body.target_site&&txt(body.target_site,200)!==site)return reply(res,400,{success:false,error:"Target website does not match the selected studio."});
   const db=createClient(url,service,{auth:{persistSession:false,autoRefreshToken:false}});
   if(action==="sync_catalog"){
    const result=await syncCatalog(db,siteKey);
    const {count}=await db.from("multi_site_product_sources").select("id",{count:"exact",head:true}).eq("site_key",siteKey);
    const {count:pending}=await db.from("multi_site_product_sources").select("id",{count:"exact",head:true}).eq("site_key",siteKey).is("linked_draft_id",null);
-   return reply(200,{success:true,catalog:result,total_catalog_products:count??result.matched_products,awaiting_draft_generation:pending??result.matched_products,source_website:"https://dubaipremiertourism.com",live_published:false});
+   return reply(res,200,{success:true,catalog:result,total_catalog_products:count??result.matched_products,awaiting_draft_generation:pending??result.matched_products,source_website:"https://dubaipremiertourism.com",live_published:false});
   }
   if(action==="retry_failed"){
    const {data,error}=await db.from("multi_site_product_sources").update({generation_attempts:0,last_generation_error:"",updated_at:new Date().toISOString()}).eq("site_key",siteKey).is("linked_draft_id",null).gte("generation_attempts",3).select("id");
-   if(error)return reply(500,{success:false,error:"Could not reset failed catalog items: "+error.message});
-   return reply(200,{success:true,retry_items_reset:data?.length||0,live_published:false});
+   if(error)return reply(res,500,{success:false,error:"Could not reset failed catalog items: "+error.message});
+   return reply(res,200,{success:true,retry_items_reset:data?.length||0,live_published:false});
   }
   if(action==="generate_catalog_batch"){
    const key=process.env.GEMINI_API_KEY;
-   if(!key)return reply(503,{success:false,error:"GEMINI_API_KEY is missing from Supabase Edge Function secrets. No product was created."});
+   if(!key)return reply(res,503,{success:false,error:"GEMINI_API_KEY is missing from the Vercel project environment. No product was created."});
    const model=process.env.MULTI_SITE_PRODUCT_MODEL||"gemini-2.5-flash";
    const {data:rows,error}=await db.from("multi_site_product_sources").select("*").eq("site_key",siteKey).is("linked_draft_id",null).lt("generation_attempts",3).order("source_title",{ascending:true}).limit(1);
-   if(error)return reply(500,{success:false,error:"Could not load source products: "+error.message});
-   if(!rows?.length)return reply(200,{success:true,generated_count:0,failed_count:0,has_more:false,message:"All currently synced source products already have drafts.",live_published:false,wordpress_write_performed:false});
+   if(error)return reply(res,500,{success:false,error:"Could not load source products: "+error.message});
+   if(!rows?.length)return reply(res,200,{success:true,generated_count:0,failed_count:0,has_more:false,message:"All currently synced source products already have drafts.",live_published:false,wordpress_write_performed:false});
    const generated:any[]=[],failed:any[]=[];
    for(const p of rows){
     const {data:existingDraft}=await db.from("multi_site_product_drafts").select("id,product_title,status,seo_title,meta_description,created_at").eq("site_key",siteKey).eq("source_product_id",p.source_product_id).maybeSingle();
@@ -199,8 +199,8 @@ export default async function handler(req:any,res:any){
     catch(e){const message=e instanceof Error?e.message:"Unknown generation error";await db.from("multi_site_product_sources").update({last_generation_error:txt(message,1000),updated_at:new Date().toISOString()}).eq("id",p.id);failed.push({source_title:p.source_title,error:message});}
    }
    const {count:remaining}=await db.from("multi_site_product_sources").select("id",{count:"exact",head:true}).eq("site_key",siteKey).is("linked_draft_id",null);
-   return reply(200,{success:true,generated_count:generated.length,failed_count:failed.length,generated,failed,remaining:remaining??0,has_more:(remaining??0)>0,live_published:false,wordpress_write_performed:false,publication_authorized:false});
+   return reply(res,200,{success:true,generated_count:generated.length,failed_count:failed.length,generated,failed,remaining:remaining??0,has_more:(remaining??0)>0,live_published:false,wordpress_write_performed:false,publication_authorized:false});
   }
-  return reply(400,{success:false,error:"Unsupported action. Use sync_catalog or generate_catalog_batch."});
- }catch(e){return reply(500,{success:false,error:e instanceof Error?e.message:"Unexpected product studio error.",wordpress_write_performed:false})}
+  return reply(res,400,{success:false,error:"Unsupported action. Use sync_catalog or generate_catalog_batch."});
+ }catch(e){return reply(res,500,{success:false,error:e instanceof Error?e.message:"Unexpected product studio error.",wordpress_write_performed:false})}
 }
