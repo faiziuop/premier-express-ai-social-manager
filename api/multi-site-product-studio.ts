@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 const cors={"Access-Control-Allow-Origin":"*","Access-Control-Allow-Headers":"authorization, apikey, content-type","Access-Control-Allow-Methods":"POST, OPTIONS","Content-Type":"application/json"};
-const reply=(res:any,status:number,body:Record<string,unknown>)=>res.status(status).set(cors).json(body);
+const reply=(res:any,status:number,body:Record<string,unknown>)=>{for(const [k,v] of Object.entries(cors))res.setHeader(k,v);res.statusCode=status;res.end(JSON.stringify(body));};
 const sites={transport:"https://transport.dubaipremiertourism.com",safari:"https://safari.dubaipremiertourism.com"} as const;
 const txt=(v:unknown,n=12000)=>String(v??"").trim().slice(0,n);
 const arr=(v:unknown)=>Array.isArray(v)?v.map(x=>txt(x,180)).filter(Boolean).slice(0,20):[];
@@ -156,7 +156,7 @@ export default async function handler(req:any,res:any){
  const origin=String(req.headers?.origin||"");
  const allowedOrigins=new Set(["https://dubaipremiertourism.com","https://www.dubaipremiertourism.com","https://transport.dubaipremiertourism.com","https://safari.dubaipremiertourism.com","https://premier-express-ai-social-manager.vercel.app"]);
  if(origin&&!allowedOrigins.has(origin))return reply(res,403,{success:false,error:"Origin is not allowed."});
- if(req.method==="OPTIONS")return res.status(204).set(cors).end();
+ if(req.method==="OPTIONS"){for(const [k,v] of Object.entries(cors))res.setHeader(k,v);res.statusCode=204;return res.end();}
  if(req.method!=="POST")return reply(res,405,{success:false,error:"POST required"});
  try{
   const url=process.env.SUPABASE_URL,anon=process.env.SUPABASE_ANON_KEY,service=process.env.SUPABASE_SERVICE_ROLE_KEY;
