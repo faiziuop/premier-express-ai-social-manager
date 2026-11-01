@@ -22,3 +22,12 @@ This directory is the isolated Next.js application deployed by the V2 Vercel pro
 ## Current delivery status
 
 This is an actively built foundation, not yet the complete business manager. Provider OAuth, publishing queues, GSC ingestion, WordPress intelligence execution, and full acceptance testing remain separate delivery stages.
+
+## First-owner setup
+
+Before the first email-confirmed sign-up, configure Supabase Dashboard → Authentication → URL Configuration:
+
+- Site URL: `https://premier-express-business-man-git-f9629c-premier-express-tourism.vercel.app`
+- Redirect URL allowlist: add that same HTTPS origin with its callback path wildcard.
+
+The preview is protected by Vercel team SSO. Sign in to the authorized Vercel team before opening it. The first confirmed account becomes its own owner-scoped tenant; the dashboard initializes the Premier Express business profile and immutable SEO publication policy on first login.
