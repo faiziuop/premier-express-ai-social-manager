@@ -21,14 +21,14 @@ The following migrations are applied to the isolated V2 Supabase project. This l
 | 20261101095756 | add_website_intelligence_archive_and_social_enrichment |
 | 20261101095805 | add_website_seo_audit_history |
 | 20261101095816 | extend_agent_runs_media_and_archive_flexibility |
-| 20261101095827 | expand_quotation_letter_and_business_profile_legacy_fields |
+| 20261101095827 | expand_quotation_letter_and_business_profile_legacy_fields |\n| 20261101100318 | index_new_owner_scoped_foreign_keys |
 
 ## Current schema checks
 
 - 34 public tables.
 - RLS enabled on all 34 public tables.
 - OAuth integration secrets have no authenticated Data API policy and are intended for trusted server-side use only.
-- 14 composite owner-scoped foreign-key relationships enforce tenant-safe references.
+- 23 composite owner-scoped foreign-key relationships enforce tenant-safe references.
 - Private `social-media` Storage bucket accepts JPG, PNG, WebP and MP4 up to 100 MB, with owner-folder policies.
 - Search Console raw metrics have a daily deduplication index.
 - SEO publication hard gate requires Content >= 90, SEO = 100, both approval timestamps, and approved/published state before authorization can be true.
