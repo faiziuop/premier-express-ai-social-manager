@@ -21,7 +21,8 @@ The following migrations are applied to the isolated V2 Supabase project. This l
 | 20261101095756 | add_website_intelligence_archive_and_social_enrichment |
 | 20261101095805 | add_website_seo_audit_history |
 | 20261101095816 | extend_agent_runs_media_and_archive_flexibility |
-| 20261101095827 | expand_quotation_letter_and_business_profile_legacy_fields |\n| 20261101100318 | index_new_owner_scoped_foreign_keys |
+| 20261101095827 | expand_quotation_letter_and_business_profile_legacy_fields |
+| 20261101100318 | index_new_owner_scoped_foreign_keys |
 
 ## Current schema checks
 
