@@ -1,0 +1,10 @@
+'use client';
+import {useState} from 'react';
+import {createClient} from '@supabase/supabase-js';
+const supabase=createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!,process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!);
+export default function Login(){
+ const [email,setEmail]=useState(''); const [password,setPassword]=useState(''); const [busy,setBusy]=useState(false); const [error,setError]=useState(''); const [message,setMessage]=useState('');
+ async function signIn(e:React.FormEvent){e.preventDefault();setBusy(true);setError('');const {error}=await supabase.auth.signInWithPassword({email,password});setBusy(false);if(error){setError(error.message);return;}window.location.href='/';}
+ async function signUp(){setBusy(true);setError('');const {data,error}=await supabase.auth.signUp({email,password});setBusy(false);if(error)setError(error.message);else setMessage(data.session?'Account created.':'Check your email to confirm your account.');}
+ return <main className="form"><div className="eyebrow">Premier Express Tourism LLC</div><h1 className="h1">Business Manager V2</h1><p className="sub">Secure access to your business workspace.</p><form onSubmit={signIn}><div className="field"><label>Email address</label><input type="email" value={email} onChange={e=>setEmail(e.target.value)} required autoComplete="email"/></div><div className="field"><label>Password</label><input type="password" value={password} onChange={e=>setPassword(e.target.value)} required minLength={8} autoComplete="current-password"/></div><button className="btn primary" disabled={busy} style={{width:'100%'}}>{busy?'Please wait…':'Sign in'}</button></form><button className="btn" onClick={signUp} disabled={busy} style={{width:'100%',marginTop:10}}>Create account</button>{error&&<p className="error">{error}</p>}{message&&<p className="success">{message}</p>}</main>;
+}
