@@ -1,0 +1,21 @@
+'use client';
+import {useEffect,useState} from 'react';
+import {useParams,useRouter} from 'next/navigation';
+import {createClient} from '@supabase/supabase-js';
+const supabase=createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!,process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!);
+const config:Record<string,{title:string;description:string;table:string;columns:string[]}>={
+ social:{title:'AI Social Manager',description:'Content drafts, approvals, scheduling and publishing records.',table:'content_posts',columns:['caption','status','content_type','scheduled_at','created_at']},
+ leads:{title:'Leads & WhatsApp CRM',description:'Customer enquiries, lead status and source attribution.',table:'leads',columns:['customer_name','phone','source','status','created_at']},
+ bookings:{title:'Bookings & Revenue',description:'Tour bookings, payment tracking and revenue attribution.',table:'business_bookings',columns:['customer_name','service_name','travel_date','confirmed_amount','status']},
+ quotations:{title:'Quotations',description:'Quotation records, client details, totals and status.',table:'quotations',columns:['quotation_number','client_name','issue_date','total_amount','status']},
+ letters:{title:'Company Letters',description:'Formal company letters and document records.',table:'letters',columns:['letter_number','subject','recipient_name','status','created_at']},
+ seo:{title:'Website Intelligence & SEO',description:'WooCommerce product reviews, evidence, GSC snapshots and controlled publication.',table:'seo_product_reviews',columns:['product_title','focus_keyphrase','content_score','seo_score','status']},
+ integrations:{title:'Integrations',description:'Provider connection health and permission status. Credentials remain server-only.',table:'social_connections',columns:['platform','account_name','status','last_verified_at']},
+ settings:{title:'Workspace Settings',description:'Business profile and workspace preferences.',table:'business_profiles',columns:['business_name','website_url','whatsapp','timezone','default_language']}
+};
+export default function ModulePage(){const params=useParams<{module:string}>();const router=useRouter();const [rows,setRows]=useState<Record<string,unknown>[]>([]);const [busy,setBusy]=useState(true);const [error,setError]=useState('');const key=String(params.module||'');const item=config[key];
+ async function load(){if(!item)return;setBusy(true);setError('');const {data:{session}}=await supabase.auth.getSession();if(!session){router.replace('/login');return;}const {data,error}=await supabase.from(item.table).select('*').order('created_at',{ascending:false}).limit(50);if(error)setError(error.message);else setRows((data||[]) as Record<string,unknown>[]);setBusy(false);}
+ useEffect(()=>{if(item)load();else setBusy(false);},[key]);
+ if(!item)return <main className="main"><a className="btn" href="/">Back to overview</a><h1 className="h1">Module not found</h1></main>;
+ return <main className="main"><a className="btn" href="/">← Overview</a><div className="topbar" style={{marginTop:26}}><div><div className="eyebrow">Business module</div><h1 className="h1">{item.title}</h1><p className="sub">{item.description}</p></div><button className="btn" onClick={load} disabled={busy}>Refresh</button></div><div className="notice">V2 is isolated from the legacy system. Publishing, WordPress writes and external provider actions remain disabled until their approval workflows and integrations are implemented and tested.</div>{error&&<p className="error">{error}</p>}<section className="section"><div className="sectionhead"><h2>Latest records</h2><span className="pill">{busy?'Loading…':rows.length+' shown · maximum 50'}</span></div>{busy?<div className="card">Loading secure records…</div>:!rows.length?<div className="card"><div className="cardlabel">No records yet</div><p className="sub">No records are available in this new V2 workspace.</p></div>:<div className="card" style={{overflowX:'auto'}}><table><thead><tr>{item.columns.map(c=><th key={c}>{c.replaceAll('_',' ')}</th>)}</tr></thead><tbody>{rows.map((row,i)=><tr key={String(row.id||i)}>{item.columns.map(c=><td key={c}>{row[c]===null||row[c]===undefined?'—':String(row[c])}</td>)}</tr>)}</tbody></table></div>}</section></main>;
+}
