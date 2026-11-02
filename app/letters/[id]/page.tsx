@@ -1,0 +1,25 @@
+"use client";
+import {useEffect,useState} from "react";
+import {useParams,useRouter} from "next/navigation";
+import {createClient} from "@supabase/supabase-js";
+const db=createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!,process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!);
+type Letter={id:string;letter_number:string;letter_date:string;subject:string;recipient_name?:string|null;recipient_title?:string|null;recipient_company?:string|null;recipient_address?:string|null;salutation?:string|null;body_markdown:string;closing?:string|null;signatory_name:string;signatory_title:string;status:string;purpose?:string|null};
+export default function LetterDetailPage(){
+ const {id}=useParams<{id:string}>();const router=useRouter();
+ const [letter,setLetter]=useState<Letter|null>(null),[error,setError]=useState(""),[busy,setBusy]=useState(true);
+ useEffect(()=>{let active=true;(async()=>{const {data:{session}}=await db.auth.getSession();if(!session){router.replace("/login");return;}const {data,error}=await db.from("letters").select("*").eq("id",id).single();if(!active)return;if(error)setError(error.message);else setLetter(data as Letter);setBusy(false);})();return()=>{active=false};},[id,router]);
+ if(busy)return <main className="main">Loading letter…</main>;
+ if(error||!letter)return <main className="main"><button className="btn" onClick={()=>router.push("/letters")}>← Letters</button><p className="error">{error||"Letter not found."}</p></main>;
+ return <main className="main letter-page"><div className="no-print topbar"><button className="btn" onClick={()=>router.push("/letters")}>← Letters</button><button className="btn primary" onClick={()=>window.print()}>Print / Save PDF</button></div>
+ <article className="letter-paper"><header className="letter-head"><div className="letter-brand">PREMIER EXPRESS TOURISM LLC</div><div>Mohammed Saeed Harb – GF Office No. 23, Port Saeed, Deira</div><div>Dubai, United Arab Emirates · +971 56 202 6553</div><div>info@dubaipremiertourism.com · www.dubaipremiertourism.com</div></header>
+ <div className="letter-ref"><span>Ref: {letter.letter_number}</span><span>Date: {letter.letter_date}</span></div>
+ <div className="recipient">{letter.recipient_name&&<strong>{letter.recipient_name}</strong>}{letter.recipient_title&&<div>{letter.recipient_title}</div>}{letter.recipient_company&&<div>{letter.recipient_company}</div>}{letter.recipient_address&&<div className="address">{letter.recipient_address}</div>}</div>
+ <h1>{letter.subject}</h1>{letter.purpose&&<p className="purpose">{letter.purpose}</p>}
+ <p className="salutation">{letter.salutation||"Dear Sir/Madam,"}</p>
+ <div className="letter-body">{letter.body_markdown.split(/\r?\n/).map((line,i)=><p key={i}>{line||" "}</p>)}</div>
+ <p className="closing">{letter.closing||"Yours faithfully,"}</p>
+ <div className="signature-block"><div className="signature-space" aria-label="Signature space"></div><strong>{letter.signatory_name||"Said Mustafa"}</strong><div>{letter.signatory_title||"Manager"}</div><strong className="company-sign">PREMIER EXPRESS TOURISM LLC</strong><div className="stamp-space">COMPANY STAMP</div></div>
+ <footer className="letter-footer">This letter is issued by Premier Express Tourism LLC for the purpose stated above.</footer></article>
+ <style jsx global>{`
+ .letter-page{color:#171717}.letter-paper{max-width:850px;min-height:1050px;background:#fff;color:#171717;margin:24px auto;padding:48px 58px;box-shadow:0 8px 35px #0002;font-family:"Times New Roman",Times,serif;font-size:15px;line-height:1.55}.letter-head{text-align:center;border-bottom:2px solid #17365d;padding-bottom:18px;font-size:12px}.letter-brand{font-size:20px;font-weight:bold;color:#17365d;letter-spacing:.3px;margin-bottom:5px}.letter-ref{display:flex;justify-content:space-between;margin:24px 0}.recipient{min-height:85px}.recipient .address{white-space:pre-line}.letter-paper h1{font-size:18px;text-align:center;text-decoration:underline;margin:25px 0 20px}.purpose{font-weight:bold}.salutation{margin-top:24px}.letter-body{min-height:220px;white-space:pre-wrap}.letter-body p{margin:0 0 12px}.closing{margin-top:26px}.signature-block{position:relative;width:300px;margin-top:8px;min-height:165px}.signature-space{height:38px}.signature-block>strong,.signature-block>div:not(.signature-space):not(.stamp-space){display:block}.company-sign{font-size:12px;margin-top:3px}.stamp-space{position:absolute;left:165px;top:32px;width:112px;height:112px;border:2px dashed #245a9b;border-radius:50%;display:flex;align-items:center;justify-content:center;text-align:center;color:#245a9b;font-size:11px;font-weight:bold;letter-spacing:1px;transform:rotate(-12deg);opacity:.7}.letter-footer{border-top:1px solid #b9c4d2;margin-top:42px;padding-top:12px;text-align:center;font-size:10px;color:#4d5968}.no-print{display:flex;justify-content:space-between}@media print{@page{size:A4;margin:15mm}body{background:#fff!important}.main{max-width:none!important;padding:0!important;margin:0!important}.no-print{display:none!important}.letter-paper{box-shadow:none;margin:0;padding:0;min-height:0;max-width:none}.letter-body{min-height:0}}`}</style></main>;
+}
